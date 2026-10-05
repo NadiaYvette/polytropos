@@ -8,13 +8,15 @@ Status: LIVING DOCUMENT · v0.1 · 2026-10-05
 |---|---|---|---|---|
 | `notes/POLYTROPOS_DESIGN.md` | design | draft | cross-cutting | — |
 | `notes/COMMIT_ATTRIBUTION.md` | convention | live | cross-cutting | — |
+| `notes/PROVENANCE.md` | convention | live | cross-cutting | — |
+| `registers/PACKAGES.md` | register | live | cross-cutting | — |
 
 ## Part 2 — Reading paths
 
 **Newcomer.** `README.md` → design note §§0–2 (what and how it is represented)
 → §6 (why a plugin) → §7 (what is not decided).
 
-**Contributor.** Design note in full, then `polytropos-core/src/Polytropos/Core.hs`
+**Contributor.** Design note in full, then `packages/polytropos-core/src/Polytropos/Core.hs`
 — it is sectioned §1–§6 to match the note, and the two must be read together.
 Commit convention: `AGENTS.md` advisory 4, details in the attribution note.
 

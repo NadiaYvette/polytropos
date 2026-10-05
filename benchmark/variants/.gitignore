@@ -1,0 +1,6 @@
+dist-newstyle
+.work
+gen/out
+__pycache__
+*.dump-ds-preopt
+*.dump-simpl

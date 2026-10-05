@@ -10,12 +10,15 @@ not taken.
 
 ## What exists
 
-- `polytropos-core/src/Polytropos/Core.hs` — `Row`, `SumRow`, `Rep`,
+- `packages/polytropos-core/src/Polytropos/Core.hs` — `Row`, `SumRow`, `Rep`,
   `productRep`, `injectRep`, `fieldAt`, `setFieldAt`, `projectRep`, `matchRep`,
   `RowEq`, `RowShow`, `DictAny`, `noInlineUnsafeCo`
-- `polytropos-core/test/Main.hs` — 25 tests; the `RowEq`/`RowShow` bodies here
+- `packages/polytropos-core/test/Main.hs` — 25 tests; the `RowEq`/`RowShow` bodies here
   are the specification of what the plugin must emit
 - `docs/notes/POLYTROPOS_DESIGN.md` — decisions D1–D10, costs, open questions
+- `benchmark/variants/` — the four-arm compile-time harness the design rests on
+- `docs/registers/PACKAGES.md`, `docs/notes/PROVENANCE.md`, `THIRD_PARTY.md` —
+  layout rules, licence obligations, attribution index
 
 ## What is deliberately missing
 

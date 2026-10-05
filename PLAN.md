@@ -33,7 +33,7 @@ Design note §6, in order:
 
 ## Milestone 4 — scale
 
-- [ ] Port the measurement harness into this repo so the compile-time claims
-      are first-class and re-runnable here
+- [x] Port the measurement harness into this repo so the compile-time claims
+      are first-class and re-runnable here (`benchmark/variants`)
 - [ ] Re-measure with the plugin in place; the target is arm-L behaviour
       (linear, and cheaper than a plain sum)

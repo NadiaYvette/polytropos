@@ -10,7 +10,12 @@ not — see the open questions in the design note.
 
 ## Packages
 
-- `polytropos-core` — rows, `Rep`, evidence classes.
+- [`packages/polytropos-core`](packages/polytropos-core) — rows, `Rep`,
+  evidence classes.
+
+Directory roles and the rule that decides them (native / port / fork) are in
+[`docs/registers/PACKAGES.md`](docs/registers/PACKAGES.md); `ports/` and
+`forks/` exist and are empty.
 
 ## Design
 
@@ -18,11 +23,10 @@ Read [`docs/notes/POLYTROPOS_DESIGN.md`](docs/notes/POLYTROPOS_DESIGN.md) first.
 It records the decisions (D1–D10), the known costs, and what is deliberately
 still open.
 
-The empirical case is the measurement harness in the sibling project
-`~/src/large-data/large-records-benchmarks/variants/` (a local path, not a
-vendored dependency): with compile-time-computed indices a row-polymorphic value
-costs *less* to compile than a plain Haskell one; without them it costs
-≈N^2.8.
+The empirical case is the measurement harness in
+[`benchmark/variants`](benchmark/variants), which lives here: with
+compile-time-computed indices a row-polymorphic value costs *less* to compile
+than a plain Haskell one; without them it costs ≈N^2.8.
 
 ## Build & Test
 
@@ -39,6 +43,8 @@ cabal test all
 `~/src/sarutahiko` program but not its naming convention, its register, or its
 roadmap. No migration between the two is planned; see design note §7 Q5.
 
-Sibling projects referenced by path above are local co-development checkouts,
-not dependencies: `polytropos` builds against nothing but `base` and
-`primitive`.
+`~/src/large-data` (the `large-records` fork) is a local co-development
+checkout, not a dependency and not an upstream: nothing from it is compiled as
+part of this project, and no code has been copied from it. The
+attribution ledger is [`THIRD_PARTY.md`](THIRD_PARTY.md) and the rules are in
+[`docs/notes/PROVENANCE.md`](docs/notes/PROVENANCE.md).

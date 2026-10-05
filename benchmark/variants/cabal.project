@@ -1,0 +1,4 @@
+packages: .
+
+package bench-variants
+  ghc-options: -O0

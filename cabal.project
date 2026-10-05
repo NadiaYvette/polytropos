@@ -1,4 +1,12 @@
-packages: polytropos-core
+-- Native packages. `ports/` is listed but intentionally empty today: a port
+-- is added here only when it is developed in-tree (see docs/registers/
+-- PACKAGES.md for the discriminator). `forks/` is never listed, because a
+-- fork is built from its own checkout, not from this project.
+--
+-- `benchmark/variants/` is deliberately NOT listed. It is a standalone
+-- cabal.project of its own, because every arm must be compiled at -O0 and in
+-- isolation for the measurement to mean anything.
+packages: packages/*/
 
 with-compiler: ghc-9.14.1
 

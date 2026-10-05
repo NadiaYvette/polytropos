@@ -25,7 +25,8 @@ collapse to one mechanism.
    quietly settle them in code; the row shape may need rework once they are
    answered, and that is cheaper now than later.
 3. **The tests specify the plugin.** The hand-written `RowEq` / `RowShow`
-   instances in `polytropos-core/test/Main.hs` are the specification of what the
+   instances in `packages/polytropos-core/test/Main.hs` are the specification
+   of what the
    TcPlugin must emit: literal indices, no type-level search. Keep them literal
    — a test that performs a type-level search no longer tests the point.
 4. **Commits:** descriptive-imperative subject, body explains why, HEREDOC

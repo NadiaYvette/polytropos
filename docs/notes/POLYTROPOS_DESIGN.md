@@ -1,7 +1,7 @@
 # polytropos — Row-Polymorphic / Open ADTs
 
 Status: DRAFT v0.1 · 2026-10-05 — skeleton only; §4 and §6 are open by design
-Related: `~/src/large-data/large-records-benchmarks/variants/README.md` (the
+Related: `benchmark/variants/README.md` (the
 measurement this design rests on), `~/src/sarutahiko/docs/registers/REUSE_REGISTER.md`
 §1 Q1 (why a new generic layer is justified at all)
 
@@ -155,23 +155,23 @@ cannot be solved from the arguments. `large-anon` does not pay this because
 
 ## 6. The plugin — the load-bearing part
 
-The measurement (`large-records-benchmarks/variants/README.md`, GHC 9.14.1, N=10..100)
+The measurement (`benchmark/variants/README.md`, GHC 9.14.1, N=10..100)
 settled what the plugin is and is not for:
 
 | Arm | ds-preopt growth | exponent |
 |---|---|---|
 | plain record (stock deriving) | linear | 1.04 |
-| plain sum (stock deriving) | linear | 0.94 |
-| structural variant, type-level index search | 569× over 10× N | 2.80 |
-| structural variant, literal index (plugin output) | linear | 1.01 |
+| plain sum (stock deriving) | linear | 0.93 |
+| structural variant, type-level index search | 579× over 10× N | 2.80 |
+| structural variant, literal index (plugin output) | linear | 1.02 |
 
 **D9 — the plugin is for the row-polymorphic index, not for sums.** Plain sums
 and plain products are already linear; no plugin is needed to make them fast.
 What costs is resolving a symbol to a compile-time index in a row, which
 without a plugin is a type-level search costing ≈N^2.8 (2.08M lines of
-pre-optimisation Core and 865 MB at N=100). With literal indices the same
-values cost *less* than a plain sum (0.52×), and the benefit grows exactly
-linearly in N.
+pre-optimisation Core and 804 MB at N=100). With literal indices the same
+values cost *less* than a plain sum (0.45–0.55×), and the benefit grows as
+≈N^1.75.
 
 **D10 — the three ergonomic extensions need no plugin.** `OverloadedLabels` is
 a language extension over `IsLabel`; `OverloadedRecordDot` is native on GHC ≥
