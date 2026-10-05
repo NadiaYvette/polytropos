@@ -40,10 +40,15 @@ C  structural, type-level search             3597     2081480    579x      2.80 
 L  structural, literal tags (plugin output)   349        3591     10x      1.02      191M
 ```
 
-Core sizes are deterministic and reproduce exactly run to run, **provided the
-same compiler flags are used** — see *Reproducibility* below. Peak RSS is
-reported for the best of three runs and moves by roughly 1% between runs, so
-treat the RSS column as accurate to about a megabyte, not a digit.
+The two Core columns (`ds_preopt`, `simpl`) are deterministic: a from-scratch
+re-run reproduces all 80 line counts exactly. They are meaningful only with the
+same compiler flags — see *Reproducibility* below.
+
+The other two columns are measurements of a real process and are **not**
+reproducible. Peak RSS is the best of three runs; across independent full runs
+it drifts by up to about 2%, and wall-clock by more. Treat both as indicative
+of magnitude, never as a digit. Every conclusion drawn below rests on the Core
+columns, which is why the RSS column is labelled only to the megabyte.
 
 Plugin benefit, `C / L`, grows as roughly N^1.75:
 
@@ -169,3 +174,27 @@ table, check that flag first.
 that `cabal build all` at the top level never compiles it. Each arm must be
 built at `-O0` and in isolation for the comparison to mean anything, and a
 cabal `-O1` build would quietly invalidate the whole harness.
+
+### Checking a re-run against this table
+
+`results.csv` in the repository is the run the table above was computed from. A
+fresh `measure.py` will *not* reproduce that file byte for byte, and should not
+be expected to: the `wall_ms` and `rss_kb` columns vary between runs. What must
+reproduce is the Core. Compare those two columns only:
+
+```sh
+python3 - <<'EOF'
+import csv
+new = list(csv.DictReader(open("results.csv")))
+import subprocess
+old = list(csv.DictReader(subprocess.run(
+    ["git", "show", "HEAD:benchmark/variants/results.csv"],
+    capture_output=True, text=True).stdout.splitlines()))
+bad = [(a["arm"], a["n"]) for a, b in zip(old, new)
+       if a["ds_preopt"] != b["ds_preopt"] or a["simpl"] != b["simpl"]]
+print("Core mismatches:", bad or "none")
+EOF
+```
+
+`Core mismatches: none` is the pass condition. If it lists rows, a flag
+changed — check `-package-env -` first, then `-O0`.
