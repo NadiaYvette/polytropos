@@ -1,0 +1,5 @@
+packages: polytropos-core
+
+with-compiler: ghc-9.14.1
+
+write-ghc-environment-files: always

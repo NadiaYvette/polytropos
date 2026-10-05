@@ -1,0 +1,49 @@
+cabal-version:      3.0
+name:               polytropos-core
+version:            0.1.0.0
+synopsis:           Row-polymorphic / open ADTs: rows, generic representation, evidence
+description:
+  The substrate layer of @polytropos@: a row vocabulary for both products and
+  sums, a generic representation (@Rep@) that carries a runtime tag plus a flat
+  @SmallArray@ of payload slots, and the evidence classes whose instance bodies
+  are to be synthesised as literals by the forthcoming TcPlugin.
+
+  This package is deliberately incomplete: the evidence classes have @undefined@
+  defaults pending the plugin, and the elimination story is unsettled. See
+  @docs/notes/POLYTROPOS_DESIGN.md@.
+
+license:            BSD-3-Clause
+author:             Nadia Yvette Chambers
+maintainer:         nadia.yvette.chambers@ik.me
+category:           Data
+extra-doc-files:    CHANGELOG.md
+
+common warnings
+  ghc-options:
+      -Wall
+      -Wcompat
+      -Widentities
+      -Wincomplete-record-updates
+      -Wincomplete-uni-patterns
+      -Wredundant-constraints
+      -Wunused-packages
+
+library
+  import:           warnings
+  exposed-modules:  Polytropos.Core
+  hs-source-dirs:   src
+  default-language: GHC2021
+  build-depends:    base       >= 4.19 && < 4.23
+                  , primitive  >= 0.9  && < 0.10
+
+test-suite polytropos-core-test
+  import:           warnings
+  type:             exitcode-stdio-1.0
+  main-is:          Main.hs
+  hs-source-dirs:   test
+  default-language: GHC2021
+  build-depends:    base
+                  , polytropos-core
+                  , primitive
+                  , tasty         >= 1.4  && < 1.6
+                  , tasty-hunit   >= 0.10 && < 0.11
