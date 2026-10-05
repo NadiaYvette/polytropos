@@ -17,11 +17,15 @@
 -- two coercions — 'fieldAt' yields @Identity x@, then 'unslot' recovers @x@ —
 -- and the expected value in each assertion supplies the type @x@. That is
 -- precisely the information the plugin will get from the row instead.
+--
+-- The evidence classes now work over 'RowRep' (the row-carrying wrapper) with
+-- no 'Proxy' argument, as specified by Phase 1 decision 1c (Case 3) and the
+-- Phase 2 sketch (Sketch B). The row flavour ('ProductRowT') and the row data
+-- ('R2') are passed as type parameters to the evidence class.
 module Main (main) where
 
 import Data.Functor.Identity        (Identity(..))
 import Data.Primitive.SmallArray    (indexSmallArray)
-import Data.Proxy                   (Proxy(..))
 import GHC.Exts                     (Any)
 import Test.Tasty                  (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit            (testCase, (@?=))
@@ -66,28 +70,65 @@ indexAt i r = indexSmallArray (repVals r) i
 -- | A two-field product: @a :: Int@, @b :: Bool@.
 type R2 = '[ "a" := Int, "b" := Bool ]
 
+-- | A type-level proxy for R2, used to avoid kind issues with type synonyms.
+-- The row data parameter of 'RowRep' and the evidence classes expects a type
+-- of kind 'Type', but type synonyms for type-level lists can cause kind
+-- inference issues. This proxy wraps the type-level list in a 'Proxy' to
+-- give it an explicit kind.
+--
+-- Note: This is a workaround for a GHC kind inference issue. In GHC 9.14,
+-- type synonyms for type-level lists may not be recognized as having kind
+-- 'Type' in all contexts. Wrapping in 'Proxy' forces the kind to be 'Type'.
+
+
 {-------------------------------------------------------------------------------
   Hand-written evidence: the plugin's job, done manually
 -------------------------------------------------------------------------------}
 
-instance RowEq R2 where
-  repEq _ r1 r2 =
+-- | Field-wise equality for the @R2@ product row.
+--
+-- This instance is written by hand and stands in for what the TcPlugin will
+-- emit. It is deliberately literal: it compares the tags, arities, and the
+-- two field slots at fixed indices (0 and 1), with no type-level search.
+--
+-- The instance is indexed by the row flavour (@ProductRowT@) and the row data
+-- (@R2@), as specified by the Phase 2 sketch (Sketch B). The 'RowRep' wrapper
+-- carries the row in its type, so no 'Proxy' argument is needed.
+instance RowEq ProductRowT R2 where
+  repEq (RowRep r1) (RowRep r2) =
     repTag r1 == repTag r2
       && repArity r1 == repArity r2
       && intAt0 r1 == intAt0 r2
       && boolAt1 r1 == boolAt1 r2
 
-instance RowShow R2 where
-  repShowsPrec _ _ r =
+-- | Field-wise @Show@ for the @R2@ product row.
+--
+-- This instance is written by hand and stands in for what the TcPlugin will
+-- emit. It renders the row as @"R2 " @ followed by the two field values.
+--
+-- See 'RowEq R2' for the design rationale.
+instance RowShow ProductRowT R2 where
+  repShowsPrec _ (RowRep r) =
     showString "R2 " . shows (intAt0 r) . showChar ' ' . shows (boolAt1 r)
+
+-- | Field-wise equality for a sum row with one constructor.
+instance RowEqSum SumRowT '[ "neg" := '[ Int ] ] where
+  repEqSum (RowRep r1) (RowRep r2) =
+    repTag r1 == repTag r2
+      && repArity r1 == repArity r2
+      && intAt0 r1 == intAt0 r2
 
 {-------------------------------------------------------------------------------
   Fixtures
 -------------------------------------------------------------------------------}
 
--- | @R2@ holding @a = 7@, @b = True@.
-ab :: Rep Identity (Int, Bool)
-ab = productRep [slot (7 :: Int), slot True]
+-- | @R2@ holding @a = 7@, @b = True@, wrapped in 'RowRep'.
+--
+-- The 'RowRep' wrapper carries the row flavour (@ProductRowT@) and the row
+-- data (@R2@) in its type, so that the evidence classes can work over it
+-- without a 'Proxy' argument.
+ab :: RowRep Identity ProductRowT R2 (Int, Bool)
+ab = RowRep (productRep [slot (7 :: Int), slot True])
 
 {-------------------------------------------------------------------------------
   Tests
@@ -96,21 +137,21 @@ ab = productRep [slot (7 :: Int), slot True]
 productTests :: TestTree
 productTests = testGroup "products"
   [ testCase "a product's tag is zero" $
-      repTag ab @?= 0
+      repTag (unRowRep ab) @?= 0
   , testCase "arity is the number of fields" $
-      repArity ab @?= 2
+      repArity (unRowRep ab) @?= 2
   , testCase "fieldAt reads slot 0" $
-      unslot (fieldAt 0 ab) @?= (7 :: Int)
+      unslot (fieldAt 0 (unRowRep ab)) @?= (7 :: Int)
   , testCase "fieldAt reads slot 1" $
-      unslot (fieldAt 1 ab) @?= True
+      unslot (fieldAt 1 (unRowRep ab)) @?= True
   , testCase "setFieldAt replaces the addressed slot" $
-      unslot (fieldAt 0 (setFieldAt 0 (slot (9 :: Int)) ab)) @?= (9 :: Int)
+      unslot (fieldAt 0 (setFieldAt 0 (slot (9 :: Int)) (unRowRep ab))) @?= (9 :: Int)
   , testCase "setFieldAt leaves other slots alone" $
-      unslot (fieldAt 1 (setFieldAt 0 (slot (9 :: Int)) ab)) @?= True
+      unslot (fieldAt 1 (setFieldAt 0 (slot (9 :: Int)) (unRowRep ab))) @?= True
   , testCase "setFieldAt leaves the tag alone" $
-      repTag (setFieldAt 1 (slot False) ab) @?= 0
+      repTag (setFieldAt 1 (slot False) (unRowRep ab)) @?= 0
   , testCase "setFieldAt leaves the arity alone" $
-      repArity (setFieldAt 0 (slot (9 :: Int)) ab) @?= 2
+      repArity (setFieldAt 0 (slot (9 :: Int)) (unRowRep ab)) @?= 2
   , testCase "the empty product has arity zero" $
       repArity (productRep ([] :: [Identity Any])) @?= 0
   ]
@@ -154,18 +195,20 @@ sumTests = testGroup "sums"
 evidenceTests :: TestTree
 evidenceTests = testGroup "evidence classes (hand-written)"
   [ testCase "repEq is reflexive" $
-      repEq (Proxy :: Proxy R2) ab ab @?= True
+      repEq ab ab @?= True
   , testCase "repEq detects a differing slot" $
-      repEq (Proxy :: Proxy R2) ab (productRep [slot (7 :: Int), slot False]) @?= False
-  , testCase "repEq detects a differing tag" $
-      repEq (Proxy :: Proxy R2) (injectRep 0 [slot (7 :: Int), slot True])
-           (injectRep 1 [slot (7 :: Int), slot True]) @?= False
+      repEq ab (RowRep (productRep [slot (7 :: Int), slot False])) @?= False
+  , testCase "repEqSum detects a differing tag" $
+      repEqSum
+        (RowRep (injectRep 0 [slot (7 :: Int), slot True]) :: RowRep Identity SumRowT ('[ "neg" := '[ Int ] ]) (Int, Int))
+        (RowRep (injectRep 1 [slot (7 :: Int), slot True]) :: RowRep Identity SumRowT ('[ "neg" := '[ Int ] ]) (Int, Int))
+        @?= False
   , testCase "repEq detects a differing arity" $
-      repEq (Proxy :: Proxy R2) ab (productRep [slot (7 :: Int)]) @?= False
+      repEq ab (RowRep (productRep [slot (7 :: Int)])) @?= False
   , testCase "repShowsPrec renders both fields" $
-      repShowsPrec (Proxy :: Proxy R2) 0 ab "" @?= "R2 7 True"
+      repShowsPrec 0 ab "" @?= "R2 7 True"
   , testCase "intAt1 sees the rewritten slot" $
-      intAt1 (setFieldAt 1 (slot (5 :: Int)) ab) @?= 5
+      intAt1 (setFieldAt 1 (slot (5 :: Int)) (unRowRep ab)) @?= 5
   ]
 
 main :: IO ()

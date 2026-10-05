@@ -5,6 +5,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 -- | Core vocabulary and generic representation for @polytropos@.
 --
@@ -34,8 +35,16 @@ module Polytropos.Core (
     Pair(..)
   , Row
   , SumRow
+    -- * Row flavours (Option D vocabulary)
+  , RowType(..)
+  , RowFlavour(..)
+    -- * Handler and result types
+  , HandlerType(..)
+  , ResultType(..)
     -- * Generic representation
   , Rep(..)
+    -- * Row-carrying wrapper (Case 3)
+  , RowRep(..)
     -- * Construction
   , productRep
   , injectRep
@@ -48,6 +57,10 @@ module Polytropos.Core (
     -- * Evidence classes
   , RowEq(..)
   , RowShow(..)
+  , RowEqSum(..)
+  , RowShowSum(..)
+  , FieldIndex(..)
+  , ConstructorIndex(..)
   , DictAny(..)
     -- * Utilities
   , noInlineUnsafeCo
@@ -55,7 +68,6 @@ module Polytropos.Core (
 
 import Data.Foldable                 (toList)
 import Data.Kind                   (Constraint, Type)
-import Data.Proxy                  (Proxy(..))
 import Data.Primitive.SmallArray
 import GHC.Exts                    (Any)
 import GHC.TypeLits                (Symbol)
@@ -86,6 +98,94 @@ type Row = [Pair Symbol Type]
 -- are therefore the lengths of the nested product rows, and may differ
 -- (see note §3, D7).
 type SumRow = [Pair Symbol Row]
+
+{-------------------------------------------------------------------------------
+  §1b  Row flavours (Option D vocabulary)
+
+  Concrete row flavours, not kind-polymorphic. Each flavour carries a
+  type-level list of entries; the flavour tells the plugin what kind of
+  entries to expect.
+
+  See PHASE2_SKETCH.md, Piece 1, §1a.
+-------------------------------------------------------------------------------}
+
+-- | The kind of row flavours (Option D).
+--
+-- Promoted by DataKinds: the types @ProductRowT@, @SumRowT@, @HandlerRowT@,
+-- @ResultRowT@ have kind @RowType@, and can be used as the row parameter of
+-- 'RowRep' and the evidence classes.
+data RowType
+  = ProductRowT        -- ^ field name → field type
+  | SumRowT            -- ^ constructor name → field-row
+  | HandlerRowT        -- ^ constructor name → handler type
+  | ResultRowT         -- ^ constructor name → result type
+
+-- | The class that abstracts over row flavours.
+--
+-- Each flavour has an associated 'EntryKind' — the kind of a single entry
+-- in a row of that flavour. The plugin uses this to know what to inspect.
+class RowFlavour (r :: RowType) where
+  -- | The kind of entries in a row of this flavour.
+  type EntryKind (r :: RowType) :: Type
+
+-- | A product-row entry: a field name paired with a field type.
+instance RowFlavour ProductRowT where
+  type EntryKind ProductRowT = Pair Symbol Type
+
+-- | A sum-row entry: a constructor name paired with its field-row.
+instance RowFlavour SumRowT where
+  type EntryKind SumRowT = Pair Symbol Row
+
+-- | A handler-row entry: a handler type (see 'HandlerType').
+-- instance RowFlavour HandlerRowT where  -- reserved for Phase 4
+--  type EntryKind HandlerRowT = HandlerType  -- not yet implemented
+
+-- | A result-row entry: a result type (see 'ResultType').
+-- instance RowFlavour ResultRowT where  -- reserved for Phase 4
+--  type EntryKind ResultRowT = ResultType  -- not yet implemented
+
+-- | A handler type: "handler for constructor n, with field types fs,
+-- returning result type res in monad m".
+--
+-- This is the entry kind of 'HandlerRowT'. Each handler entry carries the
+-- constructor name, field types, result type, and monad explicitly, so that
+-- handler rows are self-contained and can be passed around without a paired
+-- sum row (see PHASE2_SKETCH.md, refinement #2).
+data HandlerType (n :: Symbol) (fs :: Row) (res :: Type) (m :: Type -> Type)
+  = HandlerType
+
+-- | A result type: "result for constructor n, of type res".
+--
+-- This is the entry kind of 'ResultRowT'. Each result entry carries the
+-- constructor name and the result type.
+data ResultType (n :: Symbol) (res :: Type)
+  = ResultType
+
+{-------------------------------------------------------------------------------
+  §1c  The row-carrying wrapper (Case 3)
+
+  'Rep' stays erased (it does not know its row). The wrapper 'RowRep' carries
+  the row in its type, so that the evidence classes can work over 'RowRep'
+  without a 'Proxy' argument (obligation 4, design note §6).
+
+  See PHASE2_SKETCH.md, Piece 1, §1c.
+-------------------------------------------------------------------------------}
+
+-- | Typed, row-carrying wrapper around 'Rep'.
+--
+-- @f@ is the functor applied to each payload slot.
+-- @r@ is the row flavour (one of 'ProductRowT', 'SumRowT', etc.).
+-- @row@ is the actual row data (a type-level list of entries), of any kind.
+-- @a@ is the value type.
+--
+-- At runtime this is exactly @Rep f a@ — a newtype with zero cost.
+data RowRep (f :: Type -> Type) (r :: RowType) (row :: k) a = RowRep
+  { unRowRep :: Rep f a }
+  -- Note: @k@ is a kind variable that allows any kind for the row data.
+  -- For product rows, @row@ has kind @[Pair Symbol Type]@.
+  -- For sum rows, @row@ has kind @[Pair Symbol Row]@.
+  -- The evidence classes use this flexibility to accept different row kinds.
+
 
 {-------------------------------------------------------------------------------
   §2  The generic representation
@@ -194,40 +294,66 @@ matchRep k r = k (repTag r) (toListSlots (repVals r))
   test suite are hand-written and stand in for what the plugin will emit.
 -------------------------------------------------------------------------------}
 
+-- | Field-wise equality for a product row.
+--
+-- The method works over 'RowRep', so the row is in the type and no 'Proxy'
+-- argument is needed (obligation 4, design note §6). A plugin will build the
+-- body by substituting literal slot indices and a literal element count, so
+-- there is no type-level search at the use site.
+--
+-- The test suite writes these bodies by hand, which makes the tests the
+-- specification of what the plugin must emit.
+class RowFlavour r => RowEq (r :: RowType) (row :: k) where
+  repEq :: RowRep f r row a -> RowRep f r row a -> Bool
+  repEq _ _ = undefined
+
+-- | Field-wise @Show@ for a product row. See 'RowEq' for the design.
+class RowFlavour r => RowShow (r :: RowType) (row :: k) where
+  repShowsPrec :: Int -> RowRep f r row a -> ShowS
+  repShowsPrec _ _ = undefined
+
+-- | Field-wise equality for a sum row.
+--
+-- Sums need their own class because the comparison includes the tag (the
+-- constructor index), which products don't have (their tag is always 0 and
+-- folds away).
+class RowFlavour r => RowEqSum (r :: RowType) (row :: k) where
+  repEqSum :: RowRep f r row a -> RowRep f r row a -> Bool
+  repEqSum _ _ = undefined
+
+-- | Field-wise @Show@ for a sum row.
+class RowFlavour r => RowShowSum (r :: RowType) (row :: k) where
+  repShowsPrecSum :: Int -> RowRep f r row a -> ShowS
+  repShowsPrecSum _ _ = undefined
+
+-- | Evidence that a field name @n@ has a slot at a known index in a row.
+--
+-- The plugin solves this by inspecting the row and emitting the index as a
+-- literal (obligation 1, design note §5).
+class FieldIndex (n :: Symbol) (row :: k) (a :: Type) where
+  fieldIndex :: Int
+  fieldIndex = undefined
+
+-- | Evidence that a constructor name @n@ has a known tag in a row.
+--
+-- The plugin solves this by inspecting the row and emitting the tag as a
+-- literal (obligation 2, design note §5).
+class ConstructorIndex (n :: Symbol) (row :: k) where
+  constructorIndex :: Word
+  constructorIndex = undefined
+
 -- | Evidence that all fields of a row satisfy some class.
 --
 -- @DictAny c@ is the type-erased form of @c x@, mirroring @large-anon@'s
 -- dictionary packing. It is what lets one dictionary carry many field
 -- dictionaries without a type-level list of them.
+--
+-- @DictAny@ is a forward-looking mechanism (see PHASE2_SKETCH.md, refinement
+-- #4). It is not used by the current 'RowEq'/'RowShow' classes, but it may be
+-- needed when the evidence classes carry field-class dictionaries (e.g. an
+-- 'Eq' dictionary for each field).
 data DictAny (c :: Type -> Constraint) where
   DictAny :: c x => DictAny c
-
--- | Field-wise equality for a product or a sum row.
---
--- The method is /polymorphic in the representation/: one dictionary compares
--- any @Rep f a@ known to have row @r@. A plugin will build the body by
--- substituting literal slot indices and a literal element count, so there is
--- no type-level search at the use site. The test suite writes these bodies by
--- hand, which makes the tests the specification of what the plugin must emit.
---
--- == Why the row is an explicit argument
---
--- 'Rep' is deliberately /not/ indexed by its row: it is the erased runtime
--- form, and products and sums share it. The cost is that @RowEq r@ cannot be
--- solved from the arguments alone, so the row is passed as a 'Proxy'.
---
--- This is a known ergonomic debt, not a neutral choice. @large-anon@ does not
--- pay it because its @Record f r@ carries the row in the type, so
--- @RowHasField n r a@ resolves from the value's own type. Closing this gap is
--- one of the plugin's jobs: see note §6.
-class RowEq (r :: Row) where
-  repEq :: Proxy r -> Rep f a -> Rep f a -> Bool
-  repEq _ _ _ = undefined
-
--- | Field-wise @Show@ for a product or a sum row. See 'RowEq' for the 'Proxy'.
-class RowShow (r :: Row) where
-  repShowsPrec :: Proxy r -> Int -> Rep f a -> ShowS
-  repShowsPrec _ _ _ = undefined
 
 {-------------------------------------------------------------------------------
   §6  Utilities
