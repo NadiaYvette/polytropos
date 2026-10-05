@@ -29,8 +29,11 @@ collapse to one mechanism.
    TcPlugin must emit: literal indices, no type-level search. Keep them literal
    — a test that performs a type-level search no longer tests the point.
 4. **Commits:** descriptive-imperative subject, body explains why, HEREDOC
-   style. Attribution uses Linux kernel-style git trailers:
-   `Assisted-by: <Tool> (<Provider> / <Model>)`.
+   style. AI attribution uses the Linux kernel trailer, exactly
+   `Assisted-by: LLM` — never the assistant's name, vendor or model; never
+   `Co-authored-by:` (that certifies the DCO, which only a human can). Enforced
+   by `.githooks/commit-msg`; template in `.gitmessage`; see
+   `docs/notes/COMMIT_ATTRIBUTION.md`.
 5. **Toolchain:** GHC 9.14 / Cabal 3.18; features opt in via the cabal commons
    only. Tests: tasty.
 6. **This file has a ~4 KB budget.** Add links, not content.

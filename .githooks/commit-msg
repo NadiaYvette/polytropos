@@ -1,0 +1,80 @@
+#!/bin/sh
+# commit-msg: enforce one AI-attribution convention for every assistant.
+#
+# The rule is the Linux kernel's, from
+# Documentation/process/coding-assistants.rst:
+#
+#     Assisted-by: LLM [TOOL1] [TOOL2]
+#
+# The optional trailing tokens are *analysis* tools (coccinelle, sparse,
+# smatch, clang-tidy), not the assistant. Naming the assistant or its model
+# is wrong on purpose: upstream deleted those fields in Aug 2026 because
+# they advertised proprietary vendors without telling a reviewer anything
+# useful. So this hook rejects them.
+#
+# Why not Co-authored-by: that trailer claims authorship, and an assistant
+# cannot certify the Developer Certificate of Origin. Why not
+# Signed-off-by: the kernel is explicit that only a human may add it.
+#
+# Install:  git config core.hooksPath .githooks
+# Disable:  git commit --no-verify
+
+set -u
+
+msg_file=$1
+[ -f "$msg_file" ] || exit 0
+
+# --parse implies --only-input, so trailer.<key>.cmd from git config is NOT
+# applied here: we want to inspect what was literally written, not what git
+# would rewrite it to.
+trailers=$(git interpret-trailers --parse < "$msg_file" 2>/dev/null) || exit 0
+
+status=0
+err() { printf 'commit-msg: %s\n' "$*" >&2; status=1; }
+
+# 1. Robot emoji is decoration that several upstreams now reject outright.
+if grep -q '🤖' "$msg_file"; then
+	err "robot emoji in message; it carries no information and is rejected by some upstreams. Delete it."
+fi
+
+# 2. Generated-by: credits an assistant as the producer of the change.
+if printf '%s\n' "$trailers" | grep -qi '^[[:space:]]*Generated-by:'; then
+	err "Generated-by: is not the convention here. Use 'Assisted-by: LLM' instead."
+fi
+
+# 3. Co-authored-by / Co-developed-by naming an assistant claims it co-wrote
+#    the change. A human co-author is fine; an assistant is not.
+ai_names='copilot|chatgpt|gpt-[0-9]|codex|cursor|gemini|llama|qwen|deepseek|mistral|claude|anthropic|openai|aider|devin|codebuff|freebuff|buffy|space[ _-]?bunny|noreply@|\[bot\]|@bot\b'
+if printf '%s\n' "$trailers" \
+	| grep -Ei "^[[:space:]]*(Co-authored-by|Co-developed-by):.*($ai_names)"; then
+	err "Co-authored-by:/Co-developed-by: naming an AI tool. An assistant cannot be a co-author or certify the DCO. Use 'Assisted-by: LLM' instead."
+fi
+
+# 4. The value itself. First token must be the literal 'LLM'; anything after
+#    it is an analysis-tool list.
+if printf '%s\n' "$trailers" | grep -qi '^[[:space:]]*Assisted-by:'; then
+	printf '%s\n' "$trailers" | grep -i '^[[:space:]]*Assisted-by:' | while read -r line; do
+		value=${line#*:}
+		first=${value# }
+		first=${first%% *}
+		if [ "$first" != "LLM" ]; then
+			printf 'commit-msg: Assisted-by: must start with the literal token LLM; got %s\n' \
+				"\"$first\"" >&2
+			printf 'commit-msg: see Documentation/process/coding-assistants.rst -- the assistant name and model are deliberately not recorded\n' >&2
+			exit 1
+		fi
+	done || status=1
+	# `exit 1` inside the pipeline subshell sets the pipeline's status, which
+	# `|| status=1` picks up.
+fi
+
+# 5. Absence is not an error: a human commit needs no trailer. Set
+#    commit.warnMissingAssistedBy=true to be reminded on every commit.
+if [ -z "$(printf '%s\n' "$trailers" | grep -i '^[[:space:]]*Assisted-by:')" ]; then
+	if [ "$(git config --bool commit.warnMissingAssistedBy || echo false)" = true ]; then
+		printf 'commit-msg: no Assisted-by: trailer.\n' >&2
+		printf 'commit-msg: required only if an advanced coding tool took part in the change.\n' >&2
+	fi
+fi
+
+exit $status

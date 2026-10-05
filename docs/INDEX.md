@@ -7,6 +7,7 @@ Status: LIVING DOCUMENT · v0.1 · 2026-10-05
 | Path | Genre | Stage | Tier | Flags |
 |---|---|---|---|---|
 | `notes/POLYTROPOS_DESIGN.md` | design | draft | cross-cutting | — |
+| `notes/COMMIT_ATTRIBUTION.md` | convention | live | cross-cutting | — |
 
 ## Part 2 — Reading paths
 
@@ -15,6 +16,7 @@ Status: LIVING DOCUMENT · v0.1 · 2026-10-05
 
 **Contributor.** Design note in full, then `polytropos-core/src/Polytropos/Core.hs`
 — it is sectioned §1–§6 to match the note, and the two must be read together.
+Commit convention: `AGENTS.md` advisory 4, details in the attribution note.
 
 **Reviewer.** The two things most worth attacking: §3 (the widening/narrowing
 asymmetry) and §4 (elimination). Both are marked open on purpose.
