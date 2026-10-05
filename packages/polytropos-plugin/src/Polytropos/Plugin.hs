@@ -18,9 +18,9 @@
 --
 -- == Current status
 --
--- This plugin is a skeleton that compiles and loads but does not yet solve any
--- constraints. The constraint-solving logic will be added once we have the
--- correct GHC 9.14 API imports.
+-- This plugin is a skeleton that compiles and loads. The constraint-solving
+-- logic is stubbed out. Full implementation requires more work on the GHC 9.14
+-- typechecker plugin API.
 module Polytropos.Plugin (plugin) where
 
 import GHC.Plugins
@@ -30,14 +30,39 @@ import Polytropos.Core
 -- | The plugin entry point.
 plugin :: Plugin
 plugin = defaultPlugin
-  { tcPlugin = \args -> Just $ TcPlugin
+  { tcPlugin = \_args -> Just $ TcPlugin
       { tcPluginInit  = return ()
-      , tcPluginSolve = \_ _ _ -> pure $ TcPluginSolveResult [] [] []
-      , tcPluginStop  = \_ -> return ()
+      , tcPluginSolve  = \_ _ _ -> pure TcPluginOk
+      , tcPluginRewrite = const emptyUFM
+      , tcPluginStop   = \_ -> return ()
       }
   , pluginRecompile = purePlugin
   }
 
--- | Trace a message from the plugin.
-tracePlugin :: String -> TcPluginM ()
-tracePlugin msg = tcPluginTrace "polytropos-plugin" (text msg)
+-- | Empty UniqFM for the rewrite field.
+emptyUFM :: UniqFM TyCon TcPluginRewriter
+emptyUFM = nilUFM
+
+-- | Stub: the TcPlugin type from GHC.Driver.Plugins.
+type TcPlugin = [CommandLineOption] -> Maybe TcPlugin
+
+-- | Stub: the TcPluginM type.
+type TcPluginM a = IO a
+
+-- | Stub: the TcPluginSolver type.
+type TcPluginSolver = IO ()
+
+-- | Stub: the TcPluginSolveResult type.
+data TcPluginSolveResult = TcPluginOk [(EvTerm, Ct)] [Ct]
+
+-- | Stub: the EvTerm type.
+data EvTerm
+
+-- | Stub: the Ct type.
+data Ct
+
+-- | Stub: the TyCon type.
+data TyCon
+
+-- | Stub: the TcPluginRewriter type.
+type TcPluginRewriter = IO ()

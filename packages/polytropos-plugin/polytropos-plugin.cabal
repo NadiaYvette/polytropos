@@ -4,14 +4,16 @@ version:            0.1.0.0
 synopsis:           TcPlugin that emits literal evidence for Polytropos row classes
 description:
   A GHC typechecker plugin for @polytropos@ that solves the evidence-class
-  constraints (@'RowEq'@, @'RowShow'@, @'RowEqSum'@, @'RowShowSum'@,
-  @'FieldIndex'@, @'ConstructorIndex'@) by inspecting the row carried in a
+  constraints (@'FieldIndex'@, @'ConstructorIndex'@, @'RowEq'@, @'RowShow'@,
+  @'RowEqSum'@, @'RowShowSum'@) by inspecting the row carried in a
   @'RowRep'@'s type and emitting literal slot indices, tags, and comparison
   bodies — the same technique @large-anon@ uses for @DictRowHasField@.
 
-  The plugin is loaded via @ghc-options: -fplugin=Polytropos.Plugin@ in the
-  consuming package's .cabal file. It has no runtime footprint on the
-  @polytropos-core@ package; the core package stays measurable.
+  Uses the @ghc-tcplugin-api@ library for a streamlined interface to GHC's
+  typechecker plugin API.
+
+  Load with @ghc-options: -fplugin=Polytropos.Plugin@ in the consuming
+  package's .cabal file.
 license:            BSD-3-Clause
 author:             Nadia Yvette Chambers
 maintainer:         nadia.yvette.chambers@ik.me
@@ -36,5 +38,6 @@ library
   build-depends:
       base       >= 4.19 && < 4.23
     , ghc         >= 9.14 && < 9.15
+    , ghc-tcplugin-api >= 0.1 && < 0.21
     , polytropos-core
     , primitive   >= 0.9  && < 0.10
