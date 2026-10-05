@@ -7,11 +7,11 @@ Status: LIVING DOCUMENT · v0.1 · 2026-10-05
 | Path | Genre | Stage | Tier | Flags |
 |---|---|---|---|---|
 | `notes/POLYTROPOS_DESIGN.md` | design | draft | cross-cutting | — |
-| `notes/COMMIT_ATTRIBUTION.md` | convention | live | cross-cutting | — |
-| `notes/PROVENANCE.md` | convention | live | cross-cutting | — |
+| `notes/COMMIT_ATTRIBUTION.md` | convention | blessed | cross-cutting | — |
+| `notes/PROVENANCE.md` | convention | blessed | cross-cutting | — |
 | `notes/DOC_STRATEGY.md` | strategy | blessed | cross-cutting | — |
 | `registers/PACKAGES.md` | register | live | cross-cutting | — |
-| `transcripts/gemini-large-data-hybrid-variant-records-spec.md` | transcript | archive | cross-cutting | superseded in part |
+| `transcripts/gemini-large-data-hybrid-variant-records-spec.md` | transcript | archive | cross-cutting | inconsistent |
 
 ## Part 2 — Reading paths
 
@@ -37,8 +37,13 @@ measured and found false — read it as the question, then read
 
 ## Conventions
 
-- `notes/` — designs and specs; `registers/` — living registers; `imports/` —
-  verbatim third-party material; `transcripts/` — conversation archives.
+Column vocabularies are defined in `notes/DOC_STRATEGY.md` §3 (stages, flags) and
+§5 (genre, directory); the values below are drawn from them. `Tier` is retained
+from the inherited schema but carries only `cross-cutting` — see `DOC_STRATEGY.md`
+§0.1 for why it has no discriminating power here.
+
+- `notes/` — designs and specs; `registers/` — living registers; `transcripts/` —
+  conversation archives. A new genre decides directory and suffix together.
 - Genre, stage and tier are index metadata only; no filenames encode them.
 - Superseded documents stay in place with successor links; there is no archive
   directory.

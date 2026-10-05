@@ -1,6 +1,9 @@
 <!--
 SPDX-License-Identifier: BSD-3-Clause
 -->
+Status: POLICY · v1.0 · 2026-10-05 — blessed; see `DOC_STRATEGY.md` §3 for what
+blessing certifies and §8 for the authority it transfers.
+
 # Commit attribution
 
 One convention for AI attribution, shared by every assistant, REPL,

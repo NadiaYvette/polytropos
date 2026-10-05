@@ -112,6 +112,19 @@ Inherited wholesale; the stage vocabulary is what `docs/INDEX.md` already uses.
 6. `superseded` — replaced; **must link its successor**.
 7. `dead` — removed from the tree; tombstoned (below).
 
+Stages 1–7 govern **notes**, which record decisions and therefore have a
+lifecycle. Two further values apply to the other genres, which are not decision
+artifacts and have no blessing step:
+
+8. `live` — a living register or inventory: append-only by its own rules, never
+   blessed, superseded in place rather than replaced. `registers/`.
+9. `archive` — a preserved record kept for provenance: verbatim, never edited, not
+   canonical for anything. `transcripts/`.
+
+The distinction is the point: a note at `draft` is work pending adoption, whereas a
+register at `live` is finished and merely accumulating. Collapsing the two would
+make "needs a decision" indistinguishable from "needs a row".
+
 **Invalidity flags** — an orthogonal overlay on stages 2–5, so that an implemented
 document can be inconsistent without leaving `implemented` and repair need not force
 a re-blessing cycle. Carried in the Status header: `erroneous`, `inconsistent`,
@@ -134,11 +147,17 @@ in-tree. Version-qualified references keep stale links resolving: Hackage
 version-qualified docs for released packages, tag-pinned source links otherwise.
 
 **The working example.** The Gemini transcript in `docs/transcripts/` is the only
-document currently carrying a defect marker. It asserts three things about the
-`large-data` codebase that later measurement found false, so it is flagged
-`superseded in part` in the index and its provenance header points at the
-benchmark. It stays in the tree: an archive record that quietly contradicts the
-design note is worse than no archive.
+document currently carrying a defect flag. It asserts three things about the
+`large-data` codebase that later measurement found false, so it carries
+`inconsistent` in the index and its provenance header points at the benchmark. It
+stays in the tree: an archive record that quietly contradicts the design note is
+worse than no archive.
+
+Note what the flag does and does not do here. The document is at stage `archive`,
+so `superseded` would be wrong — nothing replaced it, and it is not going to be
+revised. The flag marks the *claims* as not citable; it does not demote the
+document out of the archive, because an uncorrected primary source with a stated
+correction is worth more than one quietly deleted.
 
 ## 4. The rot problem — design ahead of code
 
@@ -349,3 +368,4 @@ change; that is §4's precedence rule applied to evidence rather than to code.
 | 2026-10-05 | §6 and §11 repurposed rather than dropped. Rendering infrastructure is not applicable at one package and says so. §11 is rewritten around polytropos's actual relationship to measurement — evidence as a first-class documentation citizen — including the `-package-env -` reproducibility rule, the which-columns-are-stable rule, and benchmark-is-not-a-doc. |
 | 2026-10-05 | §9 keeps the source's "credit by choice, not obligation" position, and points at `THIRD_PARTY.md` and `COMMIT_ATTRIBUTION.md` rather than introducing `CREDITS.md`/`LICENSES/`, which this repository had already replaced. |
 | 2026-10-05 | §1 retains the scaled-textbook tutorial ambition as deferred rather than dropped, with a revisit trigger (a tutorial track appearing). |
+| 2026-10-05 | §3 extended with two stages for the non-note genres: `live` (living register, append-only) and `archive` (preserved record, not canonical). Found by applying the document to the corpus it governs: the index was already using both, and the Gemini transcript was marked `superseded in part`, which was neither a defined flag nor the right claim -- nothing replaced the transcript, so `inconsistent` on the claims is what the vocabulary actually expresses. `docs/INDEX.md` corrected to the defined vocabulary, and `COMMIT_ATTRIBUTION.md` / `PROVENANCE.md` given the Status headers their new `blessed` stage requires. |
