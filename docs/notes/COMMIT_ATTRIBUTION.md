@@ -31,6 +31,19 @@ Naming the assistant is therefore wrong here, not merely verbose. The hook
 rejects it. What a reviewer actually needs to know — that a machine was in the
 loop, and which commit to scrutinise — is preserved.
 
+### Which assistant, then?
+
+The trailer answers "was a machine involved?", not "which one?" So when the
+*identity* of the assistant is the information a reader needs, it goes in the
+document, not the commit. That is the case for imported transcripts: an
+archived conversation is one assistant's work by definition, and naming it in
+the provenance header is what makes the archive honest about what it holds.
+
+Concretely: `docs/transcripts/gemini-*.md` name Gemini in their provenance
+header and carry `Assisted-by: LLM` on the commit that imported them. The
+trailer describes *that commit*; the header describes *the archived material*.
+Keep the two separate and neither has to bend.
+
 ## Three trailers that are wrong
 
 | Trailer | Why not |
@@ -76,6 +89,17 @@ both found by experiment rather than by reading the docs:
 The hook parses trailers with `git interpret-trailers --parse`, which implies
 `--only-input`; that deliberately bypasses the `trailer.<key>.cmd` config so the
 hook inspects what was literally written rather than what git would rewrite.
+
+## Attribution inside documents
+
+Imported material records its own origin. A transcript's provenance header
+names the assistant, the venue and the date; a port's `LICENSE` names the
+upstream holders. See `PROVENANCE.md` for the licensing half and
+`docs/registers/PACKAGES.md` for the register.
+
+This is not an exception to the rule above — it is where the rule points when
+the identity matters. The trailer says a machine helped write the diff. The
+header says whose words are being preserved. Neither tries to do both.
 
 ## Scope
 
