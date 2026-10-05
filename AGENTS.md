@@ -14,13 +14,15 @@ collapse to one mechanism.
 1. `README.md` — what this is, and its status.
 2. `docs/notes/POLYTROPOS_DESIGN.md` — the canonical design note: decisions
    D1–D10, known costs, and the open questions (§7).
-3. `docs/INDEX.md` — corpus inventory and reading map.
+3. `docs/notes/DOC_STRATEGY.md` — documentation policy: genres, lifecycle,
+   canonicity, tone. §4's precedence rule is the one that fires most.
+4. `docs/INDEX.md` — corpus inventory and reading map.
 
 ## Operational advisories
 
 1. **Design docs are load-bearing.** A change that makes the design note stale
    must correct the note in the same change set. Code wins at runtime; the
-   note must still be fixed, not ignored.
+   note must still be fixed, not ignored. (`DOC_STRATEGY.md` §4.)
 2. **§4 (elimination) and §7 (open questions) are open on purpose.** Do not
    quietly settle them in code; the row shape may need rework once they are
    answered, and that is cheaper now than later.

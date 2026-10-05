@@ -9,6 +9,7 @@ Status: LIVING DOCUMENT · v0.1 · 2026-10-05
 | `notes/POLYTROPOS_DESIGN.md` | design | draft | cross-cutting | — |
 | `notes/COMMIT_ATTRIBUTION.md` | convention | live | cross-cutting | — |
 | `notes/PROVENANCE.md` | convention | live | cross-cutting | — |
+| `notes/DOC_STRATEGY.md` | strategy | blessed | cross-cutting | — |
 | `registers/PACKAGES.md` | register | live | cross-cutting | — |
 | `transcripts/gemini-large-data-hybrid-variant-records-spec.md` | transcript | archive | cross-cutting | superseded in part |
 
@@ -16,6 +17,10 @@ Status: LIVING DOCUMENT · v0.1 · 2026-10-05
 
 **Newcomer.** `README.md` → design note §§0–2 (what and how it is represented)
 → §6 (why a plugin) → §7 (what is not decided).
+
+**Anyone changing the documentation.** `notes/DOC_STRATEGY.md` governs genres,
+lifecycle, canonicity and tone. Its §4 precedence rule — code wins at runtime, the
+note is corrected regardless — is the one that fires most often.
 
 **Contributor.** Design note in full, then `packages/polytropos-core/src/Polytropos/Core.hs`
 — it is sectioned §1–§6 to match the note, and the two must be read together.
