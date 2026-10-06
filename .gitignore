@@ -3,3 +3,5 @@ dist-newstyle/
 *.hi
 *.o
 cabal.project.freeze
+.ghc-pkg-env/
+run-smoke.sh

@@ -25,23 +25,13 @@ type R2 = '[ "a" := Int, "b" := Bool ]
 slot :: a -> Identity Any
 slot = noInlineUnsafeCo
 
--- | Read a concrete value out of a slot.
-unslot :: Identity Any -> a
-unslot = noInlineUnsafeCo
-
 -- | Read slot 0 as an Int.
-intAt0 :: forall f a. Rep f a -> Int
-intAt0 = noInlineUnsafeCo . indexAt 0
-  where
-    indexAt :: forall f a. Int -> Rep f a -> f Any
-    indexAt i r = indexSmallArray (repVals r) i
+intAt0 :: Rep Identity a -> Int
+intAt0 r = noInlineUnsafeCo (indexSmallArray (repVals r) 0)
 
 -- | Read slot 1 as a Bool.
-boolAt1 :: forall f a. Rep f a -> Bool
-boolAt1 = noInlineUnsafeCo . indexAt 1
-  where
-    indexAt :: forall f a. Int -> Rep f a -> f Any
-    indexAt i r = indexSmallArray (repVals r) i
+boolAt1 :: Rep Identity a -> Bool
+boolAt1 r = noInlineUnsafeCo (indexSmallArray (repVals r) 1)
 
 -- | The two values under test.
 ab :: RowRep Identity ProductRowT R2 (Int, Bool)

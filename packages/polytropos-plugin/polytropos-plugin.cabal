@@ -58,4 +58,3 @@ test-suite polytropos-plugin-smoke
 
   ghc-options:
       -fplugin=Polytropos.Plugin
-      -package-env -
