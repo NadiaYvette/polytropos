@@ -6,7 +6,7 @@ Status: LIVING DOCUMENT · v0.1 · 2026-10-05
 
 | Path | Genre | Stage | Tier | Flags |
 |---|---|---|---|---|
-| `notes/POLYTROPOS_DESIGN.md` | design | draft | cross-cutting | — |
+| `notes/POLYTROPOS_DESIGN.md` | design | draft | cross-cutting | §4 answered; §7 Q1–Q3 closed; §7 Q4 nuanced; §7 Q5 open |
 | `notes/COMMIT_ATTRIBUTION.md` | convention | blessed | cross-cutting | — |
 | `notes/PROVENANCE.md` | convention | blessed | cross-cutting | — |
 | `notes/DOC_STRATEGY.md` | strategy | blessed | cross-cutting | — |
@@ -16,7 +16,7 @@ Status: LIVING DOCUMENT · v0.1 · 2026-10-05
 ## Part 2 — Reading paths
 
 **Newcomer.** `README.md` → design note §§0–2 (what and how it is represented)
-→ §6 (why a plugin) → §7 (what is not decided).
+→ §6 (why a plugin) → §7 (what is still open).
 
 **Anyone changing the documentation.** `notes/DOC_STRATEGY.md` governs genres,
 lifecycle, canonicity and tone. Its §4 precedence rule — code wins at runtime, the
@@ -26,8 +26,10 @@ note is corrected regardless — is the one that fires most often.
 — it is sectioned §1–§6 to match the note, and the two must be read together.
 Commit convention: `AGENTS.md` advisory 4, details in the attribution note.
 
-**Reviewer.** The two things most worth attacking: §3 (the widening/narrowing
-asymmetry) and §4 (elimination). Both are marked open on purpose.
+**Reviewer.** The §3 widening/narrowing asymmetry is still the load-bearing
+open shape; §4 (elimination) is now answered (hybrid + Option D vocabulary + Case 3
+wrapper) and sketched in `PHASE2_SKETCH.md`. The remaining §7 open items are Q4
+(`DictAny` fate) and Q5 (polytropos/large-anon coexistence).
 
 **Someone new to the idea.** The transcript that started this
 (`transcripts/gemini-large-data-hybrid-variant-records-spec.md`) explains the
