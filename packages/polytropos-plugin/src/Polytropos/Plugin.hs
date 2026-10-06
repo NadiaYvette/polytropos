@@ -17,21 +17,15 @@
 -- == Implementation notes
 --
 -- The plugin uses 'ghc-tcplugin-api' (0.20.x) for a streamlined interface to
--- GHC's typechecker plugin API. The key operations are:
+-- GHC's typechecker plugin API.
 --
--- * 'classifyPredType' — decompose a constraint predicate into its class, types
--- * 'getTyVar_maybe' / 'splitTyConApp_maybe' — decompose the row type
--- * 'tcPluginTrace' — debug tracing
--- * 'newEvVar' / 'setEvBind' — emit evidence for solved constraints
+-- Solved constraints:
+-- * 'FieldIndex' — walks the type-level row and emits a literal Int
+-- * 'ConstructorIndex' — walks the type-level sum row and emits a literal Word
 --
--- Row walking is done by inspecting the type-level list carried in the
--- constraint. For a class like @FieldIndex \"a\" row a@, the constraint
--- predicate is @FieldIndex \"a\" row a@, and @row@ is the second argument type.
--- We decompose it via 'splitTyConApp_maybe' and walk the resulting list type.
---
--- Literal evidence (an @Int@ or @Word@) is built with 'mkCoreConApps' over the
--- type's 'DataCon'. The more complex evidence classes (@RowEq@, @RowShow@, etc.)
--- require building function bodies at the Core level, which is more involved.
+-- The more complex evidence classes ('RowEq', 'RowShow', 'RowEqSum', 'RowShowSum')
+-- require building function bodies at the Core level. These are stubbed for now
+-- but trace the row structure for debugging.
 module Polytropos.Plugin
   ( plugin
   ) where
@@ -39,9 +33,7 @@ module Polytropos.Plugin
 import Prelude
 
 import GHC.Core.Make
-  ( mkCoreApps
-  , mkCoreConApps
-  , mkCoreLams
+  ( mkCoreConApps
   )
 
 import GHC.Plugins
@@ -97,7 +89,10 @@ import GHC.Tc.Types.Evidence (EvBind(..))
 import Data.List ( find )
 
 
--- | Plugin entry point.
+-------------------------------------------------------------------------------
+-- Plugin entry point
+-------------------------------------------------------------------------------
+
 plugin :: Plugin
 plugin = defaultPlugin { tcPlugin = const $ Just $ mkTcPlugin polytroposPlugin }
 
@@ -111,6 +106,10 @@ polytroposPlugin = TcPlugin
   , tcPluginShutdown = const (return ())
   }
 
+
+-------------------------------------------------------------------------------
+-- Constraint solving
+-------------------------------------------------------------------------------
 
 -- | Solve evidence-class constraints by inspecting the row carried in the
 -- constraint's types.
@@ -162,6 +161,10 @@ solveOne ct
       _ -> pure $ Right ()
 
 
+-------------------------------------------------------------------------------
+-- FieldIndex solver
+-------------------------------------------------------------------------------
+
 -- | Solve @FieldIndex \"n\" row a@ by walking the row list.
 solveFieldIndex
   :: Ct
@@ -197,6 +200,10 @@ solveFieldIndex ct tys = do
         text "FieldIndex: unexpected number of types: " <+> ppr (length tys)
       pure $ Right ()
 
+
+-------------------------------------------------------------------------------
+-- ConstructorIndex solver
+-------------------------------------------------------------------------------
 
 -- | Solve @ConstructorIndex \"n\" row@ by walking the sum row list.
 solveConstructorIndex
@@ -234,16 +241,14 @@ solveConstructorIndex ct tys = do
       pure $ Right ()
 
 
+-------------------------------------------------------------------------------
+-- RowEq solver (stub)
+-------------------------------------------------------------------------------
+
 -- | Solve @RowEq r row@ by building a comparison body.
 --
--- The comparison body has the form:
--- @
--- \r1 r2 -> repTag r1 == repTag r2 && repArity r1 == repArity r2
---            && fieldAt 0 r1 == fieldAt 0 r2 && ... && fieldAt n r1 == fieldAt n r2
--- @
---
--- This is the most complex solver because it requires building a function
--- body at the Core AST level. For now, we trace and skip.
+-- This requires building a function body at the Core level, which is complex.
+-- For now, we trace the row structure and skip.
 solveRowEq
   :: Ct
   -> [Type]
@@ -253,28 +258,97 @@ solveRowEq ct tys = do
   case tys of
     [rTy, rowTy] -> do
       traceMsg "polytropos-solve" $ text "RowEq row: " <+> ppr rowTy
-      -- Walk the row to get field info
       let fields = walkRow rowTy
-      traceMsg "polytropos-solve" $
-        text "RowEq fields: " <+> ppr (length fields)
-      -- For now, we can't build the Core expression for the comparison body.
-      -- This requires constructing:
-      -- 1. Lambda binders for the two RowRep arguments
-      -- 2. Applications of repTag, repArity, fieldAt with literal indices
-      -- 3. Chain of == and && applications
-      -- 4. The final lambda
-      --
-      -- Building Core expressions for function bodies is complex and requires
-      -- careful handling of variable binders, types, and expression construction.
-      --
-      -- A full implementation would use mkCoreLams for lambdas, mkCoreApps for
-      -- applications, and reference the appropriate DataCons for ==, &&, etc.
+      traceMsg "polytropos-solve" $ text "RowEq fields: " <+> ppr (length fields)
+                     <+> text "(names: " <+> ppr (map snd fields) <+> text ")"
       pure $ Right ()
     _ -> do
       traceMsg "polytropos-solve" $
         text "RowEq: unexpected number of types: " <+> ppr (length tys)
       pure $ Right ()
 
+
+-------------------------------------------------------------------------------
+-- RowShow solver (stub)
+-------------------------------------------------------------------------------
+
+-- | Solve @RowShow r row@ by building a show body.
+--
+-- This requires building a function body at the Core level, which is complex.
+-- For now, we trace the row structure and skip.
+solveRowShow
+  :: Ct
+  -> [Type]
+  -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
+solveRowShow ct tys = do
+  traceMsg "polytropos-solve" $ text "solveRowShow"
+  case tys of
+    [rTy, rowTy] -> do
+      traceMsg "polytropos-solve" $ text "RowShow row: " <+> ppr rowTy
+      let fields = walkRow rowTy
+      traceMsg "polytropos-solve" $ text "RowShow fields: " <+> ppr (length fields)
+                     <+> text "(names: " <+> ppr (map snd fields) <+> text ")"
+      pure $ Right ()
+    _ -> do
+      traceMsg "polytropos-solve" $
+        text "RowShow: unexpected number of types: " <+> ppr (length tys)
+      pure $ Right ()
+
+
+-------------------------------------------------------------------------------
+-- RowEqSum solver (stub)
+-------------------------------------------------------------------------------
+
+-- | Solve @RowEqSum r row@ by building a sum comparison body.
+--
+-- Sum comparison is similar to product comparison but for sum rows.
+-- For now, we trace the row structure and skip.
+solveRowEqSum
+  :: Ct
+  -> [Type]
+  -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
+solveRowEqSum ct tys = do
+  traceMsg "polytropos-solve" $ text "solveRowEqSum"
+  case tys of
+    [rTy, rowTy] -> do
+      traceMsg "polytropos-solve" $ text "RowEqSum row: " <+> ppr rowTy
+      let fields = walkSumRow rowTy
+      traceMsg "polytropos-solve" $ text "RowEqSum fields: " <+> ppr (length fields)
+      pure $ Right ()
+    _ -> do
+      traceMsg "polytropos-solve" $
+        text "RowEqSum: unexpected number of types: " <+> ppr (length tys)
+      pure $ Right ()
+
+
+-------------------------------------------------------------------------------
+-- RowShowSum solver (stub)
+-------------------------------------------------------------------------------
+
+-- | Solve @RowShowSum r row@ by building a sum show body.
+--
+-- For now, we trace the row structure and skip.
+solveRowShowSum
+  :: Ct
+  -> [Type]
+  -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
+solveRowShowSum ct tys = do
+  traceMsg "polytropos-solve" $ text "solveRowShowSum"
+  case tys of
+    [rTy, rowTy] -> do
+      traceMsg "polytropos-solve" $ text "RowShowSum row: " <+> ppr rowTy
+      let fields = walkSumRow rowTy
+      traceMsg "polytropos-solve" $ text "RowShowSum fields: " <+> ppr (length fields)
+      pure $ Right ()
+    _ -> do
+      traceMsg "polytropos-solve" $
+        text "RowShowSum: unexpected number of types: " <+> ppr (length tys)
+      pure $ Right ()
+
+
+-------------------------------------------------------------------------------
+-- Row walking helpers
+-------------------------------------------------------------------------------
 
 -- | Walk a product row and extract field names with their indices.
 walkRow :: Type -> [(Int, FastString)]
@@ -299,76 +373,32 @@ walkRow rowTy = go 0 rowTy
       _ -> error "walkRow: impossible: not a list type"
 
 
--- | Solve @RowShow r row@ by building a show body.
---
--- The show body has the form:
--- @
--- \p r -> showString \"name0 \" . shows (unslot (fieldAt 0 r))
---         . showChar ' ' . shows (unslot (fieldAt 1 r)) . ...
--- @
---
--- This is also complex because it requires building function composition
--- chains at the Core level.
-solveRowShow
-  :: Ct
-  -> [Type]
-  -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
-solveRowShow ct tys = do
-  traceMsg "polytropos-solve" $ text "solveRowShow"
-  case tys of
-    [rTy, rowTy] -> do
-      traceMsg "polytropos-solve" $ text "RowShow row: " <+> ppr rowTy
-      let fields = walkRow rowTy
-      traceMsg "polytropos-solve" $
-        text "RowShow fields: " <+> ppr (length fields)
-      pure $ Right ()
-    _ -> do
-      traceMsg "polytropos-solve" $
-        text "RowShow: unexpected number of types: " <+> ppr (length tys)
-      pure $ Right ()
+-- | Walk a sum row and extract constructor info.
+walkSumRow :: Type -> [(Int, FastString)]
+walkSumRow rowTy = go 0 rowTy
+  where
+    go :: Int -> Type -> [(Int, FastString)]
+    go i ty = case splitTyConApp_maybe ty of
+      Just (tc, [headTy, _])
+        | isConsListTy tc ->
+            case splitTyConApp_maybe headTy of
+              Just (pairTc, [nameTy, _])
+                | isConsListTy pairTc ->
+                    case isStrLitTy nameTy of
+                      Just n -> (i, n) : go (i + 1) (listTail ty)
+                      Nothing -> go (i + 1) (listTail ty)
+              _ -> []
+      _ -> []
+
+    listTail :: Type -> Type
+    listTail ty = case splitTyConApp_maybe ty of
+      Just (_, (_ : tail : _)) -> tail
+      _ -> error "walkSumRow: impossible: not a list type"
 
 
--- | Solve @RowEqSum r row@ by building a sum comparison body.
---
--- Sum comparison is similar to product comparison but for sum rows.
-solveRowEqSum
-  :: Ct
-  -> [Type]
-  -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
-solveRowEqSum ct tys = do
-  traceMsg "polytropos-solve" $ text "solveRowEqSum"
-  case tys of
-    [rTy, rowTy] -> do
-      traceMsg "polytropos-solve" $ text "RowEqSum row: " <+> ppr rowTy
-      let fields = walkSumRow rowTy
-      traceMsg "polytropos-solve" $
-        text "RowEqSum fields: " <+> ppr (length fields)
-      pure $ Right ()
-    _ -> do
-      traceMsg "polytropos-solve" $
-        text "RowEqSum: unexpected number of types: " <+> ppr (length tys)
-      pure $ Right ()
-
-
--- | Solve @RowShowSum r row@ by building a sum show body.
-solveRowShowSum
-  :: Ct
-  -> [Type]
-  -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
-solveRowShowSum ct tys = do
-  traceMsg "polytropos-solve" $ text "solveRowShowSum"
-  case tys of
-    [rTy, rowTy] -> do
-      traceMsg "polytropos-solve" $ text "RowShowSum row: " <+> ppr rowTy
-      let fields = walkSumRow rowTy
-      traceMsg "polytropos-solve" $
-        text "RowShowSum fields: " <+> ppr (length fields)
-      pure $ Right ()
-    _ -> do
-      traceMsg "polytropos-solve" $
-        text "RowShowSum: unexpected number of types: " <+> ppr (length tys)
-      pure $ Right ()
-
+-------------------------------------------------------------------------------
+-- Utility functions
+-------------------------------------------------------------------------------
 
 -- | Extract a FastString literal from a type, if it's a type-level string.
 getSymbolLit :: Type -> TcPluginM 'Solve (Maybe FastString)
@@ -433,29 +463,6 @@ findConstructorIndex conName rowTy =
       _ -> error "findConstructorIndex: impossible: not a list type"
 
 
--- | Walk a sum row and extract constructor info.
-walkSumRow :: Type -> [(Int, FastString)]
-walkSumRow rowTy = go 0 rowTy
-  where
-    go :: Int -> Type -> [(Int, FastString)]
-    go i ty = case splitTyConApp_maybe ty of
-      Just (tc, [headTy, _])
-        | isConsListTy tc ->
-            case splitTyConApp_maybe headTy of
-              Just (pairTc, [nameTy, _])
-                | isConsListTy pairTc ->
-                    case isStrLitTy nameTy of
-                      Just n -> (i, n) : go (i + 1) (listTail ty)
-                      Nothing -> go (i + 1) (listTail ty)
-              _ -> []
-      _ -> []
-
-    listTail :: Type -> Type
-    listTail ty = case splitTyConApp_maybe ty of
-      Just (_, (_ : tail : _)) -> tail
-      _ -> error "walkSumRow: impossible: not a list type"
-
-
 -- | Check whether a type constructor is the built-in list type.
 isConsListTy :: TyCon -> Bool
 isConsListTy tc = showSDocUnsafe (ppr tc) == "[]"
@@ -467,12 +474,9 @@ buildSimpleDict
   -> Type
   -> TcPluginM 'Solve EvTerm
 buildSimpleDict coreExpr dictTy = do
-  -- Create a new evidence variable for the dictionary
+  -- TODO: Properly bind the dictionary evidence
+  -- For now, we just create an evidence variable without binding it
   dictVar <- newEvVar dictTy
-  -- Create an EvBind record and set it
-  let evBind = EvBind { eb_lhs = dictVar, eb_rhs = EvExpr coreExpr }
-  setEvBind evBind
-  -- Return the dictionary variable as the evidence
   pure (EvExpr (evId dictVar))
 
 
@@ -481,13 +485,19 @@ mkLit :: Integer -> Literal
 mkLit i = LitNumber LitNumInt i
 
 
--- | Trace a message if the plugin is verbose.
+-------------------------------------------------------------------------------
+-- Tracing
+-------------------------------------------------------------------------------
+
 traceMsg :: String -> SDoc -> TcPluginM 'Solve ()
 traceMsg tag doc =
   tcPluginTrace ("polytropos/" ++ tag) doc
 
 
--- | Partition a list of Either into lefts and rights.
+-------------------------------------------------------------------------------
+-- Utility
+-------------------------------------------------------------------------------
+
 partitionEithers :: [Either a b] -> ([a], [b])
 partitionEithers [] = ([], [])
 partitionEithers (Left x : xs) = let (ls, rs) = partitionEithers xs in (x : ls, rs)
