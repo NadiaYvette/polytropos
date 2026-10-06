@@ -30,7 +30,8 @@
 -- We decompose it via 'splitTyConApp_maybe' and walk the resulting list type.
 --
 -- Literal evidence (an @Int@ or @Word@) is built with 'mkCoreConApps' over the
--- type's 'DataCon'.
+-- type's 'DataCon'. The more complex evidence classes (@RowEq@, @RowShow@, etc.)
+-- require building function bodies at the Core level, which is more involved.
 module Polytropos.Plugin
   ( plugin
   ) where
@@ -38,7 +39,9 @@ module Polytropos.Plugin
 import Prelude
 
 import GHC.Core.Make
-  ( mkCoreConApps
+  ( mkCoreApps
+  , mkCoreConApps
+  , mkCoreLams
   )
 
 import GHC.Plugins
@@ -177,9 +180,7 @@ solveFieldIndex ct tys = do
               traceMsg "polytropos-solve" $
                 text "FieldIndex " <+> ppr fieldName <+>
                 text " = " <+> ppr i <+> text " (literal)"
-              -- Build the evidence: an Int literal using intDataCon
               let coreExpr = mkCoreConApps intDataCon [Lit (mkLit (fromIntegral i :: Integer))]
-              -- Build a simple dictionary binding
               evTerm <- buildSimpleDict coreExpr aTy
               pure $ Left (evTerm, ct)
             Nothing -> do
@@ -215,9 +216,7 @@ solveConstructorIndex ct tys = do
               traceMsg "polytropos-solve" $
                 text "ConstructorIndex " <+> ppr conName <+>
                 text " = " <+> ppr w <+> text " (literal)"
-              -- Build the evidence: a Word literal using wordDataCon
               let coreExpr = mkCoreConApps wordDataCon [Lit (mkLit (fromIntegral w :: Integer))]
-              -- Build a simple dictionary binding
               evTerm <- buildSimpleDict coreExpr (mkTyConTy wordTyCon)
               pure $ Left (evTerm, ct)
             Nothing -> do
@@ -236,6 +235,15 @@ solveConstructorIndex ct tys = do
 
 
 -- | Solve @RowEq r row@ by building a comparison body.
+--
+-- The comparison body has the form:
+-- @
+-- \r1 r2 -> repTag r1 == repTag r2 && repArity r1 == repArity r2
+--            && fieldAt 0 r1 == fieldAt 0 r2 && ... && fieldAt n r1 == fieldAt n r2
+-- @
+--
+-- This is the most complex solver because it requires building a function
+-- body at the Core AST level. For now, we trace and skip.
 solveRowEq
   :: Ct
   -> [Type]
@@ -245,10 +253,22 @@ solveRowEq ct tys = do
   case tys of
     [rTy, rowTy] -> do
       traceMsg "polytropos-solve" $ text "RowEq row: " <+> ppr rowTy
-      -- Build a comparison body that compares tags, arities, and field slots.
-      -- This requires deep inspection of the row structure and building a Core
-      -- expression that compares two RowRep arguments. This is the most complex
-      -- part of the plugin and is not yet implemented.
+      -- Walk the row to get field info
+      let fields = walkRow rowTy
+      traceMsg "polytropos-solve" $
+        text "RowEq fields: " <+> ppr (length fields)
+      -- For now, we can't build the Core expression for the comparison body.
+      -- This requires constructing:
+      -- 1. Lambda binders for the two RowRep arguments
+      -- 2. Applications of repTag, repArity, fieldAt with literal indices
+      -- 3. Chain of == and && applications
+      -- 4. The final lambda
+      --
+      -- Building Core expressions for function bodies is complex and requires
+      -- careful handling of variable binders, types, and expression construction.
+      --
+      -- A full implementation would use mkCoreLams for lambdas, mkCoreApps for
+      -- applications, and reference the appropriate DataCons for ==, &&, etc.
       pure $ Right ()
     _ -> do
       traceMsg "polytropos-solve" $
@@ -256,7 +276,39 @@ solveRowEq ct tys = do
       pure $ Right ()
 
 
+-- | Walk a product row and extract field names with their indices.
+walkRow :: Type -> [(Int, FastString)]
+walkRow rowTy = go 0 rowTy
+  where
+    go :: Int -> Type -> [(Int, FastString)]
+    go i ty = case splitTyConApp_maybe ty of
+      Just (tc, [headTy, _])
+        | isConsListTy tc ->
+            case splitTyConApp_maybe headTy of
+              Just (pairTc, [nameTy, _])
+                | isConsListTy pairTc ->
+                    case isStrLitTy nameTy of
+                      Just n -> (i, n) : go (i + 1) (listTail ty)
+                      Nothing -> go (i + 1) (listTail ty)
+              _ -> []
+      _ -> []
+
+    listTail :: Type -> Type
+    listTail ty = case splitTyConApp_maybe ty of
+      Just (_, (_ : tail : _)) -> tail
+      _ -> error "walkRow: impossible: not a list type"
+
+
 -- | Solve @RowShow r row@ by building a show body.
+--
+-- The show body has the form:
+-- @
+-- \p r -> showString \"name0 \" . shows (unslot (fieldAt 0 r))
+--         . showChar ' ' . shows (unslot (fieldAt 1 r)) . ...
+-- @
+--
+-- This is also complex because it requires building function composition
+-- chains at the Core level.
 solveRowShow
   :: Ct
   -> [Type]
@@ -266,6 +318,9 @@ solveRowShow ct tys = do
   case tys of
     [rTy, rowTy] -> do
       traceMsg "polytropos-solve" $ text "RowShow row: " <+> ppr rowTy
+      let fields = walkRow rowTy
+      traceMsg "polytropos-solve" $
+        text "RowShow fields: " <+> ppr (length fields)
       pure $ Right ()
     _ -> do
       traceMsg "polytropos-solve" $
@@ -274,6 +329,8 @@ solveRowShow ct tys = do
 
 
 -- | Solve @RowEqSum r row@ by building a sum comparison body.
+--
+-- Sum comparison is similar to product comparison but for sum rows.
 solveRowEqSum
   :: Ct
   -> [Type]
@@ -283,6 +340,9 @@ solveRowEqSum ct tys = do
   case tys of
     [rTy, rowTy] -> do
       traceMsg "polytropos-solve" $ text "RowEqSum row: " <+> ppr rowTy
+      let fields = walkSumRow rowTy
+      traceMsg "polytropos-solve" $
+        text "RowEqSum fields: " <+> ppr (length fields)
       pure $ Right ()
     _ -> do
       traceMsg "polytropos-solve" $
@@ -300,6 +360,9 @@ solveRowShowSum ct tys = do
   case tys of
     [rTy, rowTy] -> do
       traceMsg "polytropos-solve" $ text "RowShowSum row: " <+> ppr rowTy
+      let fields = walkSumRow rowTy
+      traceMsg "polytropos-solve" $
+        text "RowShowSum fields: " <+> ppr (length fields)
       pure $ Right ()
     _ -> do
       traceMsg "polytropos-solve" $
@@ -317,10 +380,6 @@ getSymbolLit ty = do
 
 
 -- | Find the field index of a named field in a row type.
---
--- The row type is expected to be a type-level list of @"name := type"@ pairs.
--- We walk the list, comparing field names, and return the index of the first
--- match.
 findFieldIndex
   :: FastString
   -> Type
@@ -348,9 +407,6 @@ findFieldIndex fieldName rowTy =
 
 
 -- | Find the constructor index of a named constructor in a sum row type.
---
--- The sum row type is expected to be a type-level list of
--- @"name := field_row"@ pairs.
 findConstructorIndex
   :: FastString
   -> Type
@@ -377,16 +433,35 @@ findConstructorIndex conName rowTy =
       _ -> error "findConstructorIndex: impossible: not a list type"
 
 
+-- | Walk a sum row and extract constructor info.
+walkSumRow :: Type -> [(Int, FastString)]
+walkSumRow rowTy = go 0 rowTy
+  where
+    go :: Int -> Type -> [(Int, FastString)]
+    go i ty = case splitTyConApp_maybe ty of
+      Just (tc, [headTy, _])
+        | isConsListTy tc ->
+            case splitTyConApp_maybe headTy of
+              Just (pairTc, [nameTy, _])
+                | isConsListTy pairTc ->
+                    case isStrLitTy nameTy of
+                      Just n -> (i, n) : go (i + 1) (listTail ty)
+                      Nothing -> go (i + 1) (listTail ty)
+              _ -> []
+      _ -> []
+
+    listTail :: Type -> Type
+    listTail ty = case splitTyConApp_maybe ty of
+      Just (_, (_ : tail : _)) -> tail
+      _ -> error "walkSumRow: impossible: not a list type"
+
+
 -- | Check whether a type constructor is the built-in list type.
 isConsListTy :: TyCon -> Bool
 isConsListTy tc = showSDocUnsafe (ppr tc) == "[]"
 
 
 -- | Build a simple dictionary from a CoreExpr.
---
--- This creates an evidence variable, binds it to the expression, and returns
--- the variable as the dictionary. This is a simplified approach that works
--- for classes with a single method that returns a literal value.
 buildSimpleDict
   :: CoreExpr
   -> Type
@@ -395,7 +470,6 @@ buildSimpleDict coreExpr dictTy = do
   -- Create a new evidence variable for the dictionary
   dictVar <- newEvVar dictTy
   -- Create an EvBind record and set it
-  -- EvBind has fields: eb_lhs :: EvVar, eb_rhs :: EvTerm, eb_info :: EvBindInfo
   let evBind = EvBind { eb_lhs = dictVar, eb_rhs = EvExpr coreExpr }
   setEvBind evBind
   -- Return the dictionary variable as the evidence
