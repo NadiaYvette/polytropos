@@ -88,6 +88,8 @@ import GHC.Tc.Types.Evidence (EvBind(..))
 
 import Data.List ( find )
 
+import Polytropos.Core (repTag, repArity, fieldAt)
+
 
 -------------------------------------------------------------------------------
 -- Plugin entry point

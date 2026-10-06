@@ -64,6 +64,10 @@ module Polytropos.Core (
   , DictAny(..)
     -- * Utilities
   , noInlineUnsafeCo
+    -- * Exports for TcPlugin
+  , repTag
+  , repArity
+  , fieldAt
   ) where
 
 import Data.Foldable                 (toList)

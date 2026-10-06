@@ -32,15 +32,18 @@ constraints by emitting literal slot indices and tags.
 ## What is deliberately missing
 
 - `RowEq` / `RowShow` / `RowEqSum` / `RowShowSum` constraint solving — these
-  require building complex Core expressions that compare two `RowRep` values,
-  which is more involved than emitting a literal index
+  require building function bodies at the Core AST level (lambdas, applications,
+  composition chains), which needs careful handling of GHC's Core representation.
+  The solvers now trace the row structure and skip.
+  
+  **Update**: Exported `repTag`, `repArity`, `fieldAt` from Polytropos.Core so
+  the plugin can reference them. The plugin builds successfully.
 - Testing the plugin end-to-end against the core tests
 
 ## Next action
 
-Complete the remaining constraint solvers (`RowEq`, `RowShow`, `RowEqSum`,
-`RowShowSum`) or test the existing `FieldIndex`/`ConstructorIndex` solvers
-end-to-end with a test that uses the plugin.
+Now that the plugin can reference `repTag`, `repArity`, and `fieldAt` from
+Polytropos.Core, implement the Core expression building for RowEq/RowShow.
 
 The plugin uses `ghc-tcplugin-api` for the GHC API. The core module changes
 are complete and all 25 tests pass. The plugin package now compiles and solves
