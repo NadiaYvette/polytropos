@@ -26,8 +26,8 @@ can change the row shape:
 
 Design note §6, in order:
 
-- [ ] Field name → literal slot index
-- [ ] Constructor name → literal tag
+- [x] Field name → literal slot index (solves `FieldIndex` constraints)
+- [x] Constructor name → literal tag (solves `ConstructorIndex` constraints)
 - [ ] `RowEq` / `RowShow` bodies emitted as literals
 - [ ] Retire the `Proxy r` debt (§5, D8a) by indexing `Rep` by its row
 

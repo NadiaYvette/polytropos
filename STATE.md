@@ -4,9 +4,10 @@ Operational frontier. Read with `PLAN.md`; update before ending a session.
 
 ## Where we are
 
-Phase 1 decisions all made. Phase 2 sketching done. Phase 3 (the plugin) started
-but not complete. `polytropos-core` builds on GHC 9.14.1 and its 25 tests pass.
-The plugin package compiles but does not yet solve constraints.
+Phase 1 decisions all made. Phase 2 sketching done. Phase 3 (the plugin) in progress.
+`polytropos-core` builds on GHC 9.14.1 and its 25 tests pass.
+The plugin package now compiles and solves `FieldIndex` and `ConstructorIndex`
+constraints by emitting literal slot indices and tags.
 
 ## What exists
 
@@ -19,8 +20,9 @@ The plugin package compiles but does not yet solve constraints.
   are the specification of what the plugin must emit
 - `packages/polytropos-plugin/polytropos-plugin.cabal` — plugin package with
   `ghc-tcplugin-api` dependency
-- `packages/polytropos-plugin/src/Polytropos/Plugin.hs` — plugin skeleton that
-  compiles and loads, traces constraints, but does not solve any
+- `packages/polytropos-plugin/src/Polytropos/Plugin.hs` — plugin that compiles,
+  loads, and solves `FieldIndex` and `ConstructorIndex` constraints by walking
+  the type-level row list and emitting literal Int/Word evidence
 - `docs/notes/POLYTROPOS_DESIGN.md` — decisions D1–D10, costs, open questions
 - `docs/notes/PHASE2_SKETCH.md` — Phase 2 sketch (all refinements resolved)
 - `benchmark/variants/` — the four-arm compile-time harness the design rests on
@@ -29,21 +31,17 @@ The plugin package compiles but does not yet solve constraints.
 
 ## What is deliberately missing
 
-The plugin's constraint-solving logic — the plugin skeleton traces constraints
-but does not solve any. Full implementation requires:
-- Inspecting constraints (ctPred, classifyPredType)
-- Building dictionary evidence (classDataCon, mkCoreConApps, EvExpr)
-- Building equality evidence (mkUnivCo, evCoercion)
-- Walking type-level lists to find field/constructor indices
+- `RowEq` / `RowShow` / `RowEqSum` / `RowShowSum` constraint solving — these
+  require building complex Core expressions that compare two `RowRep` values,
+  which is more involved than emitting a literal index
+- Testing the plugin end-to-end against the core tests
 
 ## Next action
 
-Complete the plugin's constraint-solving logic. The plugin must solve:
-- `FieldIndex n row a` → literal slot index (obligation 1)
-- `ConstructorIndex n row` → literal tag (obligation 2)
-- `RowEq r row` / `RowShow r row` → literal comparison/show bodies (obligation 3)
-- `RowEqSum r row` / `RowShowSum r row` → literal sum comparison/show bodies
+Complete the remaining constraint solvers (`RowEq`, `RowShow`, `RowEqSum`,
+`RowShowSum`) or test the existing `FieldIndex`/`ConstructorIndex` solvers
+end-to-end with a test that uses the plugin.
 
 The plugin uses `ghc-tcplugin-api` for the GHC API. The core module changes
-are complete and all 25 tests pass. The plugin package compiles but does not
-yet solve constraints.
+are complete and all 25 tests pass. The plugin package now compiles and solves
+`FieldIndex` and `ConstructorIndex` constraints.

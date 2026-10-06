@@ -1,10 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE TypeApplications #-}
 
 -- | GHC typechecker plugin for @polytropos@.
 --
@@ -25,91 +22,75 @@
 -- * 'classifyPredType' — decompose a constraint predicate into its class, types
 -- * 'getTyVar_maybe' / 'splitTyConApp_maybe' — decompose the row type
 -- * 'tcPluginTrace' — debug tracing
--- * 'mkWantedEv' / 'newEvVar' — emit evidence for solved constraints
--- * 'evDataConApp' — build a class-dictionary evidence term from a DataCon
+-- * 'newEvVar' / 'setEvBind' — emit evidence for solved constraints
 --
 -- Row walking is done by inspecting the type-level list carried in the
--- constraint. For a class like @FieldIndex "a" row a@, the constraint
--- predicate is @FieldIndex "a" row a@, and @row@ is the second argument type.
+-- constraint. For a class like @FieldIndex \"a\" row a@, the constraint
+-- predicate is @FieldIndex \"a\" row a@, and @row@ is the second argument type.
 -- We decompose it via 'splitTyConApp_maybe' and walk the resulting list type.
 --
 -- Literal evidence (an @Int@ or @Word@) is built with 'mkCoreConApps' over the
--- type's 'DataCon'. Class-dictionary evidence is built with 'evDataConApp'
--- over the class's 'DataCon' (obtained via 'classDataCon').
+-- type's 'DataCon'.
 module Polytropos.Plugin
   ( plugin
   ) where
 
+import Prelude
+
+import GHC.Core.Make
+  ( mkCoreConApps
+  )
+
 import GHC.Plugins
   ( Plugin (..)
   , defaultPlugin
-  , purePlugin
   , tcPlugin
-  , tcPluginTrace
   , ppr
   , text
-  , showSDoc
+  , (<+>)
+  , CoreExpr
+  , Expr(..)
+  , Type
+  , TyCon
+  , mkTcOcc
+  , nameOccName
+  , mkTyConTy
+  , splitTyConApp_maybe
+  , isStrLitTy
+  , intDataCon
+  , wordDataCon
+  , FastString
+  , Literal(..)
+  , LitNumType(..)
+  , wordTyCon
+  , showSDocUnsafe
+  , SDoc
   )
 
 import GHC.TcPlugin.API
   ( TcPlugin (..)
-  , mkTcPlugin
-  , TcPluginSolver
-  , TcPluginSolveResult
-  , TcPluginOk (..)
+  , TcPluginSolveResult(..)
   , TcPluginM
   , classifyPredType
-  , ClassPred (..)
+  , Pred(..)
   , ctPred
   , ctEvidence
-  , ctFlavour
   , isWanted
-  , mkClassPred
   , className
-  , classDataCon
-  , tyConName
-  , mkTyConTy
-  , mkTyConApp
-  , splitTyConApp_maybe
-  , splitAppTy_maybe
-  , getTyVar_maybe
-  , isStrLitTy
-  , mkStrLitTy
   , tcPluginTrace
   , EvTerm (..)
-  , EvExpr
-  , EvBindsVar
+  , EvExpr (..)
   , newEvVar
   , setEvBind
-  , askEvBinds
-  , evDataConApp
-  , mkEvApp
-  , mkEvVarApps
-  , mkWantedEv
-  , newName
-  , mkLocalId
-  , mkCoreVar
-  , mkIntLit
-  , mkWordLit
-  , mkCoreConApps
-  , mkCoreLams
-  , mkCoreLets
-  , varType
-  , mkTyVarTy
-  , typeKind
-  , symbolKind
+  , evId
+  , Ct
+  , TcPluginStage(..)
+  , mkTcPlugin
+  , emptyUFM
   )
 
-import Polytropos.Core
-  ( FieldIndex (..)
-  , ConstructorIndex (..)
-  , RowEq (..)
-  , RowShow (..)
-  , RowEqSum (..)
-  , RowShowSum (..)
-  )
+import GHC.Tc.Types.Evidence (EvBind(..))
 
-import Data.Maybe ( listToMaybe, mapMaybe )
 import Data.List ( find )
 
 
@@ -121,31 +102,36 @@ plugin = defaultPlugin { tcPlugin = const $ Just $ mkTcPlugin polytroposPlugin }
 polytroposPlugin :: TcPlugin
 polytroposPlugin = TcPlugin
   { tcPluginInit  = return ()
-  , tcPluginSolve  = \_ _ -> polytroposSolve
+  , tcPluginSolve  = const polytroposSolve
   , tcPluginRewrite = const emptyUFM
-  , tcPluginPostTc = \_ -> return ()
+  , tcPluginPostTc = const (return ())
+  , tcPluginShutdown = const (return ())
   }
 
 
 -- | Solve evidence-class constraints by inspecting the row carried in the
 -- constraint's types.
 polytroposSolve
-  :: EvBindsVar
-  -> [Ct]
+  :: [Ct]
   -> [Ct]
   -> TcPluginM 'Solve TcPluginSolveResult
-polytroposSolve _ givens wanteds = do
+polytroposSolve givens wanteds = do
   let allCts = givens ++ wanteds
   traceMsg "polytropos-solve" $ text "num constraints: " <+> ppr (length allCts)
 
   solved <- mapM solveOne allCts
-  let (solved', _) = partitionEithers solved
-  pure $ TcPluginOk solved' []
+  let (solved', fskipped) = partitionEithers solved
+  traceMsg "polytropos-solve" $ text "solved: " <+> ppr (length solved')
+                         <+> text "skipped: " <+> ppr (length fskipped)
+  pure $ TcPluginSolveResult { tcPluginInsolubleCts = []
+                           , tcPluginSolvedCts = solved'
+                           , tcPluginNewCts = []
+                           }
 
 
 solveOne :: Ct -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
 solveOne ct
-  | not (isWanted (ctFlavour (ctEvidence ct)))
+  | not (isWanted (ctEvidence ct))
   = pure $ Right ()
   | otherwise
   = do
@@ -173,7 +159,7 @@ solveOne ct
       _ -> pure $ Right ()
 
 
--- | Solve @FieldIndex "n" row a@ by walking the row list.
+-- | Solve @FieldIndex \"n\" row a@ by walking the row list.
 solveFieldIndex
   :: Ct
   -> [Type]
@@ -191,8 +177,10 @@ solveFieldIndex ct tys = do
               traceMsg "polytropos-solve" $
                 text "FieldIndex " <+> ppr fieldName <+>
                 text " = " <+> ppr i <+> text " (literal)"
-              evExpr <- mkIntLit i
-              evTerm <- evExprToEvTerm evExpr aTy
+              -- Build the evidence: an Int literal using intDataCon
+              let coreExpr = mkCoreConApps intDataCon [Lit (mkLit (fromIntegral i :: Integer))]
+              -- Build a simple dictionary binding
+              evTerm <- buildSimpleDict coreExpr aTy
               pure $ Left (evTerm, ct)
             Nothing -> do
               traceMsg "polytropos-solve" $
@@ -209,7 +197,7 @@ solveFieldIndex ct tys = do
       pure $ Right ()
 
 
--- | Solve @ConstructorIndex "n" row@ by walking the sum row list.
+-- | Solve @ConstructorIndex \"n\" row@ by walking the sum row list.
 solveConstructorIndex
   :: Ct
   -> [Type]
@@ -227,8 +215,10 @@ solveConstructorIndex ct tys = do
               traceMsg "polytropos-solve" $
                 text "ConstructorIndex " <+> ppr conName <+>
                 text " = " <+> ppr w <+> text " (literal)"
-              evExpr <- mkWordLit w
-              evTerm <- evExprToEvTerm evExpr (wordTy w)
+              -- Build the evidence: a Word literal using wordDataCon
+              let coreExpr = mkCoreConApps wordDataCon [Lit (mkLit (fromIntegral w :: Integer))]
+              -- Build a simple dictionary binding
+              evTerm <- buildSimpleDict coreExpr (mkTyConTy wordTyCon)
               pure $ Left (evTerm, ct)
             Nothing -> do
               traceMsg "polytropos-solve" $
@@ -256,14 +246,9 @@ solveRowEq ct tys = do
     [rTy, rowTy] -> do
       traceMsg "polytropos-solve" $ text "RowEq row: " <+> ppr rowTy
       -- Build a comparison body that compares tags, arities, and field slots.
-      -- This is sketched out — the exact evidence term depends on the class
-      -- dictionary structure, which is defined by the RowEq class.
-      --
-      -- For now, we trace the constraint and return without solving.
-      -- A full implementation would:
-      -- 1. Walk rowTy to compute the arity and field names
-      -- 2. Build a Core expression that compares the two RowRep arguments
-      -- 3. Build a class dictionary evidence term from that Core expression
+      -- This requires deep inspection of the row structure and building a Core
+      -- expression that compares two RowRep arguments. This is the most complex
+      -- part of the plugin and is not yet implemented.
       pure $ Right ()
     _ -> do
       traceMsg "polytropos-solve" $
@@ -365,7 +350,7 @@ findFieldIndex fieldName rowTy =
 -- | Find the constructor index of a named constructor in a sum row type.
 --
 -- The sum row type is expected to be a type-level list of
--- @"name := field-row"@ pairs.
+-- @"name := field_row"@ pairs.
 findConstructorIndex
   :: FastString
   -> Type
@@ -394,72 +379,32 @@ findConstructorIndex conName rowTy =
 
 -- | Check whether a type constructor is the built-in list type.
 isConsListTy :: TyCon -> Bool
-isConsListTy tc =
-  showSDoc (ppr tc) == "[]"
+isConsListTy tc = showSDocUnsafe (ppr tc) == "[]"
 
 
--- | Convert a Core expression to an EvTerm.
-evExprToEvTerm :: EvExpr -> Type -> TcPluginM 'Solve EvTerm
-evExprToEvTerm expr ty = do
-  evVar <- newEvVar ty
-  setEvBind (EvBind evVar (EvExpr expr))
-  pure (EvExpr (evId evVar))
+-- | Build a simple dictionary from a CoreExpr.
+--
+-- This creates an evidence variable, binds it to the expression, and returns
+-- the variable as the dictionary. This is a simplified approach that works
+-- for classes with a single method that returns a literal value.
+buildSimpleDict
+  :: CoreExpr
+  -> Type
+  -> TcPluginM 'Solve EvTerm
+buildSimpleDict coreExpr dictTy = do
+  -- Create a new evidence variable for the dictionary
+  dictVar <- newEvVar dictTy
+  -- Create an EvBind record and set it
+  -- EvBind has fields: eb_lhs :: EvVar, eb_rhs :: EvTerm, eb_info :: EvBindInfo
+  let evBind = EvBind { eb_lhs = dictVar, eb_rhs = EvExpr coreExpr }
+  setEvBind evBind
+  -- Return the dictionary variable as the evidence
+  pure (EvExpr (evId dictVar))
 
 
--- | Build an Int literal as a Core expression.
-mkIntLit :: Int -> TcPluginM 'Solve EvExpr
-mkIntLit i = do
-  -- Use GHC's built-in integer type.
-  let intTy = intTy
-  pure $ mkCoreConApps intTy [] [mkIntLit' i]
-  where
-    mkIntLit' :: Int -> CoreExpr
-    mkIntLit' i = Lit (mkIntegralLit (fromIntegral i :: Integer))
-
-    intTy :: Type
-    intTy = mkTyConTy (tcTyCon intTyCon)
-
-    intTyCon :: TyCon
-    intTyCon = tcTyCon intTyConName
-
-    intTyConName :: Name
-    intTyConName = mkInternalName (mkUnique 'I' 0) (mkTcOcc "Int") noSrcSpan
-
-
--- | Build a Word literal as a Core expression.
-mkWordLit :: Word -> TcPluginM 'Solve EvExpr
-mkWordLit w = do
-  let wordTy = wordTy
-  pure $ mkCoreConApps wordTy [] [mkWordLit' w]
-  where
-    mkWordLit' :: Word -> CoreExpr
-    mkWordLit' w = Lit (mkIntegralLit (fromIntegral w :: Integer))
-
-    wordTy :: Type
-    wordTy = mkTyConTy (tcTyCon wordTyCon)
-
-    wordTyCon :: TyCon
-    wordTyCon = tcTyCon wordTyConName
-
-    wordTyConName :: Name
-    wordTyConName = mkInternalName (mkUnique 'W' 0) (mkTcOcc "Word") noSrcSpan
-
-
--- | A dummy SrcLoc for synthetic literals.
-noSrcSpan :: SrcSpan
-noSrcSpan = UnhelpfulSpan (fsLit "polytropos-plugin")
-
-
--- | Make an internal name.
-mkInternalName :: Unique -> OccName -> SrcSpan -> Name
-mkInternalName uniq occ span =
-  Name
-    { nSrcSpan = span
-    , nSort = Internal
-    , nUniq = getUnique uniq
-    , nOccName = occ
-    , nPkgQual = NoPkgQual
-    }
+-- | Create an integer Literal from an Integer.
+mkLit :: Integer -> Literal
+mkLit i = LitNumber LitNumInt i
 
 
 -- | Trace a message if the plugin is verbose.
@@ -470,12 +415,6 @@ traceMsg tag doc =
 
 -- | Partition a list of Either into lefts and rights.
 partitionEithers :: [Either a b] -> ([a], [b])
-partitionEithers = foldr (either (first:) (second:)) ([], [])
-  where
-    first (x, xs) = (x : fst xs, snd xs)
-    second (ys, y) = (fst ys, y : snd ys)
-
-
--- | A dummy Unique for synthetic names.
-mkUnique :: Char -> Int -> Unique
-mkUnique _ _ = 0
+partitionEithers [] = ([], [])
+partitionEithers (Left x : xs) = let (ls, rs) = partitionEithers xs in (x : ls, rs)
+partitionEithers (Right y : xs) = let (ls, rs) = partitionEithers xs in (ls, y : rs)
