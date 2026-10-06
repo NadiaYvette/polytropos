@@ -34,17 +34,25 @@ constraints by emitting literal slot indices and tags.
 - `RowEq` / `RowShow` / `RowEqSum` / `RowShowSum` constraint solving — these
   require building function bodies at the Core AST level (lambdas, applications,
   composition chains), which needs careful handling of GHC's Core representation.
-  The solvers now trace the row structure and skip.
-  
-  **Update**: Exported `repTag`, `repArity`, `fieldAt` from Polytropos.Core so
-  the plugin can reference them. The plugin builds successfully.
+  The plugin now has the infrastructure to look up names from GHC.Classes, GHC.Show,
+  GHC.Base, and Polytropos.Core at init time, and stores them in PluginState.
+  The RowEq/RowShow/RowEqSum/RowShowSum solvers trace the row structure and skip
+  (full Core building pending Eq dictionary resolution).
 - Testing the plugin end-to-end against the core tests
 
 ## Next action
 
-Now that the plugin can reference `repTag`, `repArity`, and `fieldAt` from
-Polytropos.Core, implement the Core expression building for RowEq/RowShow.
+The plugin infrastructure is in place: tcPluginInit looks up all needed names
+(from Polytropos.Core, GHC.Classes, GHC.Show, GHC.Base) and stores them in
+PluginState. The RowEq/RowShow/RowEqSum/RowShowSum solvers now walk the row
+with types (walkRowWithTypes, walkSumRowWithTypes) to extract field/constructor
+names AND types. The buildRowEqBody/buildComparisonChain functions are stubs that
+error with a message about pending Eq dictionary resolution.
 
-The plugin uses `ghc-tcplugin-api` for the GHC API. The core module changes
-are complete and all 25 tests pass. The plugin package now compiles and solves
-`FieldIndex` and `ConstructorIndex` constraints.
+The hard part that remains: building Core expressions that use (==) at field
+types requires Eq dictionaries for those types. For simple types (Int, Bool),
+the dictionaries are in GHC.Classes ($fEqInt, $fEqBool). For arbitrary types,
+the plugin needs to look them up from the typechecking environment.
+
+The plugin package compiles and solves FieldIndex/ConstructorIndex constraints.
+All 25 core tests pass.

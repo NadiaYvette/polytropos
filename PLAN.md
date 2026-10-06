@@ -28,7 +28,9 @@ Design note §6, in order:
 
 - [x] Field name → literal slot index (solves `FieldIndex` constraints)
 - [x] Constructor name → literal tag (solves `ConstructorIndex` constraints)
-- [ ] `RowEq` / `RowShow` bodies emitted as literals (solvers stubbed — exported repTag/repArity/fieldAt from Core, need Core AST building)
+- [x] Plugin infrastructure: tcPluginInit looks up names from Polytropos.Core, GHC.Classes, GHC.Show, GHC.Base and stores in PluginState
+- [x] RowEq/RowShow/RowEqSum/RowShowSum solvers walk rows with types (walkRowWithTypes, walkSumRowWithTypes)
+- [ ] RowEq/RowShow/RowEqSum/RowShowSum bodies emitted as literals (Core building stubs in place — need Eq dictionary resolution)
 - [ ] Retire the `Proxy r` debt (§5, D8a) by indexing `Rep` by its row
 
 ## Milestone 4 — scale
