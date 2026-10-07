@@ -33,6 +33,7 @@ import Test.Tasty                  (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit            (testCase, (@?=))
 
 import Polytropos.Core
+import Polytropos
 
 {-------------------------------------------------------------------------------
   Slot helpers
@@ -240,9 +241,34 @@ evidenceTests = testGroup "evidence classes (hand-written)"
       intAt1 (setFieldAt 1 (slot (5 :: Int)) (unRowRep ab)) @?= 5
   ]
 
+{-------------------------------------------------------------------------------
+  Consumer API Tests
+-------------------------------------------------------------------------------}
+
+instance ConstructorIndex "Neg" '[ "Neg" ':= '[ "v" ':= Int ] ] where
+  constructorIndex = 0
+
+consumerTests :: TestTree
+consumerTests = testGroup "consumer api (Polytropos)"
+  [ testCase "emptyRecord has arity 0" $
+      repArity (unRowRep emptyRecord) @?= 0
+  , testCase "insertField builds record" $ do
+      let r = insertField (Field @"a") (42 :: Int) emptyRecord
+      unslot (fieldAt 0 (unRowRep r)) @?= (42 :: Int)
+      repArity (unRowRep r) @?= 1
+  , testCase "Variant pattern and injection" $ do
+      let r = insertField (Field @"v") (7 :: Int) emptyRecord
+          v :: Variant ('[ "Neg" ':= '[ "v" ':= Int ] ])
+          v = Variant (Field @"Neg") r
+      case v of
+        Variant (Field :: Field "Neg") r' -> unslot (fieldAt 0 (unRowRep r')) @?= (7 :: Int)
+        _ -> error "Pattern match failed"
+  ]
+
 main :: IO ()
 main = defaultMain $ testGroup "polytropos-core"
   [ productTests
   , sumTests
   , evidenceTests
+  , consumerTests
   ]
