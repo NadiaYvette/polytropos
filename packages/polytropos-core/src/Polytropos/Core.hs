@@ -37,6 +37,7 @@ module Polytropos.Core (
     Pair(..)
   , Row
   , SumRow
+  , Field(..)
     -- * Row flavours (Option D vocabulary)
   , RowType(..)
   , RowFlavour(..)
@@ -85,6 +86,7 @@ import Data.Foldable               (toList)
 import Data.Kind                   (Constraint, Type)
 import Data.Primitive.SmallArray
 import GHC.Exts                    (Any)
+import GHC.OverloadedLabels        (IsLabel(..))
 import GHC.TypeLits                (Symbol)
 import Unsafe.Coerce               (unsafeCoerce)
 
@@ -98,6 +100,14 @@ import Unsafe.Coerce               (unsafeCoerce)
 -- @Pair@ / @:=@. Kept deliberately simple; the @f@-functor parameter that
 -- @large-anon@ threads through its rows is future work (see note §1, D3).
 data Pair a b = a := b
+
+-- | A zero-cost witness for a type-level field name.
+--
+-- Can be constructed ergonomically via @OverloadedLabels@ (e.g. @#foo@).
+data Field (n :: Symbol) = Field
+
+instance (l ~ l') => IsLabel l (Field l') where
+  fromLabel = Field
 
 -- | A /product/ row: an ordered list of field names and field types.
 --
