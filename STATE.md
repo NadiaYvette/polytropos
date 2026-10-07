@@ -4,9 +4,9 @@ Operational frontier. Read with `PLAN.md`; update before ending a session.
 
 ## Where we are
 
-Phases 3, 4A and 4B/4D foundations are in. Tasks `task-01` through `task-11`, `task-14` and
-`task-18` have been executed and verified through their deterministic gates. All 9 packages build
-cleanly on GHC 9.14.1 with `-Wall -Werror` and all 93 tests pass:
+Phases 3, 4A and 4B/4D foundations are in. Tasks `task-01` through `task-12`, `task-14` and
+`task-18` have been executed and verified through their deterministic gates. All 10 packages build
+cleanly on GHC 9.14.1 with `-Wall -Werror` and all 99 tests pass:
 - `polytropos-core` passes 32 tests (primitive SmallArray CoW updates, `setFieldsAt` batch updates,
   `MRep` transient builders, `Polytropos` consumer surface, `Record`, `Variant`).
 - `polytropos-plugin-smoke` passes 10 tests with `-fplugin=Polytropos.Plugin` (`RowEq`, `RowShow`,
@@ -23,6 +23,8 @@ cleanly on GHC 9.14.1 with `-Wall -Werror` and all 93 tests pass:
   `zipBeamFieldsM`, `allBeamValues`, row-symbol column names; compiles in a fraction of a second).
 - `polytropos-openapi3-test` passes 7 tests (record object schemas with properties/required in row
   order, variant `oneOf` tagged unions, JSON roundtrip of the generated schemas).
+- `polytropos-cbor-test` passes 6 tests (3- and 20-field record roundtrips, variant roundtrips,
+  byte-level format assertions: length header + flat payload, tag + payload).
 
 ## What exists
 
@@ -56,6 +58,9 @@ cleanly on GHC 9.14.1 with `-Wall -Werror` and all 93 tests pass:
 - `packages/polytropos-openapi3/` — Satellite package: `ToSchema` for records (object schema,
   properties/required from row symbols) and variants (`oneOf` tagged unions), row-walked not
   Generic-derived
+- `packages/polytropos-cbor/` — Satellite package: `Serialise` for records (CBOR array: length
+  header + flat payload) and variants (array: constructor Word tag + payload), positional encoding
+  mirroring the runtime Rep layout; scoped allow-newer for cborg/serialise's pre-9.14 base bounds
 - `docs/NEWBIE_GUIDE.md` — quickstart and token-conservation workflow guide
 - `docs/MAINTAINER_GUIDE.md` — engineering governance and zero-contamination doctrine
 - `docs/notes/POLYTROPOS_DESIGN.md` — decisions D1–D10, costs, open questions
@@ -71,15 +76,12 @@ cleanly on GHC 9.14.1 with `-Wall -Werror` and all 93 tests pass:
 
 ## What is deliberately missing
 
-- Phase 4B remaining serialization satellites: `polytropos-cbor` (`task-12`) and
-  `polytropos-cassava` (`task-13`).
+- Phase 4B remaining serialization satellite: `polytropos-cassava` (`task-13`).
 - Phase 4C remaining database satellites: `polytropos-hasql` (`task-15`), `polytropos-rel8`
   (`task-16`), `polytropos-persistent` (`task-17`).
 - Phase 4D remaining testing satellite: `polytropos-quickcheck` (`task-19`).
 
 ## Next action
 
-- Execute `task-12-satellite-cbor.yaml` to establish `polytropos-cbor`; the serialization shape
-  (tagged single-member variant objects) should follow the `polytropos-aeson` conventions.
-- Continue through `task-13`, then the remaining database satellites (`task-15`..`task-17`),
-  then `task-19`.
+- Execute `task-13-satellite-cassava.yaml` to establish `polytropos-cassava`.
+- Continue with the remaining database satellites (`task-15`..`task-17`), then `task-19`.
