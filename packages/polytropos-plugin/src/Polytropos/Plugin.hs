@@ -90,8 +90,7 @@ import GHC.Core.TyCo.Compare
   )
 
 import GHC.Builtin.Types
-  ( extractPromotedList
-  , boolTy
+  ( boolTy
   , trueDataCon
   , falseDataCon
   )
@@ -717,11 +716,6 @@ unwrapSynonyms ty = case coreView ty of
   Just ty' -> unwrapSynonyms ty'
   Nothing  -> ty
 
-
-
-
-myIsPromotedList :: Type -> Bool
-myIsPromotedList ty = case myExtractPromotedList ty of Just _ -> True; Nothing -> False
 
 myExtractPromotedList :: Type -> Maybe [Type]
 myExtractPromotedList ty = case splitTyConApp_maybe (unwrapSynonyms ty) of
