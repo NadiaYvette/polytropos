@@ -28,12 +28,12 @@ packages:
   - packages/polytropos-core
 
 executor: agy
-model: gemini-3.8-flash-high
+model: gemini-3.1-pro-high
 skills:
   - tricorder
   - code-navigation
 max_turns: 8
-run_budget: 360
+run_budget: 600
 max_repair_attempts: 3
 
 steps:
