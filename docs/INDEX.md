@@ -12,6 +12,7 @@ Status: LIVING DOCUMENT · v0.1 · 2026-10-05
 | `notes/DOC_STRATEGY.md` | strategy | blessed | cross-cutting | — |
 | `registers/PACKAGES.md` | register | live | cross-cutting | — |
 | `transcripts/gemini-large-data-hybrid-variant-records-spec.md` | transcript | archive | cross-cutting | inconsistent |
+| `transcripts/gemini-powerful-abstraction-techniques-in-haskell.md` | transcript | archive | cross-cutting | — |
 
 ## Part 2 — Reading paths
 
@@ -31,11 +32,13 @@ open shape; §4 (elimination) is now answered (hybrid + Option D vocabulary + Ca
 wrapper) and sketched in `PHASE2_SKETCH.md`. The remaining §7 open items are Q4
 (`DictAny` fate) and Q5 (polytropos/large-anon coexistence).
 
-**Someone new to the idea.** The transcript that started this
-(`transcripts/gemini-large-data-hybrid-variant-records-spec.md`) explains the
-appeal, but several of its claims about the existing codebase were later
-measured and found false — read it as the question, then read
-`benchmark/variants/README.md` for the answer.
+**Someone new to the idea.** The transcripts in `transcripts/` record the
+ideation context: `transcripts/gemini-powerful-abstraction-techniques-in-haskell.md`
+discusses the architectural motivation for high-leverage abstractions (open ADTs,
+algebraic effects, datatype generics, profunctors), while
+`transcripts/gemini-large-data-hybrid-variant-records-spec.md` initiated the hybrid
+variant record exploration (read alongside `benchmark/variants/README.md` for
+measured corrections).
 
 ## Conventions
 
