@@ -16,3 +16,8 @@ write-ghc-environment-files: always
 -- predates the release and is metadata-only. Scoped to these two packages
 -- so every other dependency's base bound stays enforced.
 allow-newer: cborg:base, serialise:base, serialise:time, serialise:containers, serialise:bytestring, cborg:bytestring, cborg:containers, cborg:primitive, cborg:text
+-- Same metadata-only situation, from the other side: persistent 2.18.1.0
+-- caps template-haskell < 2.24 and aeson < 2.3, but compiles unchanged
+-- against the template-haskell 2.24 / aeson 2.2.5.1 pair GHC 9.14 ships.
+allow-newer: persistent:template-haskell
+constraints: any.aeson ==2.2.5.1
