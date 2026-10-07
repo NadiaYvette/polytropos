@@ -1,0 +1,68 @@
+---
+id: task-08-modular-optics-interop
+title: Establish modular optics and lens interop adapters without core contamination
+description: |
+  Provides optics interoperability in an isolated package (`packages/polytropos-optics`):
+  1. The Zero-Contamination Boundary:
+     Core `polytropos` MUST NOT depend on `lens` or `optics`, avoiding heavyweight dependency
+     trees for consumers who prefer standard `OverloadedRecordDot` or lightweight alternatives.
+  2. The Modular Optics Adapter:
+     - `packages/polytropos-optics/polytropos-optics.cabal` depending on `optics-core` (or van Laarhoven lens).
+     - Generates type-safe Lenses for record fields:
+       `fieldLens :: HasField n (Record r) a => Field n -> Lens' (Record r) a`
+     - Generates type-safe Prisms for sum constructors:
+       `ctorPrism :: Field n -> Prism' (Variant s) (Record fs)`
+  3. Law verification:
+     - Verifies Lens laws (Get-Put, Put-Get, Put-Put) and Prism laws in tests.
+
+dependencies:
+  - task-07-polytropos-generics
+
+packages:
+  - packages/polytropos-optics
+  - packages/polytropos-core
+
+executor: agy
+model: "mistral/codestral-latest"
+skills:
+  - tricorder
+  - code-navigation
+max_turns: 10
+run_budget: 450
+max_repair_attempts: 3
+
+steps:
+  - id: create-optics-package
+    name: Create polytropos-optics package skeleton
+    action: |
+      1. Create directory `packages/polytropos-optics`.
+      2. Write `polytropos-optics.cabal` depending on `base`, `polytropos-core`, and `optics-core`.
+      3. Register in `cabal.project`.
+      4. Write `packages/polytropos-optics/src/Polytropos/Optics.hs`.
+    duration: "20m"
+
+  - id: implement-lenses-and-prisms
+    name: Implement fieldLens and ctorPrism
+    action: |
+      In `packages/polytropos-optics/src/Polytropos/Optics.hs`:
+      1. Implement `fieldLens` using `fieldAt` getter and `setFieldAt` setter.
+      2. Implement `ctorPrism` using `projectRep` and `injectRep`.
+    duration: "25m"
+
+  - id: test-optics-laws
+    name: Add test suite verifying lens and prism laws
+    action: |
+      Create `packages/polytropos-optics/test/Main.hs`:
+      Verify roundtrip optics laws on polytropos structures.
+    duration: "15m"
+
+  - id: verify-gate
+    name: Run verification gate
+    action: |
+      Run `cabal test polytropos-optics:test:polytropos-optics-test`.
+    duration: "5m"
+
+success_criteria:
+  - `packages/polytropos-optics` compiles cleanly.
+  - Core `polytropos` remains completely free of `lens` or `optics` dependencies.
+  - Lens and prism laws pass cleanly.

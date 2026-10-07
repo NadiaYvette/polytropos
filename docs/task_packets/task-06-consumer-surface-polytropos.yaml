@@ -1,0 +1,61 @@
+---
+id: task-06-consumer-surface-polytropos
+title: Design the high-level consumer-facing surface and pattern synonyms
+description: |
+  Provides high-level, human-friendly API exports and pattern synonyms for `polytropos`:
+  1. Ergonomic type synonyms:
+     - `type Record r = RowRep ProductRowT r Identity`
+     - `type Variant s = RowRep SumRowT s Identity`
+  2. Smart constructors and combinators:
+     - `mkRecord`, `emptyRecord`, `mkVariant`
+  3. Pattern synonyms:
+     - Provide pattern matching over open records and variants without exposing raw
+       `SmallArray` or `Rep` internal structures.
+  4. Haddock documentation:
+     - Full paragraphs, invariants, Unicode symbols, and worked examples per DOC_STRATEGY.md §1.
+
+dependencies:
+  - task-05-overloaded-labels-and-record-update
+
+packages:
+  - packages/polytropos-core
+
+executor: agy
+model: "mistral/codestral-latest"
+skills:
+  - tricorder
+  - code-navigation
+max_turns: 8
+run_budget: 360
+max_repair_attempts: 3
+
+steps:
+  - id: create-consumer-module
+    name: Expose high-level Polytropos module
+    action: |
+      In `packages/polytropos-core/src/Polytropos.hs` (and exposed in cabal):
+      1. Define `type Record r = RowRep ProductRowT r Identity`.
+      2. Define `type Variant s = RowRep SumRowT s Identity`.
+      3. Expose smart constructors: `emptyRecord`, `insertField`, `injectVariant`.
+      4. Expose pattern synonyms for ergonomic destruction and construction.
+      5. Re-export essential classes (`RowEq`, `RowShow`, `RowFlavour`).
+    duration: "25m"
+
+  - id: consumer-tests
+    name: Add high-level API unit tests
+    action: |
+      In `packages/polytropos-core/test/Main.hs`:
+      Test creating, accessing, updating, and showing records and variants using the
+      clean high-level `Polytropos` interface.
+    duration: "15m"
+
+  - id: verify-gate
+    name: Run verification gate
+    action: |
+      Run `cabal test all`.
+    duration: "5m"
+
+success_criteria:
+  - High-level module `Polytropos` exposed and cleanly re-exporting user API.
+  - Pattern synonyms and type synonyms operational.
+  - Zero compiler warnings under GHC2024 / -Wall -Werror.

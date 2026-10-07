@@ -1,0 +1,97 @@
+---
+id: task-02-batch-updates-and-transients
+title: Introduce batched record updates and ephemeral ST transient builders
+description: |
+  Extends `polytropos-core` with high-performance batch updates and ephemeral mutable builders:
+  1. `setFieldsAt :: [(Int, f Any)] -> Rep f a -> Rep f a`:
+     Clones the payload `SmallArray` once, applies all `K` updates in-place, and freezes once.
+     Reduces multi-field update overhead from K * O(N) to 1 * O(N).
+  2. `MRep s f a` (transient mutable record):
+     Provides in-place slot writes within `ST s` for complex construction and deserialization.
+     Exposes `modifyRep :: Rep f a -> (forall s. MRep s f a -> ST s ()) -> Rep f a`.
+  3. `setFieldSumAt`:
+     Type-safe partial update for sum constructors ensuring runtime tag matches before updating.
+
+dependencies:
+  - task-01-field-update-cow
+
+packages:
+  - packages/polytropos-core
+
+executor: agy
+model: "mistral/codestral-latest"
+skills:
+  - tricorder
+  - code-navigation
+max_turns: 8
+run_budget: 360
+max_repair_attempts: 3
+
+steps:
+  - id: add-batch-and-transients
+    name: Implement setFieldsAt, MRep, modifyRep, and setFieldSumAt in Core.hs
+    action: |
+      In `packages/polytropos-core/src/Polytropos/Core.hs`:
+      1. Export: `setFieldsAt`, `MRep`, `thawRep`, `freezeRep`, `writeFieldAt`, `modifyRep`, `setFieldSumAt`.
+      2. Implement `setFieldsAt`:
+         ```haskell
+         setFieldsAt :: [(Int, f Any)] -> Rep f a -> Rep f a
+         setFieldsAt [] r = r
+         setFieldsAt updates (Rep t v) = Rep t $ runSmallArray $ do
+           m <- thawSmallArray v 0 (sizeofSmallArray v)
+           forM_ updates $ \(i, !x) -> writeSmallArray m i x
+           pure m
+         ```
+      3. Implement `MRep` and transient helpers:
+         ```haskell
+         data MRep s (f :: Type -> Type) a = MRep
+           {-# UNPACK #-} !Word
+           !(SmallMutableArray s (f Any))
+
+         thawRep :: Rep f a -> ST s (MRep s f a)
+         thawRep (Rep t v) = do
+           m <- thawSmallArray v 0 (sizeofSmallArray v)
+           pure (MRep t m)
+
+         freezeRep :: MRep s f a -> ST s (Rep f a)
+         freezeRep (MRep t m) = do
+           v <- unsafeFreezeSmallArray m
+           pure (Rep t v)
+
+         writeFieldAt :: MRep s f a -> Int -> f Any -> ST s ()
+         writeFieldAt (MRep _ m) i !x = writeSmallArray m i x
+
+         modifyRep :: Rep f a -> (forall s. MRep s f a -> ST s ()) -> Rep f a
+         modifyRep (Rep t v) act = Rep t $ runSmallArray $ do
+           m <- thawSmallArray v 0 (sizeofSmallArray v)
+           act (MRep t m)
+           pure m
+         ```
+      4. Implement `setFieldSumAt`:
+         ```haskell
+         setFieldSumAt :: Word -> Int -> f Any -> Rep f a -> Maybe (Rep f a)
+         setFieldSumAt expectedTag idx !val r@(Rep t _)
+           | t == expectedTag = Just (setFieldAt idx val r)
+           | otherwise        = Nothing
+         ```
+    duration: "20m"
+
+  - id: add-tests
+    name: Add tests in polytropos-core test suite
+    action: |
+      In `packages/polytropos-core/test/Main.hs`:
+      - Test `setFieldsAt` applying multiple field updates simultaneously.
+      - Test `modifyRep` executing chained mutations via `writeFieldAt`.
+      - Test `setFieldSumAt` succeeding on matching tag and returning `Nothing` on mismatch.
+    duration: "15m"
+
+  - id: verify-gate
+    name: Run verification gate
+    action: |
+      Run `cabal test polytropos-core:test:polytropos-core-test`.
+    duration: "5m"
+
+success_criteria:
+  - `setFieldsAt`, `MRep`, `modifyRep`, and `setFieldSumAt` exported and tested.
+  - Zero compiler warnings under GHC2024 / -Wall -Werror.
+  - Test suite passes with exit code 0.

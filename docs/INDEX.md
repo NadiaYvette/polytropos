@@ -10,6 +10,7 @@ Status: LIVING DOCUMENT · v0.1 · 2026-10-05
 | `MAINTAINER_GUIDE.md` | guide | live | cross-cutting | — |
 | `notes/POLYTROPOS_DESIGN.md` | design | draft | cross-cutting | §4 answered; §7 Q1–Q3 closed; §7 Q4 nuanced; §7 Q5 open |
 | `notes/DESIGN_REVIEW_CLAUDE-OPUS-4.6.md` | review | draft | cross-cutting | — |
+| `notes/FIELD_UPDATE_EFFICIENCY_DESIGN.md` | design | draft | cross-cutting | — |
 | `notes/COMMIT_ATTRIBUTION.md` | convention | blessed | cross-cutting | — |
 | `notes/PROVENANCE.md` | convention | blessed | cross-cutting | — |
 | `notes/DOC_STRATEGY.md` | strategy | blessed | cross-cutting | — |
@@ -45,6 +46,11 @@ and Q5 (polytropos/large-anon coexistence).
 [`.agents/README.md`](../.agents/README.md) → subdivided domain rules in
 `.agents/rules/` (`commit-attribution.md`, `code-navigation.md`,
 `compiler-verification.md`, `documentation-precedence.md`, `plugin-invariants.md`).
+
+**Task Packet Implementer / Autonomous Worker.**
+`notes/FIELD_UPDATE_EFFICIENCY_DESIGN.md` → sequential task packets in
+`task_packets/` (`task-01-field-update-cow.yaml` through
+`task-08-modular-optics-interop.yaml`) executed via `bin/yamaarashi-exec run`.
 
 **Someone new to the idea.** The transcripts in `transcripts/` record the
 ideation context: `transcripts/gemini-powerful-abstraction-techniques-in-haskell.md`

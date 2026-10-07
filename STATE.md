@@ -33,6 +33,13 @@ Both packages build cleanly on GHC 9.14.1 and all tests pass:
   architectural audit, and ecosystem deployment assessment from the Claude Opus 4.6
   perspective
 - `docs/notes/PHASE2_SKETCH.md` — Phase 2 sketch (all refinements resolved)
+- `docs/notes/FIELD_UPDATE_EFFICIENCY_DESIGN.md` — architectural design and roadmap
+  for hardware-vectorized Copy-on-Write updates, batched updates, and transient builders
+- `docs/task_packets/` — 8 structured task packets for progressive implementation by
+  autonomous executors (`task-01` through `task-08`)
+- `scripts/tasks/` — deterministic test verification scripts for task packet gates
+- `bin/yamaarashi-exec` & `.agents/skills/yamaarashi/SKILL.md` — runner script and
+  skill for executing task packets in isolated worktrees with SQLite tracking
 - `benchmark/variants/` — the four-arm compile-time harness the design rests on
 - `docs/registers/PACKAGES.md`, `docs/notes/PROVENANCE.md`, `THIRD_PARTY.md` —
   layout rules, licence obligations, attribution index
@@ -43,12 +50,13 @@ Both packages build cleanly on GHC 9.14.1 and all tests pass:
 ## What is deliberately missing
 
 - `RowEqSum` / `RowShowSum` constraint solving — synthesizing sum row equality
-  and show bodies matching on constructor tags and reading sum payloads.
+  and show bodies matching on constructor tags and reading sum payloads (`task-03`).
 - Arbitrary field type dictionary resolution — currently `RowEq` and `RowShow`
-  resolve dictionaries for known wired-in/base types (e.g. `Int`, `Bool`, `Char`, `Double`, `Float`, `Integer`, `Word`, `String`); general arbitrary type dictionary lookup in GHC tc context can be generalized.
+  resolve dictionaries for known wired-in/base types; generalized dictionary lookup across module boundaries queued in Phase 4.
 - Row open/extension polymorphism handling beyond literal closed lists (Option A baseline complete).
 
 ## Next action
 
-- Implement Core AST synthesis for `RowEqSum` and `RowShowSum` to handle sum rows.
-- Expand smoke tests to cover sum rows and single/empty rows.
+- Execute `task-01-field-update-cow.yaml` via `bin/yamaarashi-exec run` to implement
+  hardware-vectorized Copy-on-Write `setFieldAt` and eliminate list allocations.
+- Follow sequential sequence through `task-08`.

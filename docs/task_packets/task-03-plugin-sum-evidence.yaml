@@ -1,0 +1,68 @@
+---
+id: task-03-plugin-sum-evidence
+title: Extend TcPlugin to solve RowEqSum and RowShowSum dictionaries for sum rows
+description: |
+  In packages/polytropos-plugin/src/Polytropos/Plugin.hs, the TcPlugin currently solves
+  `RowEq` and `RowShow` for literal product rows, and `FieldIndex`/`ConstructorIndex`.
+  This task extends the plugin solver to handle sum rows:
+  1. `RowEqSum (r :: [Pair Symbol Row])`:
+     Synthesizes Core dictionary for sum equality:
+     - Compares `repTag r1 == repTag r2`.
+     - If tags match, dispatches to constructor-specific field equality comparing `repVals`.
+  2. `RowShowSum (r :: [Pair Symbol Row])`:
+     Synthesizes Core dictionary for sum show:
+     - Reads `repTag r` and dispatches to constructor label string + field rendering.
+
+dependencies:
+  - task-02-batch-updates-and-transients
+
+packages:
+  - packages/polytropos-plugin
+
+executor: agy
+model: "mistral/codestral-latest"
+skills:
+  - tricorder
+  - code-navigation
+max_turns: 12
+run_budget: 600
+max_repair_attempts: 3
+
+steps:
+  - id: solve-sum-evidence
+    name: Implement RowEqSum and RowShowSum solvers in Plugin.hs
+    action: |
+      In `packages/polytropos-plugin/src/Polytropos/Plugin.hs`:
+      1. Inspect `RowEqSum` and `RowShowSum` typeclass constraints in wanted constraints.
+      2. Parse sum row types of kind `[Pair Symbol Row]`.
+      3. For `RowEqSum`:
+         Synthesize Core expression testing tag equality, followed by a Core `Case` on the tag
+         comparing payload fields of that constructor.
+      4. For `RowShowSum`:
+         Synthesize Core expression branching on the tag, prepending constructor name,
+         and showing payload fields.
+      5. Emit dictionary bindings and return `TcPluginOk`.
+    duration: "45m"
+
+  - id: smoke-tests-sums
+    name: Add smoke test cases for sum rows
+    action: |
+      In `packages/polytropos-plugin/tests/smoke/Main.hs`:
+      1. Define test sum row types: e.g. `type S2 = '[ "C1" := '[ "x" := Int ], "C2" := '[ "y" := Bool ] ]`.
+      2. Verify `RowEqSum S2` without handwritten instances:
+         - Values with matching tag and matching fields compare equal.
+         - Values with different tags compare not equal.
+         - Values with same tag but different fields compare not equal.
+      3. Verify `RowShowSum S2` renders constructor and fields properly.
+    duration: "20m"
+
+  - id: verify-gate
+    name: Run verification gate
+    action: |
+      Run `cabal test polytropos-plugin:test:polytropos-plugin-smoke`.
+    duration: "5m"
+
+success_criteria:
+  - `RowEqSum` and `RowShowSum` solved completely by `Polytropos.Plugin`.
+  - Smoke tests for sums pass cleanly with `-fplugin=Polytropos.Plugin`.
+  - Zero compiler warnings under GHC 9.14.

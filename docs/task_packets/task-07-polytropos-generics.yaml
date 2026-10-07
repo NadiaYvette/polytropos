@@ -1,0 +1,70 @@
+---
+id: task-07-polytropos-generics
+title: Establish polytropos-generics package and structural datatype generics
+description: |
+  Establishes `packages/polytropos-generics`, a high-performance datatype generics library
+  modeled on `large-generics` but unified around `polytropos`'s single `Rep`:
+  1. Package skeleton:
+     - `packages/polytropos-generics/polytropos-generics.cabal`
+     - Register package in root `cabal.project`.
+  2. Generic conversion class:
+     - `class Generic a where type RepOf a; from :: a -> RepOf a; to :: RepOf a -> a`
+     - Bridges nominal Haskell ADTs directly to `polytropos` `Rep` with zero intermediate tree boxes.
+  3. Generic combinators:
+     - `geq`, `gcompare`, `gshowsPrec`, `gmap`, `gfoldMap`.
+  4. Test suite:
+     - Verifies round-trip conversions and generic functions on multi-constructor nominal ADTs.
+
+dependencies:
+  - task-06-consumer-surface-polytropos
+
+packages:
+  - packages/polytropos-generics
+  - packages/polytropos-core
+
+executor: agy
+model: "mistral/codestral-latest"
+skills:
+  - tricorder
+  - code-navigation
+max_turns: 12
+run_budget: 600
+max_repair_attempts: 3
+
+steps:
+  - id: create-generics-package
+    name: Create polytropos-generics package skeleton
+    action: |
+      1. Create directory `packages/polytropos-generics`.
+      2. Write `polytropos-generics.cabal` with cabal-version: 3.14, default-language: GHC2024,
+         depending on `base`, `polytropos-core`, and `primitive`.
+      3. Register `packages/polytropos-generics` in root `cabal.project`.
+      4. Write `packages/polytropos-generics/src/Polytropos/Generics.hs`.
+    duration: "20m"
+
+  - id: implement-generic-class
+    name: Implement Generic class and combinators
+    action: |
+      In `packages/polytropos-generics/src/Polytropos/Generics.hs`:
+      1. Define `Generic` typeclass.
+      2. Implement generic traversal and equality operations operating directly on `SmallArray`.
+      3. Implement manual or TH derivation helpers for nominal ADTs.
+    duration: "30m"
+
+  - id: add-generics-tests
+    name: Add test suite for generics
+    action: |
+      Create `packages/polytropos-generics/test/Main.hs`:
+      Test `from` and `to` round-tripping, `geq`, and `gshowsPrec` on sample product and sum ADTs.
+    duration: "15m"
+
+  - id: verify-gate
+    name: Run verification gate
+    action: |
+      Run `cabal test polytropos-generics:test:polytropos-generics-test`.
+    duration: "5m"
+
+success_criteria:
+  - `packages/polytropos-generics` compiles with zero warnings under `-Wall -Werror`.
+  - Generic roundtrip property passes on both products and sums.
+  - Zero boxed intermediate tree representations (`(:*:)`, `(:+:)`).

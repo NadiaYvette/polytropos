@@ -1,0 +1,60 @@
+---
+id: task-04-plugin-hasfield-overloaded-record-dot
+title: Implement GHC.Records.HasField solver in TcPlugin for OverloadedRecordDot
+description: |
+  Enables GHC's `OverloadedRecordDot` extension (`r.fieldName`) on polytropos product records:
+  1. GHC desugars `r.fieldName` into `getField @"fieldName" r`, requiring the constraint
+     `GHC.Records.HasField "fieldName" (RowRep ProductRowT r a) t`.
+  2. The TcPlugin catches wanted `HasField` constraints where the record type is
+     `RowRep ProductRowT r a`, calculates the 0-based literal field index `i`,
+     and synthesizes evidence:
+     `getField = fieldAt i`.
+  3. Provides seamless dot-syntax record inspection without manual `fieldAt` calls.
+
+dependencies:
+  - task-03-plugin-sum-evidence
+
+packages:
+  - packages/polytropos-plugin
+  - packages/polytropos-core
+
+executor: agy
+model: "mistral/codestral-latest"
+skills:
+  - tricorder
+  - code-navigation
+max_turns: 10
+run_budget: 450
+max_repair_attempts: 3
+
+steps:
+  - id: solve-hasfield
+    name: Implement HasField constraint solver in Polytropos.Plugin
+    action: |
+      In `packages/polytropos-plugin/src/Polytropos/Plugin.hs`:
+      1. Add name resolution for `GHC.Records.HasField` class and its method `getField`.
+      2. In `tcPluginSolve`, parse wanted constraints matching `HasField label (RowRep ProductRowT r a) fieldTy`.
+      3. Look up `label` in product row `r` to find field index `i` and field type `t`.
+      4. Emit evidence: construct a Core dictionary for `HasField` with `getField = \rec -> fieldAt @f @a @t (literal i) rec`.
+      5. Return `TcPluginOk [(ev, ct)] []`.
+    duration: "30m"
+
+  - id: add-record-dot-tests
+    name: Add OverloadedRecordDot tests
+    action: |
+      In `packages/polytropos-plugin/tests/smoke/Main.hs`:
+      1. Enable `{-# LANGUAGE OverloadedRecordDot #-}`.
+      2. Define a record `r = productRep [co (42 :: Int), co True]`.
+      3. Test expressions: `r.x == 42` and `r.y == True`.
+    duration: "15m"
+
+  - id: verify-gate
+    name: Run verification gate
+    action: |
+      Run `cabal test polytropos-plugin:test:polytropos-plugin-smoke`.
+    duration: "5m"
+
+success_criteria:
+  - `OverloadedRecordDot` (`r.field`) works out-of-the-box on `RowRep ProductRowT`.
+  - TcPlugin synthesizes `HasField` evidence with literal index lookup.
+  - Test suite passes cleanly with zero warnings.

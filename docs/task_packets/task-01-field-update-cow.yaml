@@ -1,0 +1,71 @@
+---
+id: task-01-field-update-cow
+title: Replace setFieldAt list-conversion with primitive Copy-on-Write SmallArray mutation
+description: |
+  In packages/polytropos-core/src/Polytropos/Core.hs, the prototype implementation of
+  `setFieldAt` converts the payload `SmallArray` to a lazy Haskell linked list via
+  `toListSlots`, traverses the list, and re-freezes via `smallArrayFromList`. This incurs
+  substantial heap allocations (3N words), cache misses, and multi-pass traversal.
+
+  This task replaces the list-conversion detour with primitive Copy-on-Write using
+  `Data.Primitive.SmallArray` (`thawSmallArray`, `writeSmallArray`, `runSmallArray`).
+  This ensures:
+  1. Exactly ONE contiguous array allocation on the heap.
+  2. Single CPU memcpy of word pointers via thawSmallArray.
+  3. Single in-place slot write via writeSmallArray.
+  4. Zero intermediate linked lists.
+
+dependencies: []
+
+packages:
+  - packages/polytropos-core
+
+executor: agy
+model: "mistral/codestral-latest"
+skills:
+  - tricorder
+  - code-navigation
+max_turns: 8
+run_budget: 300
+max_repair_attempts: 3
+
+steps:
+  - id: implement-cow-setfieldat
+    name: Implement primitive SmallArray CoW in Polytropos.Core
+    action: |
+      In `packages/polytropos-core/src/Polytropos/Core.hs`:
+      1. Ensure `Data.Primitive.SmallArray` imports include:
+         `thawSmallArray`, `writeSmallArray`, `runSmallArray`, `sizeofSmallArray`.
+      2. Rewrite `setFieldAt` to:
+         ```haskell
+         setFieldAt :: forall f a. Int -> f Any -> Rep f a -> Rep f a
+         setFieldAt i !x (Rep t v) = Rep t $ runSmallArray $ do
+           m <- thawSmallArray v 0 (sizeofSmallArray v)
+           writeSmallArray m i x
+           pure m
+         ```
+      3. Ensure code compiles with zero warnings under `-Wall -Werror`.
+    duration: "15m"
+
+  - id: add-unit-tests
+    name: Add unit tests in polytropos-core test suite
+    action: |
+      In `packages/polytropos-core/test/Main.hs`:
+      Add tests asserting that `setFieldAt`:
+      - Updates field at index 0 correctly while leaving index 1 unchanged.
+      - Updates field at index 1 correctly while leaving index 0 unchanged.
+      - Preserves tag (remains 0 for products).
+      - Preserves arity (`repArity`).
+    duration: "15m"
+
+  - id: verify-gate
+    name: Run verification gate
+    action: |
+      Run `cabal test polytropos-core:test:polytropos-core-test` and verify all tests pass.
+    duration: "5m"
+
+success_criteria:
+  - `setFieldAt` uses `runSmallArray` + `thawSmallArray` + `writeSmallArray`.
+  - Zero list allocations in `setFieldAt`.
+  - `cabal test polytropos-core:test:polytropos-core-test` passes cleanly.
+  - Zero compiler warnings under GHC 9.14 / GHC2024.
