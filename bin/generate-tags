@@ -1,14 +1,42 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: BSD-3-Clause
 set -euo pipefail
 
-# Generate hasktags if available, fall back to ctags
+# Collect in-repo packages and any available sibling checkouts in ~/src/
+TARGET_DIRS=("packages/")
+
+SIBLING_CANDIDATES=(
+  "${HOME}/src/lens/src"
+  "${HOME}/src/microlens"
+  "${HOME}/src/optics/optics-core/src"
+  "${HOME}/src/beam/beam-core"
+  "${HOME}/src/hasql"
+  "${HOME}/src/rel8/rel8"
+  "${HOME}/src/persistent/persistent"
+  "${HOME}/src/aeson/src"
+  "${HOME}/src/cassava/src"
+  "${HOME}/src/serialise/serialise"
+  "${HOME}/src/cborg/cborg"
+  "${HOME}/src/openapi3/src"
+  "${HOME}/src/large-records/large-records/src"
+  "${HOME}/src/large-records/large-anon/src"
+  "${HOME}/src/large-records/large-generics/src"
+  "${HOME}/src/large-records-ecosystem"
+)
+
+for dir in "${SIBLING_CANDIDATES[@]}"; do
+  if [ -d "$dir" ]; then
+    TARGET_DIRS+=("$dir")
+  fi
+done
+
 if command -v hasktags >/dev/null 2>&1; then
-  echo "Generating Haskell tags using hasktags..."
-  hasktags -c -x packages/
+  echo "Generating Haskell tags using hasktags across ${#TARGET_DIRS[@]} target directories..."
+  hasktags -c -x -f tags "${TARGET_DIRS[@]}"
   echo "Tags generated successfully in ./tags"
 elif command -v ctags >/dev/null 2>&1; then
   echo "Generating tags using ctags..."
-  ctags -R packages/
+  ctags -R -f tags "${TARGET_DIRS[@]}"
   echo "Tags generated successfully in ./tags"
 else
   echo "Neither hasktags nor ctags found in PATH." >&2
