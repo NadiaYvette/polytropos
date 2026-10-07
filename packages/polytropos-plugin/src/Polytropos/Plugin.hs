@@ -27,6 +27,7 @@ import GHC.Core.Make
   , mkCoreLams
   , mkCharExpr
   , mkStringExpr
+  , mkIfThenElse
   )
 
 import GHC.Plugins
@@ -45,6 +46,7 @@ import GHC.Plugins
   , intDataCon
   , wordDataCon
   , FastString
+  , unpackFS
   , Literal(..)
   , LitNumType(..)
   , wordTyCon
@@ -85,6 +87,8 @@ import GHC.Core.TyCo.Compare
 import GHC.Builtin.Types
   ( extractPromotedList
   , boolTy
+  , trueDataCon
+  , falseDataCon
   )
 
 import GHC.Builtin.Names
@@ -478,7 +482,74 @@ solveRowEqSum
   -> Class
   -> [Type]
   -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
-solveRowEqSum _state _ct _cls _tys = pure $ Right ()
+solveRowEqSum state ct cls tys = do
+  let rowTy  = last tys
+      rTy    = tys !! (length tys - 2)
+      constructors = walkSumRowWithTypes rowTy
+
+      scEvidence = evDataConApp (classDataCon (psRowFlavourCls state)) [rTy] []
+
+      repEqSumId = case classMethods cls of
+        (m : _) -> m
+        []      -> error "Polytropos.Plugin: RowEqSum class has no methods"
+      methodFullTy = piResultTys (varType repEqSumId) tys
+      (_, _, methodInDictTy) = splitFunTy methodFullTy
+      (tyVars, tauTy) = splitForAllTyCoVars methodInDictTy
+      (argTys, _) = splitFunTys tauTy
+      scaledR1Ty = argTys !! 0
+      scaledR2Ty = argTys !! 1
+
+  r1Name <- unsafeLiftTcM $ newName (mkVarOcc "r1")
+  r2Name <- unsafeLiftTcM $ newName (mkVarOcc "r2")
+  let r1Var = mkLocalId r1Name (scaledMult scaledR1Ty) (scaledThing scaledR1Ty)
+      r2Var = mkLocalId r2Name (scaledMult scaledR2Ty) (scaledThing scaledR2Ty)
+
+      kATy   = mkTyVarTy (tyVars !! 0)
+      fTy    = mkTyVarTy (tyVars !! 1)
+      aTy    = mkTyVarTy (tyVars !! 2)
+      kRowTy = typeKind rowTy
+
+      unRowRepTypeArgs = [Type kRowTy, Type kATy, Type fTy, Type rTy, Type rowTy, Type aTy]
+      rep1 = mkCoreApps (Var (psUnRowRep state)) (unRowRepTypeArgs ++ [Var r1Var])
+      rep2 = mkCoreApps (Var (psUnRowRep state)) (unRowRepTypeArgs ++ [Var r2Var])
+
+      repTypeArgs = [Type kATy, Type fTy, Type aTy]
+      tag1 = mkCoreApps (Var (psRepTag state)) (repTypeArgs ++ [rep1])
+      tag2 = mkCoreApps (Var (psRepTag state)) (repTypeArgs ++ [rep2])
+      eqTag = mkCoreApps (Var (psEqClass state)) [Type (mkTyConTy wordTyCon), Var (psFEqWord state), tag1, tag2]
+
+      falseExpr = mkCoreConApps falseDataCon []
+      trueExpr  = mkCoreConApps trueDataCon []
+      andFn e1 e2 = mkCoreApps (Var (psAnd state)) [e1, e2]
+
+      compareConFields conRowTy =
+        let fields = walkRowWithTypes conRowTy
+            fieldComps = map (compareField rep1 rep2 fTy aTy kATy) fields
+        in foldl andFn trueExpr fieldComps
+
+      buildTree _ [] = falseExpr
+      buildTree tagExpr ((i, _conName, conRowTy) : rest) =
+        let iLit = mkCoreConApps wordDataCon [Lit (mkLit (fromIntegral i :: Integer))]
+            cond = mkCoreApps (Var (psEqClass state)) [Type (mkTyConTy wordTyCon), Var (psFEqWord state), tagExpr, iLit]
+        in mkIfThenElse cond (compareConFields conRowTy) (buildTree tagExpr rest)
+
+      bodyExpr = mkIfThenElse eqTag (buildTree tag1 constructors) falseExpr
+
+      repEqSumExpr = mkCoreLams (tyVars ++ [r1Var, r2Var]) bodyExpr
+
+      dictExpr = evDataConApp (classDataCon cls) tys [scEvidence, repEqSumExpr]
+  pure $ Left (EvExpr dictExpr, ct)
+  where
+    compareField rep1 rep2 fTy aTy kATy (i, _, fieldTy) =
+      let fieldAtTypeArgs = [Type kATy, Type fTy, Type aTy, Type fieldTy]
+          idxExpr = mkCoreConApps intDataCon [Lit (mkLit (fromIntegral i :: Integer))]
+          raw1 = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep1])
+          raw2 = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep2])
+          fFieldTy = mkAppTy fTy fieldTy
+          val1 = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw1]
+          val2 = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw2]
+          eqDict = getEqDict state fieldTy
+      in mkCoreApps (Var (psEqClass state)) [Type fieldTy, eqDict, val1, val2]
 
 solveRowShowSum
   :: PluginState
@@ -486,7 +557,79 @@ solveRowShowSum
   -> Class
   -> [Type]
   -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
-solveRowShowSum _state _ct _cls _tys = pure $ Right ()
+solveRowShowSum state ct cls tys = do
+  let rowTy  = last tys
+      rTy    = tys !! (length tys - 2)
+      constructors = walkSumRowWithTypes rowTy
+
+      scEvidence = evDataConApp (classDataCon (psRowFlavourCls state)) [rTy] []
+
+      repShowsPrecSumId = case classMethods cls of
+        (m : _) -> m
+        []      -> error "Polytropos.Plugin: RowShowSum class has no methods"
+      methodFullTy = piResultTys (varType repShowsPrecSumId) tys
+      (_, _, methodInDictTy) = splitFunTy methodFullTy
+      (tyVars, tauTy) = splitForAllTyCoVars methodInDictTy
+      (argTys, _) = splitFunTys tauTy
+      scaledPrecTy = argTys !! 0
+      scaledRTy    = argTys !! 1
+
+  precName <- unsafeLiftTcM $ newName (mkVarOcc "p")
+  rName <- unsafeLiftTcM $ newName (mkVarOcc "r")
+  let precVar = mkLocalId precName (scaledMult scaledPrecTy) (scaledThing scaledPrecTy)
+      rVar    = mkLocalId rName (scaledMult scaledRTy) (scaledThing scaledRTy)
+
+      kATy   = mkTyVarTy (tyVars !! 0)
+      fTy    = mkTyVarTy (tyVars !! 1)
+      aTy    = mkTyVarTy (tyVars !! 2)
+      kRowTy = typeKind rowTy
+
+      unRowRepTypeArgs = [Type kRowTy, Type kATy, Type fTy, Type rTy, Type rowTy, Type aTy]
+      rep = mkCoreApps (Var (psUnRowRep state)) (unRowRepTypeArgs ++ [Var rVar])
+
+      repTypeArgs = [Type kATy, Type fTy, Type aTy]
+      tag = mkCoreApps (Var (psRepTag state)) (repTypeArgs ++ [rep])
+
+      spaceShowS  = mkCoreApps (Var (psShowChar state)) [mkCharExpr ' ']
+      compFn f g = mkCoreApps (Var (psComp state)) [Type stringTy, Type stringTy, Type stringTy, f, g]
+
+      showConFields conNameFS conRowTy = do
+        let conName = unpackFS conNameFS
+        prefixExpr <- unsafeLiftTcM $ mkStringExpr (conName ++ " ")
+        let prefixShowS = mkCoreApps (Var (psShowString state)) [prefixExpr]
+            fields = walkRowWithTypes conRowTy
+            fieldShows = map (showField rep fTy aTy kATy) fields
+            showParts = case fieldShows of
+              [] -> [prefixShowS]
+              (f0 : fs) -> prefixShowS : f0 : concatMap (\f -> [spaceShowS, f]) fs
+        pure $ foldr1 compFn showParts
+
+  -- We need to build the tree in TcPluginM 'Solve because of unsafeLiftTcM/mkStringExpr
+  let buildTree _tagExpr [] = do
+        errorPrefix <- unsafeLiftTcM $ mkStringExpr "??? "
+        pure $ mkCoreApps (Var (psShowString state)) [errorPrefix]
+      buildTree tagExpr ((i, conNameFS, conRowTy) : rest) = do
+        let iLit = mkCoreConApps wordDataCon [Lit (mkLit (fromIntegral i :: Integer))]
+            cond = mkCoreApps (Var (psEqClass state)) [Type (mkTyConTy wordTyCon), Var (psFEqWord state), tagExpr, iLit]
+        trueBranch <- showConFields conNameFS conRowTy
+        falseBranch <- buildTree tagExpr rest
+        pure $ mkIfThenElse cond trueBranch falseBranch
+
+  bodyExpr <- buildTree tag constructors
+  let repShowsPrecSumExpr = mkCoreLams (tyVars ++ [precVar, rVar]) bodyExpr
+
+      dictExpr = evDataConApp (classDataCon cls) tys [scEvidence, repShowsPrecSumExpr]
+  pure $ Left (EvExpr dictExpr, ct)
+  where
+    showField rep fTy aTy kATy (i, _, fieldTy) =
+      let fieldAtTypeArgs = [Type kATy, Type fTy, Type aTy, Type fieldTy]
+          idxExpr = mkCoreConApps intDataCon [Lit (mkLit (fromIntegral i :: Integer))]
+          raw = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep])
+          fFieldTy = mkAppTy fTy fieldTy
+          val = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw]
+          showDict = getShowDict state fieldTy
+          zeroPrec = mkCoreConApps intDataCon [Lit (mkLit 0)]
+      in mkCoreApps (Var (psShowsPrecMeth state)) [Type fieldTy, showDict, zeroPrec, val]
 
 -------------------------------------------------------------------------------
 -- Row walking

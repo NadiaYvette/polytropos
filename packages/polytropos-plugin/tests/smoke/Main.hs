@@ -33,10 +33,38 @@ other = RowRep (productRep [slot (7 :: Int), slot False])
 
 main :: IO ()
 main = defaultMain $ testGroup "plugin RowEq/RowShow smoke"
-  [ testCase "repEq is reflexive" $
-      repEq ab ab @?= True
-  , testCase "repEq detects a differing slot" $
-      repEq ab other @?= False
-  , testCase "repShowsPrec renders both fields" $
-      repShowsPrec 0 ab "" @?= "R2 7 True"
+  [ testGroup "Products"
+      [ testCase "repEq is reflexive" $
+          repEq ab ab @?= True
+      , testCase "repEq detects a differing slot" $
+          repEq ab other @?= False
+      , testCase "repShowsPrec renders both fields" $
+          repShowsPrec 0 ab "" @?= "R2 7 True"
+      ]
+  , testGroup "Sums"
+      [ testCase "repEqSum (RowEqSum) matches same constructor and same payload" $
+          repEqSum sumC1 sumC1 @?= True
+      , testCase "repEqSum (RowEqSum) rejects different payloads in same constructor" $
+          repEqSum sumC1 sumC1diff @?= False
+      , testCase "repEqSum (RowEqSum) rejects different constructors" $
+          repEqSum sumC1 sumC2 @?= False
+      , testCase "repShowsPrecSum (RowShowSum) renders C1 properly" $
+          repShowsPrecSum 0 sumC1 "" @?= "C1 7"
+      , testCase "repShowsPrecSum (RowShowSum) renders C2 properly" $
+          repShowsPrecSum 0 sumC2 "" @?= "C2 True"
+      ]
   ]
+
+-- | S2: a sum with two constructors
+type S2 = '[ "C1" := '[ "x" := Int ], "C2" := '[ "y" := Bool ] ]
+
+-- | Ensure the plugin solves these dictionaries (RowEqSum, RowShowSum) for S2.
+
+sumC1 :: RowRep Identity SumRowT S2 a
+sumC1 = RowRep (injectRep 0 [slot (7 :: Int)])
+
+sumC1diff :: RowRep Identity SumRowT S2 a
+sumC1diff = RowRep (injectRep 0 [slot (8 :: Int)])
+
+sumC2 :: RowRep Identity SumRowT S2 a
+sumC2 = RowRep (injectRep 1 [slot True])
