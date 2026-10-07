@@ -25,6 +25,7 @@
 -- ('R2') are passed as type parameters to the evidence class.
 module Main (main) where
 
+import Control.Monad.ST             (runST)
 import Data.Functor.Identity        (Identity(..))
 import Data.Primitive.SmallArray    (indexSmallArray)
 import GHC.Exts                     (Any)
@@ -159,6 +160,27 @@ productTests = testGroup "products"
   , testCase "setFieldAt preserves arity" $ do
       repArity (setFieldAt 0 (slot (9 :: Int)) (unRowRep ab)) @?= 2
       repArity (setFieldAt 1 (slot False) (unRowRep ab)) @?= 2
+  , testCase "setFieldsAt updates multiple fields simultaneously" $ do
+      let r = setFieldsAt [(0, slot (42 :: Int)), (1, slot False)] (unRowRep ab)
+      unslot (fieldAt 0 r) @?= (42 :: Int)
+      unslot (fieldAt 1 r) @?= False
+  , testCase "setFieldsAt with empty updates is identity" $ do
+      let r = setFieldsAt [] (unRowRep ab)
+      unslot (fieldAt 0 r) @?= (7 :: Int)
+      unslot (fieldAt 1 r) @?= True
+  , testCase "modifyRep executes chained in-place mutations" $ do
+      let r = modifyRep (unRowRep ab) $ \m -> do
+                writeFieldAt m 0 (slot (99 :: Int))
+                writeFieldAt m 1 (slot False)
+      unslot (fieldAt 0 r) @?= (99 :: Int)
+      unslot (fieldAt 1 r) @?= False
+  , testCase "thawRep and freezeRep round-trip" $ do
+      let r = runST $ do
+                m <- thawRep (unRowRep ab)
+                writeFieldAt m 0 (slot (100 :: Int))
+                freezeRep m
+      unslot (fieldAt 0 r) @?= (100 :: Int)
+      unslot (fieldAt 1 r) @?= True
   , testCase "the empty product has arity zero" $
       repArity (productRep ([] :: [Identity Any])) @?= 0
   ]

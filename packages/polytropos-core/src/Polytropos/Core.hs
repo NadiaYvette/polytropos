@@ -1,7 +1,9 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -45,6 +47,12 @@ module Polytropos.Core (
   , Rep(..)
   , repTag
   , repVals
+    -- * Ephemeral transient representation
+  , MRep(..)
+  , thawRep
+  , freezeRep
+  , writeFieldAt
+  , modifyRep
     -- * Row-carrying wrapper (Case 3)
   , RowRep(..)
   , unRowRep
@@ -55,6 +63,8 @@ module Polytropos.Core (
   , repArity
   , fieldAt
   , setFieldAt
+  , setFieldsAt
+  , setFieldSumAt
   , projectRep
   , matchRep
     -- * Evidence classes
@@ -69,7 +79,9 @@ module Polytropos.Core (
   , noInlineUnsafeCo
   ) where
 
-import Data.Foldable                 (toList)
+import Control.Monad               (forM_)
+import Control.Monad.ST            (ST)
+import Data.Foldable               (toList)
 import Data.Kind                   (Constraint, Type)
 import Data.Primitive.SmallArray
 import GHC.Exts                    (Any)
@@ -236,6 +248,38 @@ repArity = sizeofSmallArray . vals
     vals (Rep _ v) = v
 
 {-------------------------------------------------------------------------------
+  §2b  Ephemeral transient representation
+-------------------------------------------------------------------------------}
+
+-- | Ephemeral mutable representation for in-place construction and deserialization.
+data MRep s (f :: Type -> Type) a = MRep
+  {-# UNPACK #-} !Word
+  !(SmallMutableArray s (f Any))
+
+-- | Safely thaw an immutable 'Rep' into a mutable builder.
+thawRep :: Rep f a -> ST s (MRep s f a)
+thawRep (Rep t v) = do
+  m <- thawSmallArray v 0 (sizeofSmallArray v)
+  pure (MRep t m)
+
+-- | Safely freeze an ephemeral builder into an immutable 'Rep'.
+freezeRep :: MRep s f a -> ST s (Rep f a)
+freezeRep (MRep t m) = do
+  v <- unsafeFreezeSmallArray m
+  pure (Rep t v)
+
+-- | In-place slot write (@O(1)@, zero allocation).
+writeFieldAt :: MRep s f a -> Int -> f Any -> ST s ()
+writeFieldAt (MRep _ m) i !x = writeSmallArray m i x
+
+-- | Scoped pure modification wrapper.
+modifyRep :: Rep f a -> (forall s. MRep s f a -> ST s ()) -> Rep f a
+modifyRep (Rep t v) act = Rep t $ runSmallArray $ do
+  m <- thawSmallArray v 0 (sizeofSmallArray v)
+  act (MRep t m)
+  pure m
+
+{-------------------------------------------------------------------------------
   §3  Construction
 -------------------------------------------------------------------------------}
 
@@ -270,6 +314,24 @@ setFieldAt i !x (Rep t v) = Rep t $ runSmallArray $ do
   m <- thawSmallArray v 0 (sizeofSmallArray v)
   writeSmallArray m i x
   pure m
+
+-- | Clone once, apply K updates in-place, freeze once.
+--
+-- Reduces multi-field update overhead from @K * O(N)@ to @1 * O(N)@.
+setFieldsAt :: forall f a. [(Int, f Any)] -> Rep f a -> Rep f a
+setFieldsAt [] r = r
+setFieldsAt updates (Rep t v) = Rep t $ runSmallArray $ do
+  m <- thawSmallArray v 0 (sizeofSmallArray v)
+  forM_ updates $ \(i, !x) -> writeSmallArray m i x
+  pure m
+
+-- | Partial field update for sum constructors.
+--
+-- Ensures the runtime tag matches the expected constructor tag before updating.
+setFieldSumAt :: forall f a. Word -> Int -> f Any -> Rep f a -> Maybe (Rep f a)
+setFieldSumAt expectedTag idx !val r@(Rep t _)
+  | t == expectedTag = Just (setFieldAt idx val r)
+  | otherwise        = Nothing
 
 -- | Project a constructor, or 'Nothing' if the tag does not match.
 --
