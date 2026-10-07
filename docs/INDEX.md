@@ -7,6 +7,7 @@ Status: LIVING DOCUMENT · v0.1 · 2026-10-05
 | Path | Genre | Stage | Tier | Flags |
 |---|---|---|---|---|
 | `notes/POLYTROPOS_DESIGN.md` | design | draft | cross-cutting | §4 answered; §7 Q1–Q3 closed; §7 Q4 nuanced; §7 Q5 open |
+| `notes/DESIGN_REVIEW_ECOSYSTEM_SYNTHESIS.md` | review | draft | cross-cutting | — |
 | `notes/COMMIT_ATTRIBUTION.md` | convention | blessed | cross-cutting | — |
 | `notes/PROVENANCE.md` | convention | blessed | cross-cutting | — |
 | `notes/DOC_STRATEGY.md` | strategy | blessed | cross-cutting | — |
@@ -27,10 +28,11 @@ note is corrected regardless — is the one that fires most often.
 — it is sectioned §1–§6 to match the note, and the two must be read together.
 Commit convention: `AGENTS.md` advisory 4, details in the attribution note.
 
-**Reviewer.** The §3 widening/narrowing asymmetry is still the load-bearing
-open shape; §4 (elimination) is now answered (hybrid + Option D vocabulary + Case 3
-wrapper) and sketched in `PHASE2_SKETCH.md`. The remaining §7 open items are Q4
-(`DictAny` fate) and Q5 (polytropos/large-anon coexistence).
+**Reviewer.** `notes/DESIGN_REVIEW_ECOSYSTEM_SYNTHESIS.md` provides the holistic
+architectural evaluation and ecosystem deployment assessment. The §3 widening/narrowing
+asymmetry is still the load-bearing open shape; §4 (elimination) is now answered (hybrid
++ Option D vocabulary + Case 3 wrapper) and sketched in `PHASE2_SKETCH.md`. The remaining
+§7 open items are Q4 (`DictAny` fate) and Q5 (polytropos/large-anon coexistence).
 
 **Someone new to the idea.** The transcripts in `transcripts/` record the
 ideation context: `transcripts/gemini-powerful-abstraction-techniques-in-haskell.md`
