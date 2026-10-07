@@ -1,0 +1,70 @@
+---
+id: task-14-satellite-beam
+title: Implement polytropos-beam satellite package for high-arity SQL tables
+description: |
+  Establishes `packages/polytropos-beam`, enabling `polytropos` records to act as `beam`
+  database schema tables without GHC out-of-memory compilation crashes on 50+ columns:
+  1. Package skeleton:
+     - `packages/polytropos-beam/polytropos-beam.cabal` depending on `base`, `polytropos-core`,
+       and `beam-core >= 0.9`.
+     - Register `packages/polytropos-beam` in root `cabal.project`.
+  2. Higher-Kinded Data & Beamable:
+     - `polytropos` records (`RowRep ProductRowT r f`) naturally carry the columnar functor `f`.
+     - Implements `Database.Beam.Schema.Tables.Beamable`:
+       * `tblSkeleton`: generates default column names from row symbols.
+       * `zipBeamFieldsM`: traverses two records in lockstep using `SmallArray` indices.
+  3. Verification:
+     - Defines a test database table with 30 columns and confirms sub-second compilation.
+
+dependencies:
+  - task-07-polytropos-generics
+
+packages:
+  - packages/polytropos-beam
+  - packages/polytropos-core
+
+executor: agy
+model: "mistral/codestral-latest"
+skills:
+  - tricorder
+  - code-navigation
+max_turns: 10
+run_budget: 450
+max_repair_attempts: 3
+
+steps:
+  - id: create-beam-package
+    name: Create polytropos-beam package skeleton
+    action: |
+      1. Create directory `packages/polytropos-beam`.
+      2. Write `polytropos-beam.cabal` with cabal-version: 3.14, default-language: GHC2024,
+         depending on `base`, `polytropos-core`, `beam-core`.
+      3. Register in `cabal.project`.
+      4. Write `packages/polytropos-beam/src/Polytropos/Beam.hs`.
+    duration: "15m"
+
+  - id: implement-beamable-instance
+    name: Implement Beamable class for RowRep ProductRowT
+    action: |
+      In `packages/polytropos-beam/src/Polytropos/Beam.hs`:
+      1. Import `Database.Beam.Schema.Tables`.
+      2. Implement `instance (BeamableRow r) => Beamable (RowRep ProductRowT r)`.
+      3. Implement `tblSkeleton` and `zipBeamFieldsM` using flat array loops.
+    duration: "30m"
+
+  - id: add-beam-tests
+    name: Add test suite verifying Beam table operations
+    action: |
+      Create `packages/polytropos-beam/test/Main.hs`:
+      Define a mock table record and test `tblSkeleton` and `zipBeamFieldsM`.
+    duration: "15m"
+
+  - id: verify-gate
+    name: Run verification gate
+    action: |
+      Run `cabal test polytropos-beam:test:polytropos-beam-test`.
+    duration: "5m"
+
+success_criteria:
+  - `packages/polytropos-beam` compiles cleanly.
+  - `Beamable` instances function correctly across columns.

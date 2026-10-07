@@ -1,0 +1,70 @@
+---
+id: task-15-satellite-hasql
+title: Implement polytropos-hasql satellite package for high-throughput SQL decoding
+description: |
+  Establishes `packages/polytropos-hasql`, integrating `polytropos` records directly with
+  the high-performance PostgreSQL driver `hasql`:
+  1. Package skeleton:
+     - `packages/polytropos-hasql/polytropos-hasql.cabal` depending on `base`, `polytropos-core`,
+       and `hasql >= 1.6`.
+     - Register `packages/polytropos-hasql` in root `cabal.project`.
+  2. Transient Row Decoders:
+     - Uses `MRep` transient builders to decode SQL columns directly into contiguous
+       memory slots without intermediate tuple allocations or GHC's 62-column tuple limit:
+       ```haskell
+       recordRow :: RowDecoder r (Record r)
+       ```
+  3. Verification:
+     - Tests row decoder construction and simulated column consumption.
+
+dependencies:
+  - task-02-batch-updates-and-transients
+
+packages:
+  - packages/polytropos-hasql
+  - packages/polytropos-core
+
+executor: agy
+model: "mistral/codestral-latest"
+skills:
+  - tricorder
+  - code-navigation
+max_turns: 8
+run_budget: 360
+max_repair_attempts: 3
+
+steps:
+  - id: create-hasql-package
+    name: Create polytropos-hasql package skeleton
+    action: |
+      1. Create directory `packages/polytropos-hasql`.
+      2. Write `polytropos-hasql.cabal` with cabal-version: 3.14, default-language: GHC2024,
+         depending on `base`, `polytropos-core`, `hasql`.
+      3. Register in `cabal.project`.
+      4. Write `packages/polytropos-hasql/src/Polytropos/Hasql.hs`.
+    duration: "15m"
+
+  - id: implement-row-decoder
+    name: Implement Row decoders using MRep transient builders
+    action: |
+      In `packages/polytropos-hasql/src/Polytropos/Hasql.hs`:
+      1. Import `Hasql.Decoders`.
+      2. Implement row decoding combinator populating `SmallMutableArray` slots in order.
+    duration: "25m"
+
+  - id: add-hasql-tests
+    name: Add test suite for Hasql row decoders
+    action: |
+      Create `packages/polytropos-hasql/test/Main.hs`:
+      Test decoding mock row data into a 20-field `polytropos` record.
+    duration: "15m"
+
+  - id: verify-gate
+    name: Run verification gate
+    action: |
+      Run `cabal test polytropos-hasql:test:polytropos-hasql-test`.
+    duration: "5m"
+
+success_criteria:
+  - `packages/polytropos-hasql` compiles cleanly.
+  - Multi-column row decoding succeeds without tuple intermediate conversions.

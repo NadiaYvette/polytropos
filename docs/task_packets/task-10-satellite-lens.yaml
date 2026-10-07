@@ -1,0 +1,71 @@
+---
+id: task-10-satellite-lens
+title: Implement polytropos-lens satellite package for full lens suite integration
+description: |
+  Establishes `packages/polytropos-lens`, providing complete integration with Edward Kmett's
+  `lens` library while keeping core packages free of the heavyweight transitive dependency tree:
+  1. Package skeleton:
+     - `packages/polytropos-lens/polytropos-lens.cabal` depending on `base`, `polytropos-core`,
+       `lens >= 5.2`, and `profunctors`.
+     - Register `packages/polytropos-lens` in root `cabal.project`.
+  2. Class instances:
+     - Positional lenses: `Field1` through `Field9` on product records (`rec ^. _1`, `rec ^. _2`).
+     - Container classes: `Control.Lens.At.At` and `Ixed` for field access by symbol name.
+     - Profunctor Prisms: `Prism'` on sum variants using `Choice` from `profunctors`.
+     - Traversal: `Control.Lens.Each.Each` for record fields.
+  3. Law verification:
+     - Tests `_1`, `_2`, `at`, and `each` with `view` (`^.`), `set` (`.~`), and `over` (`%~`).
+
+dependencies:
+  - task-09-satellite-microlens
+
+packages:
+  - packages/polytropos-lens
+  - packages/polytropos-core
+
+executor: agy
+model: "mistral/codestral-latest"
+skills:
+  - tricorder
+  - code-navigation
+max_turns: 10
+run_budget: 450
+max_repair_attempts: 3
+
+steps:
+  - id: create-lens-package
+    name: Create polytropos-lens package skeleton
+    action: |
+      1. Create directory `packages/polytropos-lens`.
+      2. Write `polytropos-lens.cabal` depending on `base`, `polytropos-core`, `lens`, and `profunctors`.
+      3. Register in `cabal.project`.
+      4. Write `packages/polytropos-lens/src/Polytropos/Lens.hs`.
+    duration: "15m"
+
+  - id: implement-lens-instances
+    name: Implement Field1-Field9, At, Each, and Prisms
+    action: |
+      In `packages/polytropos-lens/src/Polytropos/Lens.hs`:
+      1. Import `Control.Lens`.
+      2. Implement `instance Field1 (Record r) (Record r) a a` using slot index 0.
+      3. Implement `Field2` through `Field9` for indices 1 through 8.
+      4. Implement `instance At (Record r)` and `instance Each (Record r) (Record r) a a`.
+      5. Implement `prismVariant :: Field c -> Prism' (Variant s) (Record fs)`.
+    duration: "30m"
+
+  - id: add-lens-tests
+    name: Add test suite for lens instances
+    action: |
+      Create `packages/polytropos-lens/test/Main.hs`:
+      Verify `rec ^. _1`, `rec ^. _2`, `rec ^? at "x"`, and variant prism matching.
+    duration: "15m"
+
+  - id: verify-gate
+    name: Run verification gate
+    action: |
+      Run `cabal test polytropos-lens:test:polytropos-lens-test`.
+    duration: "5m"
+
+success_criteria:
+  - `packages/polytropos-lens` compiles cleanly under `-Wall -Werror`.
+  - Positional `_1`..`_9` and variant prisms pass all unit tests.

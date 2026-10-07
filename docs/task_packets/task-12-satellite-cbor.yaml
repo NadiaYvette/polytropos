@@ -1,0 +1,68 @@
+---
+id: task-12-satellite-cbor
+title: Implement polytropos-cbor satellite package for binary CBOR serialization
+description: |
+  Establishes `packages/polytropos-cbor`, providing high-performance binary CBOR serialization
+  using `cborg` and `serialise` without intermediate tree boxing:
+  1. Package skeleton:
+     - `packages/polytropos-cbor/polytropos-cbor.cabal` depending on `base`, `polytropos-core`,
+       `cborg`, `serialise`, and `bytestring`.
+     - Register `packages/polytropos-cbor` in root `cabal.project`.
+  2. CBOR Codecs:
+     - `Serialise (Record r)`: encodes length header + flat payload field encodings.
+     - `Serialise (Variant s)`: encodes constructor Word tag + selected payload fields.
+  3. Verification:
+     - Binary serialization and deserialization roundtrip tests on products and sums.
+
+dependencies:
+  - task-11-satellite-aeson
+
+packages:
+  - packages/polytropos-cbor
+  - packages/polytropos-core
+
+executor: agy
+model: "mistral/codestral-latest"
+skills:
+  - tricorder
+  - code-navigation
+max_turns: 8
+run_budget: 360
+max_repair_attempts: 3
+
+steps:
+  - id: create-cbor-package
+    name: Create polytropos-cbor package skeleton
+    action: |
+      1. Create directory `packages/polytropos-cbor`.
+      2. Write `polytropos-cbor.cabal` with cabal-version: 3.14, default-language: GHC2024,
+         depending on `base`, `polytropos-core`, `cborg`, `serialise`, `bytestring`.
+      3. Register in `cabal.project`.
+      4. Write `packages/polytropos-cbor/src/Polytropos/CBOR.hs`.
+    duration: "15m"
+
+  - id: implement-cbor-codecs
+    name: Implement Serialise instances for Record and Variant
+    action: |
+      In `packages/polytropos-cbor/src/Polytropos/CBOR.hs`:
+      1. Import `Codec.Serialise` and `Codec.CBOR.Encoding`.
+      2. Implement `instance (AllFields Serialise r) => Serialise (Record r)`.
+      3. Implement `instance (AllConstructors Serialise s) => Serialise (Variant s)`.
+    duration: "25m"
+
+  - id: add-cbor-tests
+    name: Add test suite for CBOR serialization
+    action: |
+      Create `packages/polytropos-cbor/test/Main.hs`:
+      Test `deserialise (serialise x) == x` on records and variants.
+    duration: "15m"
+
+  - id: verify-gate
+    name: Run verification gate
+    action: |
+      Run `cabal test polytropos-cbor:test:polytropos-cbor-test`.
+    duration: "5m"
+
+success_criteria:
+  - `packages/polytropos-cbor` compiles cleanly.
+  - CBOR roundtrips pass on records and variants.

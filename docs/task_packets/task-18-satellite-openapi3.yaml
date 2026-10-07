@@ -1,0 +1,71 @@
+---
+id: task-18-satellite-openapi3
+title: Implement polytropos-openapi3 satellite package for schema generation
+description: |
+  Establishes `packages/polytropos-openapi3`, generating OpenAPI 3.0 schema specifications directly
+  from `polytropos` records and variants:
+  1. Package skeleton:
+     - `packages/polytropos-openapi3/polytropos-openapi3.cabal` depending on `base`, `polytropos-core`,
+       `openapi3 >= 3.2`, `text`, and `lens`.
+     - Register `packages/polytropos-openapi3` in root `cabal.project`.
+  2. ToSchema Typeclass Instances:
+     - Implements `ToSchema (Record r)`:
+       * Traverses field metadata to populate `properties` map and `required` list on `Schema`.
+       * Avoids GHC Generic tree explosion on large schema objects (50+ fields).
+     - Implements `ToSchema (Variant s)`:
+       * Constructs OpenAPI `oneOf` tagged union schemas.
+  3. Verification:
+     - Tests JSON schema object generation against mock REST API specifications.
+
+dependencies:
+  - task-07-polytropos-generics
+
+packages:
+  - packages/polytropos-openapi3
+  - packages/polytropos-core
+
+executor: agy
+model: "mistral/codestral-latest"
+skills:
+  - tricorder
+  - code-navigation
+max_turns: 8
+run_budget: 360
+max_repair_attempts: 3
+
+steps:
+  - id: create-openapi3-package
+    name: Create polytropos-openapi3 package skeleton
+    action: |
+      1. Create directory `packages/polytropos-openapi3`.
+      2. Write `polytropos-openapi3.cabal` with cabal-version: 3.14, default-language: GHC2024,
+         depending on `base`, `polytropos-core`, `openapi3`, `text`, `lens`.
+      3. Register in `cabal.project`.
+      4. Write `packages/polytropos-openapi3/src/Polytropos/OpenApi.hs`.
+    duration: "15m"
+
+  - id: implement-toschema-instances
+    name: Implement ToSchema for Record and Variant
+    action: |
+      In `packages/polytropos-openapi3/src/Polytropos/OpenApi.hs`:
+      1. Import `Data.OpenApi`.
+      2. Implement `ToSchema (Record r)` synthesizing object schema properties.
+      3. Implement `ToSchema (Variant s)` synthesizing sum `oneOf` representations.
+    duration: "30m"
+
+  - id: add-openapi3-tests
+    name: Add test suite for OpenAPI schema generation
+    action: |
+      Create `packages/polytropos-openapi3/test/Main.hs`:
+      Test `declareNamedSchema` output for multi-field records and variants.
+    duration: "15m"
+
+  - id: verify-gate
+    name: Run verification gate
+    action: |
+      Run `cabal test polytropos-openapi3:test:polytropos-openapi3-test`.
+    duration: "5m"
+
+success_criteria:
+  - `packages/polytropos-openapi3` compiles cleanly.
+  - Record and Variant `ToSchema` instances produce valid OpenAPI 3.0 schema definitions.

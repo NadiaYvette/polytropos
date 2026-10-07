@@ -1,0 +1,73 @@
+---
+id: task-17-satellite-persistent
+title: Implement polytropos-persistent satellite package for Yesod / Persistent ORM
+description: |
+  Establishes `packages/polytropos-persistent`, bridging `polytropos` open records with
+  the Yesod ecosystem's `persistent` relational database framework:
+  1. Package skeleton:
+     - `packages/polytropos-persistent/polytropos-persistent.cabal` depending on `base`, `polytropos-core`,
+       `persistent >= 2.14`, and `text`.
+     - Register `packages/polytropos-persistent` in root `cabal.project`.
+  2. PersistEntity & Field Marshalling:
+     - Implements `PersistRow r` typeclass providing fast marshaling:
+       * `toPersistFieldsRecord :: PersistRow r => Record r -> [PersistValue]`
+       * `fromPersistValuesRecord :: PersistRow r => [PersistValue] -> Either Text (Record r)`
+     - Uses `MRep` transient builder to reconstruct records from `[PersistValue]` lists in O(n)
+       without intermediate tuples.
+     - Provides `PersistEntity` instance or wrapper for relational table persistence.
+  3. Verification:
+     - Tests serializing and deserializing records to/from `[PersistValue]` and `Entity` wrappers.
+
+dependencies:
+  - task-02-batch-updates-and-transients
+  - task-07-polytropos-generics
+
+packages:
+  - packages/polytropos-persistent
+  - packages/polytropos-core
+
+executor: agy
+model: "mistral/codestral-latest"
+skills:
+  - tricorder
+  - code-navigation
+max_turns: 8
+run_budget: 360
+max_repair_attempts: 3
+
+steps:
+  - id: create-persistent-package
+    name: Create polytropos-persistent package skeleton
+    action: |
+      1. Create directory `packages/polytropos-persistent`.
+      2. Write `polytropos-persistent.cabal` with cabal-version: 3.14, default-language: GHC2024,
+         depending on `base`, `polytropos-core`, `persistent`, `text`.
+      3. Register in `cabal.project`.
+      4. Write `packages/polytropos-persistent/src/Polytropos/Persistent.hs`.
+    duration: "15m"
+
+  - id: implement-persist-row
+    name: Implement PersistRow class and marshalers
+    action: |
+      In `packages/polytropos-persistent/src/Polytropos/Persistent.hs`:
+      1. Import `Database.Persist`.
+      2. Define `PersistRow` class with `toPersistFieldsRecord` and `fromPersistValuesRecord`.
+      3. Implement instances populating `SmallMutableArray` slots directly.
+    duration: "30m"
+
+  - id: add-persistent-tests
+    name: Add test suite for Persistent entity mapping
+    action: |
+      Create `packages/polytropos-persistent/test/Main.hs`:
+      Test conversion between mock `[PersistValue]` rows and open records.
+    duration: "15m"
+
+  - id: verify-gate
+    name: Run verification gate
+    action: |
+      Run `cabal test polytropos-persistent:test:polytropos-persistent-test`.
+    duration: "5m"
+
+success_criteria:
+  - `packages/polytropos-persistent` compiles cleanly.
+  - Record serialization to/from `[PersistValue]` passes all tests.

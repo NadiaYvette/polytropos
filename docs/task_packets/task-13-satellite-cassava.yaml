@@ -1,0 +1,68 @@
+---
+id: task-13-satellite-cassava
+title: Implement polytropos-cassava satellite package for tabular CSV processing
+description: |
+  Establishes `packages/polytropos-cassava`, connecting `polytropos` records to the standard
+  Haskell CSV library `cassava` without intermediate nominal conversions:
+  1. Package skeleton:
+     - `packages/polytropos-cassava/polytropos-cassava.cabal` depending on `base`,
+       `polytropos-core`, `cassava >= 0.5`, `bytestring`, and `vector`.
+     - Register `packages/polytropos-cassava` in root `cabal.project`.
+  2. CSV Named Record Codecs:
+     - `FromNamedRecord (Record r)`: looks up each field label in the CSV header map in O(1).
+     - `ToNamedRecord (Record r)`: serializes field names and values to a CSV `NamedRecord`.
+  3. Verification:
+     - Tests encoding and decoding CSV rows with 10+ columns.
+
+dependencies:
+  - task-11-satellite-aeson
+
+packages:
+  - packages/polytropos-cassava
+  - packages/polytropos-core
+
+executor: agy
+model: "mistral/codestral-latest"
+skills:
+  - tricorder
+  - code-navigation
+max_turns: 8
+run_budget: 360
+max_repair_attempts: 3
+
+steps:
+  - id: create-cassava-package
+    name: Create polytropos-cassava package skeleton
+    action: |
+      1. Create directory `packages/polytropos-cassava`.
+      2. Write `polytropos-cassava.cabal` with cabal-version: 3.14, default-language: GHC2024,
+         depending on `base`, `polytropos-core`, `cassava`, `bytestring`, `vector`.
+      3. Register in `cabal.project`.
+      4. Write `packages/polytropos-cassava/src/Polytropos/Cassava.hs`.
+    duration: "15m"
+
+  - id: implement-csv-instances
+    name: Implement FromNamedRecord and ToNamedRecord
+    action: |
+      In `packages/polytropos-cassava/src/Polytropos/Cassava.hs`:
+      1. Import `Data.Csv`.
+      2. Implement `instance (AllFields FromField r) => FromNamedRecord (Record r)`.
+      3. Implement `instance (AllFields ToField r) => ToNamedRecord (Record r)`.
+    duration: "25m"
+
+  - id: add-cassava-tests
+    name: Add test suite for CSV processing
+    action: |
+      Create `packages/polytropos-cassava/test/Main.hs`:
+      Test `decodeByName (encodeByName headers [record]) == Right (headers, [record])`.
+    duration: "15m"
+
+  - id: verify-gate
+    name: Run verification gate
+    action: |
+      Run `cabal test polytropos-cassava:test:polytropos-cassava-test`.
+    duration: "5m"
+
+success_criteria:
+  - `packages/polytropos-cassava` compiles cleanly.
+  - CSV roundtrips pass on open records.

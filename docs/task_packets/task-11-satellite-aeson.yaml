@@ -1,0 +1,70 @@
+---
+id: task-11-satellite-aeson
+title: Implement polytropos-aeson satellite package for high-speed JSON codecs
+description: |
+  Establishes `packages/polytropos-aeson`, providing linear O(N) `ToJSON` and `FromJSON`
+  instances for `Record r` and `Variant s` without standard GHC.Generics compile slowdowns:
+  1. Package skeleton:
+     - `packages/polytropos-aeson/polytropos-aeson.cabal` depending on `base`, `polytropos-core`,
+       `aeson >= 2.0`, `bytestring`, and `text`.
+     - Register `packages/polytropos-aeson` in root `cabal.project`.
+  2. JSON Encoding & Decoding:
+     - `ToJSON (Record r)`: unrolls flat `SmallArray` directly into `Data.Aeson.KeyMap` Object.
+     - `FromJSON (Record r)`: decodes JSON Object keys directly into contiguous payload slots.
+     - `ToJSON (Variant s)` / `FromJSON (Variant s)`: encodes tagged JSON variants.
+  3. Verification:
+     - Roundtrip tests verifying `decode (encode record) == Just record` on records with 20+ fields.
+
+dependencies:
+  - task-07-polytropos-generics
+
+packages:
+  - packages/polytropos-aeson
+  - packages/polytropos-core
+
+executor: agy
+model: "mistral/codestral-latest"
+skills:
+  - tricorder
+  - code-navigation
+max_turns: 10
+run_budget: 450
+max_repair_attempts: 3
+
+steps:
+  - id: create-aeson-package
+    name: Create polytropos-aeson package skeleton
+    action: |
+      1. Create directory `packages/polytropos-aeson`.
+      2. Write `polytropos-aeson.cabal` with cabal-version: 3.14, default-language: GHC2024,
+         depending on `base`, `polytropos-core`, `aeson`, `bytestring`, `text`.
+      3. Register in `cabal.project`.
+      4. Write `packages/polytropos-aeson/src/Polytropos/Aeson.hs`.
+    duration: "15m"
+
+  - id: implement-json-codecs
+    name: Implement ToJSON and FromJSON instances
+    action: |
+      In `packages/polytropos-aeson/src/Polytropos/Aeson.hs`:
+      1. Import `Data.Aeson` and `Data.Aeson.Types`.
+      2. Implement `instance (AllFields ToJSON r) => ToJSON (Record r)` iterating over row symbols.
+      3. Implement `instance (AllFields FromJSON r) => FromJSON (Record r)` parsing Object keys.
+      4. Implement `ToJSON` and `FromJSON` for `Variant s`.
+    duration: "30m"
+
+  - id: add-aeson-tests
+    name: Add test suite for JSON codecs
+    action: |
+      Create `packages/polytropos-aeson/test/Main.hs`:
+      Test JSON roundtrip encoding and decoding for both product records and sum variants.
+    duration: "15m"
+
+  - id: verify-gate
+    name: Run verification gate
+    action: |
+      Run `cabal test polytropos-aeson:test:polytropos-aeson-test`.
+    duration: "5m"
+
+success_criteria:
+  - `packages/polytropos-aeson` compiles cleanly.
+  - JSON encode/decode roundtrips succeed on products and variants.

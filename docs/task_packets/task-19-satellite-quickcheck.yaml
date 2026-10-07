@@ -1,0 +1,74 @@
+---
+id: task-19-satellite-quickcheck
+title: Implement polytropos-quickcheck satellite package for property testing
+description: |
+  Establishes `packages/polytropos-quickcheck`, integrating `polytropos` records and variants
+  with `QuickCheck` property-based testing:
+  1. Package skeleton:
+     - `packages/polytropos-quickcheck/polytropos-quickcheck.cabal` depending on `base`, `polytropos-core`,
+       and `QuickCheck >= 2.14`.
+     - Register `packages/polytropos-quickcheck` in root `cabal.project`.
+  2. Arbitrary & Slot-Indexed Shrinking:
+     - Implements `Arbitrary (Record r)`:
+       * Generates each field value via `arbitrary` and packs into a contiguous `SmallArray`.
+       * Slot-indexed shrinking: shrinks each field slot independently without full combinatorial
+         Cartesian product blowup.
+     - Implements `Arbitrary (Variant s)`:
+       * Uniformly selects a variant tag index and generates payload via `arbitrary`.
+       * Shrinks payloads within the active variant constructor branch.
+  3. Verification:
+     - Tests property generation, shrink convergence, and roundtripping.
+
+dependencies:
+  - task-02-batch-updates-and-transients
+  - task-07-polytropos-generics
+
+packages:
+  - packages/polytropos-quickcheck
+  - packages/polytropos-core
+
+executor: agy
+model: "mistral/codestral-latest"
+skills:
+  - tricorder
+  - code-navigation
+max_turns: 8
+run_budget: 360
+max_repair_attempts: 3
+
+steps:
+  - id: create-quickcheck-package
+    name: Create polytropos-quickcheck package skeleton
+    action: |
+      1. Create directory `packages/polytropos-quickcheck`.
+      2. Write `polytropos-quickcheck.cabal` with cabal-version: 3.14, default-language: GHC2024,
+         depending on `base`, `polytropos-core`, `QuickCheck`.
+      3. Register in `cabal.project`.
+      4. Write `packages/polytropos-quickcheck/src/Polytropos/QuickCheck.hs`.
+    duration: "15m"
+
+  - id: implement-arbitrary-instances
+    name: Implement Arbitrary instances for Record and Variant
+    action: |
+      In `packages/polytropos-quickcheck/src/Polytropos/QuickCheck.hs`:
+      1. Import `Test.QuickCheck`.
+      2. Implement `Arbitrary (Record r)` with slot-indexed shrinking.
+      3. Implement `Arbitrary (Variant s)` with branch-preserving shrinking.
+    duration: "30m"
+
+  - id: add-quickcheck-tests
+    name: Add test suite for QuickCheck generators and shrinkers
+    action: |
+      Create `packages/polytropos-quickcheck/test/Main.hs`:
+      Test generator coverage and shrinking behavior on records and variants.
+    duration: "15m"
+
+  - id: verify-gate
+    name: Run verification gate
+    action: |
+      Run `cabal test polytropos-quickcheck:test:polytropos-quickcheck-test`.
+    duration: "5m"
+
+success_criteria:
+  - `packages/polytropos-quickcheck` compiles cleanly.
+  - Arbitrary generation and shrinking pass all property tests.

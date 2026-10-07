@@ -1,19 +1,25 @@
 ---
 id: task-08-modular-optics-interop
-title: Establish modular optics and lens interop adapters without core contamination
+title: Implement polytropos-optics satellite package for optics-core and LabelOptic
 description: |
-  Provides optics interoperability in an isolated package (`packages/polytropos-optics`):
-  1. The Zero-Contamination Boundary:
-     Core `polytropos` MUST NOT depend on `lens` or `optics`, avoiding heavyweight dependency
-     trees for consumers who prefer standard `OverloadedRecordDot` or lightweight alternatives.
-  2. The Modular Optics Adapter:
-     - `packages/polytropos-optics/polytropos-optics.cabal` depending on `optics-core` (or van Laarhoven lens).
-     - Generates type-safe Lenses for record fields:
-       `fieldLens :: HasField n (Record r) a => Field n -> Lens' (Record r) a`
-     - Generates type-safe Prisms for sum constructors:
-       `ctorPrism :: Field n -> Prism' (Variant s) (Record fs)`
-  3. Law verification:
-     - Verifies Lens laws (Get-Put, Put-Get, Put-Put) and Prism laws in tests.
+  Establishes `packages/polytropos-optics` providing native integration with Well-Typed's
+  `optics` library (`optics-core`) without contaminating core packages:
+  1. Package skeleton:
+     - `packages/polytropos-optics/polytropos-optics.cabal` depending on `base`, `polytropos-core`,
+       and `optics-core >= 0.4`.
+     - Register `packages/polytropos-optics` in root `cabal.project`.
+  2. LabelOptic integration:
+     - Implements `Optics.Label.Core.LabelOptic` so `#fieldName` acts as an `Optic A_Lens`:
+       ```haskell
+       instance (KnownSymbol n, HasField n (Record r) a)
+             => LabelOptic n A_Lens (Record r) (Record r) a a where
+         labelOptic = lensVL (fieldLens (Field @n))
+       ```
+  3. Variant Prisms:
+     - Implements constructor prisms using `Optics.Core.prism`:
+       `ctorOptic :: Field c -> Optic A_Prism NoIx (Variant s) (Variant s) (Record fs) (Record fs)`
+  4. Law verification:
+     - Tests `view`, `set`, and `over` on `#field` optics and verifies lens laws.
 
 dependencies:
   - task-07-polytropos-generics
@@ -33,27 +39,30 @@ max_repair_attempts: 3
 
 steps:
   - id: create-optics-package
-    name: Create polytropos-optics package skeleton
+    name: Create polytropos-optics package skeleton and Cabal config
     action: |
       1. Create directory `packages/polytropos-optics`.
-      2. Write `polytropos-optics.cabal` depending on `base`, `polytropos-core`, and `optics-core`.
-      3. Register in `cabal.project`.
-      4. Write `packages/polytropos-optics/src/Polytropos/Optics.hs`.
+      2. Write `polytropos-optics.cabal` with cabal-version: 3.14, default-language: GHC2024,
+         depending on `base`, `polytropos-core`, and `optics-core`.
+      3. Register `packages/polytropos-optics` in root `cabal.project`.
+      4. Create `packages/polytropos-optics/src/Polytropos/Optics.hs`.
     duration: "20m"
 
-  - id: implement-lenses-and-prisms
-    name: Implement fieldLens and ctorPrism
+  - id: implement-label-optic
+    name: Implement LabelOptic instances and Prism combinators
     action: |
       In `packages/polytropos-optics/src/Polytropos/Optics.hs`:
-      1. Implement `fieldLens` using `fieldAt` getter and `setFieldAt` setter.
-      2. Implement `ctorPrism` using `projectRep` and `injectRep`.
+      1. Import `Optics.Core` and `Optics.Label.Core`.
+      2. Implement `instance LabelOptic n A_Lens (Record r) (Record r) a a`.
+      3. Implement `ctorOptic` constructing `Optic A_Prism` via `projectRep` and `injectRep`.
     duration: "25m"
 
   - id: test-optics-laws
-    name: Add test suite verifying lens and prism laws
+    name: Add test suite verifying LabelOptic and Prism behavior
     action: |
       Create `packages/polytropos-optics/test/Main.hs`:
-      Verify roundtrip optics laws on polytropos structures.
+      Test `#foo` with `view` (`^.`), `set` (`.~`), and `over` (`%~`).
+      Verify prism match and injection roundtrips.
     duration: "15m"
 
   - id: verify-gate
@@ -63,6 +72,6 @@ steps:
     duration: "5m"
 
 success_criteria:
-  - `packages/polytropos-optics` compiles cleanly.
-  - Core `polytropos` remains completely free of `lens` or `optics` dependencies.
-  - Lens and prism laws pass cleanly.
+  - `packages/polytropos-optics` compiles cleanly under `-Wall -Werror`.
+  - `#field` operates as an `Optic A_Lens`.
+  - Lens and prism tests pass with exit code 0.

@@ -1,0 +1,71 @@
+---
+id: task-16-satellite-rel8
+title: Implement polytropos-rel8 satellite package for type-safe PostgreSQL schema
+description: |
+  Establishes `packages/polytropos-rel8`, enabling `polytropos` records to act as Higher-Kinded Data
+  (HKD) schema tables in Oliver Charles' `rel8` PostgreSQL framework:
+  1. Package skeleton:
+     - `packages/polytropos-rel8/polytropos-rel8.cabal` depending on `base`, `polytropos-core`,
+       and `rel8 >= 1.4`.
+     - Register `packages/polytropos-rel8` in root `cabal.project`.
+  2. Rel8able Class Implementation:
+     - Implements `Rel8.Generic.Rel8able (RowRep ProductRowT r)`:
+       * `hfield`: reads slot using `fieldAt`.
+       * `htabulate`: fills contiguous array slots using functor builder.
+       * `htraverse`: maps functor fields across the array.
+       * `hzipWith`: zips two columnar records in a tight vector loop.
+  3. Verification:
+     - Tests `rel8` table schema definition and query projection on open records.
+
+dependencies:
+  - task-07-polytropos-generics
+
+packages:
+  - packages/polytropos-rel8
+  - packages/polytropos-core
+
+executor: agy
+model: "mistral/codestral-latest"
+skills:
+  - tricorder
+  - code-navigation
+max_turns: 10
+run_budget: 450
+max_repair_attempts: 3
+
+steps:
+  - id: create-rel8-package
+    name: Create polytropos-rel8 package skeleton
+    action: |
+      1. Create directory `packages/polytropos-rel8`.
+      2. Write `polytropos-rel8.cabal` with cabal-version: 3.14, default-language: GHC2024,
+         depending on `base`, `polytropos-core`, `rel8`.
+      3. Register in `cabal.project`.
+      4. Write `packages/polytropos-rel8/src/Polytropos/Rel8.hs`.
+    duration: "15m"
+
+  - id: implement-rel8able-instance
+    name: Implement Rel8able instance for RowRep ProductRowT
+    action: |
+      In `packages/polytropos-rel8/src/Polytropos/Rel8.hs`:
+      1. Import `Rel8`.
+      2. Implement `instance (Rel8ableRow r) => Rel8able (RowRep ProductRowT r)`.
+      3. Provide `hfield`, `htabulate`, `htraverse`, and `hzipWith`.
+    duration: "30m"
+
+  - id: add-rel8-tests
+    name: Add test suite for Rel8 table schemas
+    action: |
+      Create `packages/polytropos-rel8/test/Main.hs`:
+      Test table declaration, `htabulate`, and `hzipWith` across columns.
+    duration: "15m"
+
+  - id: verify-gate
+    name: Run verification gate
+    action: |
+      Run `cabal test polytropos-rel8:test:polytropos-rel8-test`.
+    duration: "5m"
+
+success_criteria:
+  - `packages/polytropos-rel8` compiles cleanly.
+  - `Rel8able` methods pass all table tests.

@@ -1,0 +1,73 @@
+---
+id: task-09-satellite-microlens
+title: Implement polytropos-microlens satellite package for zero-dependency optics
+description: |
+  Establishes `packages/polytropos-microlens`, providing class-based optics integration
+  for developers who use `microlens` specifically to avoid transitive dependency bloat:
+  1. Package skeleton:
+     - `packages/polytropos-microlens/polytropos-microlens.cabal` depending strictly on
+       `base`, `polytropos-core`, and `microlens >= 0.4`.
+     - Register `packages/polytropos-microlens` in root `cabal.project`.
+  2. Traversal and class instances:
+     - Implements `Lens.Micro.Each.Each` for homogeneous traversal across record fields:
+       ```haskell
+       instance (AllFields Eq a r) => Each (Record r) (Record r) a a where
+         each = ...
+       ```
+  3. Verification:
+     - Verifies `rec & each %~ f` works across record fields.
+     - Confirms zero transitive dependencies outside `base` and `microlens`.
+
+dependencies:
+  - task-08-modular-optics-interop
+
+packages:
+  - packages/polytropos-microlens
+  - packages/polytropos-core
+
+executor: agy
+model: "mistral/codestral-latest"
+skills:
+  - tricorder
+  - code-navigation
+max_turns: 8
+run_budget: 360
+max_repair_attempts: 3
+
+steps:
+  - id: create-microlens-package
+    name: Create polytropos-microlens package skeleton
+    action: |
+      1. Create directory `packages/polytropos-microlens`.
+      2. Write `polytropos-microlens.cabal` with cabal-version: 3.14, default-language: GHC2024,
+         depending on `base`, `polytropos-core`, and `microlens`.
+      3. Register in `cabal.project`.
+      4. Write `packages/polytropos-microlens/src/Polytropos/Microlens.hs`.
+    duration: "15m"
+
+  - id: implement-microlens-instances
+    name: Implement Each and microlens combinators
+    action: |
+      In `packages/polytropos-microlens/src/Polytropos/Microlens.hs`:
+      1. Import `Lens.Micro`.
+      2. Implement `instance Each (Record r) (Record r) a a` traversing all fields of matching type.
+      3. Re-export lightweight lens combinators.
+    duration: "20m"
+
+  - id: add-microlens-tests
+    name: Add test suite for microlens
+    action: |
+      Create `packages/polytropos-microlens/test/Main.hs`:
+      Test `rec & each %~ (+1)` and `rec ^. fieldLens #x`.
+    duration: "15m"
+
+  - id: verify-gate
+    name: Run verification gate
+    action: |
+      Run `cabal test polytropos-microlens:test:polytropos-microlens-test`.
+    duration: "5m"
+
+success_criteria:
+  - `packages/polytropos-microlens` compiles with zero warnings under `-Wall -Werror`.
+  - Zero dependencies beyond `base` and `microlens`.
+  - Tests pass with exit code 0.
