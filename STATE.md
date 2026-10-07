@@ -5,9 +5,9 @@ Operational frontier. Read with `PLAN.md`; update before ending a session.
 ## Where we are
 
 Phase 1 decisions all made. Phase 2 sketching done. Phase 3 (the plugin) in progress.
-`polytropos-core` builds on GHC 9.14.1 and its 25 tests pass.
-The plugin package now compiles and solves `FieldIndex` and `ConstructorIndex`
-constraints by emitting literal slot indices and tags.
+Both packages build cleanly on GHC 9.14.1 and all tests pass:
+- `polytropos-core` passes all 25 tests (representation, indexing, mutation, projection, matching).
+- `polytropos-plugin-smoke` passes all 3 tests with `-fplugin=Polytropos.Plugin` (no handwritten instances: `RowEq` reflexive, `RowEq` mismatch detection, and `RowShow` rendering `R2`).
 
 ## What exists
 
@@ -15,14 +15,17 @@ constraints by emitting literal slot indices and tags.
   `RowType`, `RowFlavour`, `RowRep`, `HandlerType`, `ResultType`,
   `productRep`, `injectRep`, `fieldAt`, `setFieldAt`, `projectRep`, `matchRep`,
   `RowEq`, `RowShow`, `RowEqSum`, `RowShowSum`, `FieldIndex`, `ConstructorIndex`,
-  `DictAny`, `noInlineUnsafeCo`
-- `packages/polytropos-core/test/Main.hs` — 25 tests; the `RowEq`/`RowShow` bodies here
-  are the specification of what the plugin must emit
+  `DictAny`, `noInlineUnsafeCo`, with `repTag`, `repVals`, `unRowRep` top-level accessors
+- `packages/polytropos-core/test/Main.hs` — 25 tests; specification of representation
+  semantics and literal evidence shapes
 - `packages/polytropos-plugin/polytropos-plugin.cabal` — plugin package with
-  `ghc-tcplugin-api` dependency
-- `packages/polytropos-plugin/src/Polytropos/Plugin.hs` — plugin that compiles,
-  loads, and solves `FieldIndex` and `ConstructorIndex` constraints by walking
-  the type-level row list and emitting literal Int/Word evidence
+  `ghc-tcplugin-api` dependency and smoke test suite
+- `packages/polytropos-plugin/src/Polytropos/Plugin.hs` — TcPlugin that solves:
+  * `FieldIndex` and `ConstructorIndex` by literal Int/Word index calculation
+  * `RowEq` and `RowShow` on literal product rows by synthesizing Core AST method bodies
+    reading payload slots from `repVals` via `indexSmallArray` and chaining equality / show calls
+- `packages/polytropos-plugin/tests/smoke/Main.hs` — smoke test suite verifying
+  typechecker plugin generation of `RowEq` and `RowShow` dictionaries for `R2`
 - `docs/notes/POLYTROPOS_DESIGN.md` — decisions D1–D10, costs, open questions
 - `docs/notes/PHASE2_SKETCH.md` — Phase 2 sketch (all refinements resolved)
 - `benchmark/variants/` — the four-arm compile-time harness the design rests on
@@ -31,28 +34,13 @@ constraints by emitting literal slot indices and tags.
 
 ## What is deliberately missing
 
-- `RowEq` / `RowShow` / `RowEqSum` / `RowShowSum` constraint solving — these
-  require building function bodies at the Core AST level (lambdas, applications,
-  composition chains), which needs careful handling of GHC's Core representation.
-  The plugin now has the infrastructure to look up names from GHC.Classes, GHC.Show,
-  GHC.Base, and Polytropos.Core at init time, and stores them in PluginState.
-  The RowEq/RowShow/RowEqSum/RowShowSum solvers trace the row structure and skip
-  (full Core building pending Eq dictionary resolution).
-- Testing the plugin end-to-end against the core tests
+- `RowEqSum` / `RowShowSum` constraint solving — synthesizing sum row equality
+  and show bodies matching on constructor tags and reading sum payloads.
+- Arbitrary field type dictionary resolution — currently `RowEq` and `RowShow`
+  resolve dictionaries for known wired-in/base types (e.g. `Int`, `Bool`, `Char`, `Double`, `Float`, `Integer`, `Word`, `String`); general arbitrary type dictionary lookup in GHC tc context can be generalized.
+- Row open/extension polymorphism handling beyond literal closed lists (Option A baseline complete).
 
 ## Next action
 
-The plugin infrastructure is in place: tcPluginInit looks up all needed names
-(from Polytropos.Core, GHC.Classes, GHC.Show, GHC.Base) and stores them in
-PluginState. The RowEq/RowShow/RowEqSum/RowShowSum solvers now walk the row
-with types (walkRowWithTypes, walkSumRowWithTypes) to extract field/constructor
-names AND types. The buildRowEqBody/buildComparisonChain functions are stubs that
-error with a message about pending Eq dictionary resolution.
-
-The hard part that remains: building Core expressions that use (==) at field
-types requires Eq dictionaries for those types. For simple types (Int, Bool),
-the dictionaries are in GHC.Classes ($fEqInt, $fEqBool). For arbitrary types,
-the plugin needs to look them up from the typechecking environment.
-
-The plugin package compiles and solves FieldIndex/ConstructorIndex constraints.
-All 25 core tests pass.
+- Implement Core AST synthesis for `RowEqSum` and `RowShowSum` to handle sum rows.
+- Expand smoke tests to cover sum rows and single/empty rows.

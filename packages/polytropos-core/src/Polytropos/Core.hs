@@ -43,8 +43,11 @@ module Polytropos.Core (
   , ResultType(..)
     -- * Generic representation
   , Rep(..)
+  , repTag
+  , repVals
     -- * Row-carrying wrapper (Case 3)
   , RowRep(..)
+  , unRowRep
     -- * Construction
   , productRep
   , injectRep
@@ -64,10 +67,6 @@ module Polytropos.Core (
   , DictAny(..)
     -- * Utilities
   , noInlineUnsafeCo
-    -- * Exports for TcPlugin
-  , repTag
-  , repArity
-  , fieldAt
   ) where
 
 import Data.Foldable                 (toList)
@@ -183,8 +182,11 @@ data ResultType (n :: Symbol) (res :: Type)
 -- @a@ is the value type.
 --
 -- At runtime this is exactly @Rep f a@ — a newtype with zero cost.
-data RowRep (f :: Type -> Type) (r :: RowType) (row :: k) a = RowRep
-  { unRowRep :: Rep f a }
+data RowRep (f :: Type -> Type) (r :: RowType) (row :: k) a = RowRep (Rep f a)
+
+-- | Extract the underlying 'Rep' from a 'RowRep'.
+unRowRep :: RowRep f r row a -> Rep f a
+unRowRep (RowRep r) = r
   -- Note: @k@ is a kind variable that allows any kind for the row data.
   -- For product rows, @row@ has kind @[Pair Symbol Type]@.
   -- For sum rows, @row@ has kind @[Pair Symbol Row]@.
@@ -211,11 +213,16 @@ data RowRep (f :: Type -> Type) (r :: RowType) (row :: k) a = RowRep
 -- @f@ is the functor applied to each payload slot, so that @Rep I@ is
 -- isomorphic to the value itself and @Rep Maybe@ boxes the slots.
 data Rep (f :: Type -> Type) a = Rep
-  { repTag  :: {-# UNPACK #-} !Word
-    -- ^ Constructor index. @0@ for a product.
-  , repVals :: !(SmallArray (f Any))
-    -- ^ Payload slots, in row order, of the /selected/ constructor.
-  }
+  {-# UNPACK #-} !Word
+  !(SmallArray (f Any))
+
+-- | Constructor index. @0@ for a product.
+repTag :: Rep f a -> Word
+repTag (Rep t _) = t
+
+-- | Payload slots, in row order, of the /selected/ constructor.
+repVals :: Rep f a -> SmallArray (f Any)
+repVals (Rep _ v) = v
 
 -- | Materialise the payload slots as a list, in row order.
 toListSlots :: SmallArray (f Any) -> [f Any]
@@ -260,7 +267,7 @@ fieldAt i r = noInlineUnsafeCo (indexSmallArray (repVals r) i)
 -- do better, and note §2, 'Known cost' of the
 -- rebuild-in-place-avoiding representation.
 setFieldAt :: forall f a. Int -> f Any -> Rep f a -> Rep f a
-setFieldAt i x r = r { repVals = smallArrayFromList (go 0 (toListSlots (repVals r))) }
+setFieldAt i x (Rep t v) = Rep t (smallArrayFromList (go 0 (toListSlots v)))
   where
     go :: Int -> [f Any] -> [f Any]
     go j ys

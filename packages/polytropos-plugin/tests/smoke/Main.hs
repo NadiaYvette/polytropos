@@ -11,7 +11,6 @@
 module Main (main) where
 
 import Data.Functor.Identity (Identity(..))
-import Data.Primitive.SmallArray (indexSmallArray)
 import GHC.Exts (Any)
 import Test.Tasty (defaultMain, testGroup)
 import Test.Tasty.HUnit (testCase, (@?=))
@@ -24,14 +23,6 @@ type R2 = '[ "a" := Int, "b" := Bool ]
 -- | Store a concrete value in a slot.
 slot :: a -> Identity Any
 slot = noInlineUnsafeCo
-
--- | Read slot 0 as an Int.
-intAt0 :: Rep Identity a -> Int
-intAt0 r = noInlineUnsafeCo (indexSmallArray (repVals r) 0)
-
--- | Read slot 1 as a Bool.
-boolAt1 :: Rep Identity a -> Bool
-boolAt1 r = noInlineUnsafeCo (indexSmallArray (repVals r) 1)
 
 -- | The two values under test.
 ab :: RowRep Identity ProductRowT R2 (Int, Bool)

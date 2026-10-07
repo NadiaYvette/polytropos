@@ -15,18 +15,6 @@
 --
 -- Load with @ghc-options: -fplugin=Polytropos.Plugin@ in the consuming
 -- package's .cabal file.
---
--- == Implementation notes
---
--- The plugin uses 'ghc-tcplugin-api' (0.20.x) for a streamlined interface to
--- GHC's typechecker plugin API.
---
--- Solved constraints:
--- * 'FieldIndex' — walks the type-level row and emits a literal Int
--- * 'ConstructorIndex' — walks the type-level sum row and emits a literal Word
--- * 'RowEq' / 'RowShow' / 'RowEqSum' / 'RowShowSum' — build Core expression
---   bodies for the evidence class methods.
-
 module Polytropos.Plugin
   ( plugin
   ) where
@@ -36,6 +24,9 @@ import Prelude
 import GHC.Core.Make
   ( mkCoreApps
   , mkCoreConApps
+  , mkCoreLams
+  , mkCharExpr
+  , mkStringExpr
   )
 
 import GHC.Plugins
@@ -43,17 +34,12 @@ import GHC.Plugins
   , defaultPlugin
   , tcPlugin
   , ppr
-  , text
-  , (<+>)
   , CoreExpr
   , Expr(..)
   , Type
-  , TyCon
   , mkTcOcc
   , nameOccName
   , mkTyConTy
-  , mkTyConApp
-  , dataConTyCon
   , splitTyConApp_maybe
   , isStrLitTy
   , intDataCon
@@ -63,37 +49,48 @@ import GHC.Plugins
   , LitNumType(..)
   , wordTyCon
   , showSDocUnsafe
-  , SDoc
   , Var(..)
-  , idDetails
-  , idInfo
-  , vanillaIdInfo
-  , boolTyCon
+  , varType
   , intTy
   , stringTy
-  , varName
-  , varType
-  , mkFunTy
-  , liftedTypeKind
-  , FunTyFlag( FTF_T_T )
-  , TyVar
-  , mkTyVar
-  , mkTyVarBinder
-  , ForAllTyFlag( Invisible )
-  , Specificity( SpecifiedSpec )
-  , mkWildValBinder
-  , mkVanillaGlobal
-  , mkInternalName
   , mkVarOcc
-  , SrcSpan(UnhelpfulSpan)
-  , manyDataCon
-  , dataConTyCon
   , Module
-  , ModuleName
   , mkModuleName
   , fsLit
-  , stringToUnitId
-  , PkgQual(NoPkgQual, OtherPkg)
+  , coreView
+  , splitFunTy
+  , splitFunTys
+  , splitForAllTyCoVars
+  , piResultTys
+  , typeKind
+  , mkTyVarTy
+  , mkAppTy
+  , getOccName
+  , occNameString
+  )
+
+import GHC.Core.Class
+  ( classMethods
+  )
+
+import GHC.Core.Multiplicity
+  ( scaledThing
+  , scaledMult
+  )
+
+import GHC.Core.TyCo.Compare
+  ( eqType
+  )
+
+import GHC.Builtin.Types
+  ( extractPromotedList
+  , boolTy
+  )
+
+import GHC.Builtin.Names
+  ( gHC_CLASSES
+  , gHC_INTERNAL_BASE
+  , gHC_INTERNAL_SHOW
   )
 
 import GHC.TcPlugin.API
@@ -106,12 +103,7 @@ import GHC.TcPlugin.API
   , ctEvidence
   , isWanted
   , className
-  , tcPluginTrace
   , EvTerm (..)
-  , EvExpr (..)
-  , newEvVar
-  , setEvBind
-  , evId
   , Ct
   , TcPluginStage(..)
   , mkTcPlugin
@@ -119,16 +111,19 @@ import GHC.TcPlugin.API
   , lookupOrig
   , tcLookupId
   , findImportedModule
-  , PkgQual
+  , resolveImport
   , FindResult(..)
+  , Class
+  , classDataCon
+  , tcLookupClass
+  , evDataConApp
+  , newName
+  , mkLocalId
   )
 
-import GHC.Tc.Types.Evidence (EvBind(..))
-
-import Data.List ( find )
-import Prelude hiding (find)
-
-import Polytropos.Core (Rep(..), RowRep(..), repTag, repArity, fieldAt, noInlineUnsafeCo, unRowRep)
+import GHC.TcPlugin.API.Internal
+  ( unsafeLiftTcM
+  )
 
 -------------------------------------------------------------------------------
 -- Plugin entry point
@@ -137,47 +132,45 @@ import Polytropos.Core (Rep(..), RowRep(..), repTag, repArity, fieldAt, noInline
 plugin :: Plugin
 plugin = defaultPlugin { tcPlugin = const $ Just $ mkTcPlugin polytroposPlugin }
 
-
 polytroposPlugin :: TcPlugin
 polytroposPlugin = TcPlugin
-  { tcPluginInit  = polytroposInit
-  , tcPluginSolve  = const polytroposSolve
-  , tcPluginRewrite = const emptyUFM
-  , tcPluginPostTc = const (return ())
+  { tcPluginInit     = polytroposInit
+  , tcPluginSolve    = polytroposSolve
+  , tcPluginRewrite  = const emptyUFM
+  , tcPluginPostTc   = const (return ())
   , tcPluginShutdown = const (return ())
   }
-
 
 -------------------------------------------------------------------------------
 -- Plugin state
 -------------------------------------------------------------------------------
 
--- | The plugin's state: references to all the GHC and Polytropos functions
--- that the solvers need when building Core expressions.
 data PluginState = PluginState
-  { psRepTag     :: !Var    -- ^ repTag :: Rep f a -> Word
-  , psRepArity   :: !Var    -- ^ repArity :: Rep f a -> Int
-  , psFieldAt    :: !Var    -- ^ fieldAt :: Int -> Rep f a -> f x
-  , psUnRowRep   :: !Var    -- ^ unRowRep :: RowRep f r row a -> Rep f a
-  , psNoInlineCo :: !Var    -- ^ noInlineUnsafeCo :: a -> b
-  , psAnd        :: !Var    -- ^ GHC.Classes.&& :: Bool -> Bool -> Bool
-  , psShowsPrec :: !Var    -- ^ GHC.Show.showsPrec (class method)
-  , psShowString :: !Var   -- ^ GHC.Show.showString :: String -> ShowS
-  , psShowChar   :: !Var   -- ^ GHC.Show.showChar :: Char -> ShowS
-  , psComp       :: !Var    -- ^ GHC.Base.(.) :: (b -> c) -> (a -> b) -> a -> c
-  , psEqClass    :: !Var    -- ^ GHC.Classes.== (class method, polymorphic)
-  , psShowsPrecMeth :: !Var -- ^ GHC.Show.showsPrec (class method, polymorphic)
-  , psEqMethod   :: !Var    -- ^ GHC.Classes.== (alias for psEqClass)
+  { psRepTag        :: !Var    -- ^ repTag :: Rep f a -> Word
+  , psRepArity      :: !Var    -- ^ repArity :: Rep f a -> Int
+  , psFieldAt       :: !Var    -- ^ fieldAt :: Int -> Rep f a -> f x
+  , psUnRowRep      :: !Var    -- ^ unRowRep :: RowRep f r row a -> Rep f a
+  , psNoInlineCo    :: !Var    -- ^ noInlineUnsafeCo :: a -> b
+  , psAnd           :: !Var    -- ^ GHC.Internal.Classes.&&
+  , psComp          :: !Var    -- ^ GHC.Internal.Base.(.)
+  , psEqClass       :: !Var    -- ^ GHC.Internal.Classes.== (method)
+  , psShowsPrecMeth :: !Var    -- ^ GHC.Internal.Show.showsPrec (method)
+  , psShowString    :: !Var    -- ^ GHC.Internal.Show.showString
+  , psShowChar      :: !Var    -- ^ GHC.Internal.Show.showChar
+  , psFEqInt        :: !Var    -- ^ $fEqInt
+  , psFEqBool       :: !Var    -- ^ $fEqBool
+  , psFEqWord       :: !Var    -- ^ $fEqWord
+  , psFShowInt      :: !Var    -- ^ $fShowInt
+  , psFShowBool     :: !Var    -- ^ $fShowBool
+  , psRowFlavourCls :: !Class  -- ^ RowFlavour class
   }
 
-
 -------------------------------------------------------------------------------
--- Plugin initialisation: look up all needed names
+-- Plugin initialisation
 -------------------------------------------------------------------------------
 
 polytroposInit :: TcPluginM 'Init PluginState
 polytroposInit = do
-  -- Look up Polytropos.Core functions
   coreMod <- findPolytroposCoreModule
   psRepTag     <- lookupIdInModule coreMod "repTag"
   psRepArity   <- lookupIdInModule coreMod "repArity"
@@ -185,541 +178,384 @@ polytroposInit = do
   psUnRowRep   <- lookupIdInModule coreMod "unRowRep"
   psNoInlineCo <- lookupIdInModule coreMod "noInlineUnsafeCo"
 
-  -- Look up GHC.Classes functions
-  classesMod <- findGhcClassesModule
-  psEqClass    <- lookupIdInModule classesMod "=="
-  psAnd        <- lookupIdInModule classesMod "&&"
+  psEqClass    <- lookupIdInModule gHC_CLASSES "=="
+  psAnd        <- lookupIdInModule gHC_CLASSES "&&"
+  psFEqInt     <- lookupIdInModule gHC_CLASSES "$fEqInt"
+  psFEqBool    <- lookupIdInModule gHC_CLASSES "$fEqBool"
+  psFEqWord    <- lookupIdInModule gHC_CLASSES "$fEqWord"
 
-  -- Look up GHC.Show functions
-  showMod <- findGhcShowModule
-  psShowsPrecMeth <- lookupIdInModule showMod "showsPrec"
-  psShowString    <- lookupIdInModule showMod "showString"
-  psShowChar      <- lookupIdInModule showMod "showChar"
+  psShowsPrecMeth <- lookupIdInModule gHC_INTERNAL_SHOW "showsPrec"
+  psShowString    <- lookupIdInModule gHC_INTERNAL_SHOW "showString"
+  psShowChar      <- lookupIdInModule gHC_INTERNAL_SHOW "showChar"
+  psFShowInt      <- lookupIdInModule gHC_INTERNAL_SHOW "$fShowInt"
+  psFShowBool     <- lookupIdInModule gHC_INTERNAL_SHOW "$fShowBool"
 
-  -- Look up GHC.Base.(.)
-  baseMod <- findGhcBaseModule
-  psComp <- lookupIdInModule baseMod "."
+  psComp <- lookupIdInModule gHC_INTERNAL_BASE "."
+
+  rowFlavourName <- lookupOrig coreMod (mkTcOcc "RowFlavour")
+  psRowFlavourCls <- tcLookupClass rowFlavourName
 
   pure PluginState
-    { psRepTag     = psRepTag
-    , psRepArity   = psRepArity
-    , psFieldAt    = psFieldAt
-    , psUnRowRep   = psUnRowRep
-    , psNoInlineCo = psNoInlineCo
-    , psEqClass    = psEqClass
-    , psAnd        = psAnd
-    , psShowsPrec = psShowsPrecMeth
-    , psShowString = psShowString
-    , psShowChar   = psShowChar
-    , psComp       = psComp
+    { psRepTag        = psRepTag
+    , psRepArity      = psRepArity
+    , psFieldAt       = psFieldAt
+    , psUnRowRep      = psUnRowRep
+    , psNoInlineCo    = psNoInlineCo
+    , psEqClass       = psEqClass
+    , psAnd           = psAnd
+    , psComp          = psComp
     , psShowsPrecMeth = psShowsPrecMeth
-    , psEqMethod   = psEqClass
+    , psShowString    = psShowString
+    , psShowChar      = psShowChar
+    , psFEqInt        = psFEqInt
+    , psFEqBool       = psFEqBool
+    , psFEqWord       = psFEqWord
+    , psFShowInt      = psFShowInt
+    , psFShowBool     = psFShowBool
+    , psRowFlavourCls = psRowFlavourCls
     }
 
-
--- | Look up a module by name and package.
-findModule :: String -> String -> TcPluginM 'Init Module
-findModule modName pkgName = do
+findModule :: String -> Maybe String -> TcPluginM 'Init Module
+findModule modName mPkg = do
   let modName' = mkModuleName modName
-      pkgQual  = OtherPkg (stringToUnitId pkgName)
+  pkgQual <- resolveImport modName' (fsLit <$> mPkg)
   result <- findImportedModule modName' pkgQual
   case result of
     Found _ mod' -> pure mod'
     _           -> error $ "polytropos: could not find module " ++ modName
 
 findPolytroposCoreModule :: TcPluginM 'Init Module
-findPolytroposCoreModule = findModule "Polytropos.Core" "polytropos-core"
+findPolytroposCoreModule = findModule "Polytropos.Core" (Just "polytropos-core")
 
-findGhcClassesModule :: TcPluginM 'Init Module
-findGhcClassesModule = findModule "GHC.Classes" "base"
-
-findGhcShowModule :: TcPluginM 'Init Module
-findGhcShowModule = findModule "GHC.Show" "base"
-
-findGhcBaseModule :: TcPluginM 'Init Module
-findGhcBaseModule = findModule "GHC.Base" "base"
-
--- | Look up an Id by name in a module.
 lookupIdInModule :: Module -> String -> TcPluginM 'Init Var
 lookupIdInModule modName occStr = do
   let occ = mkVarOcc occStr
   name <- lookupOrig modName occ
   tcLookupId name
 
-
 -------------------------------------------------------------------------------
 -- Constraint solving
 -------------------------------------------------------------------------------
 
--- | Solve evidence-class constraints by inspecting the row carried in the
--- constraint's types.
 polytroposSolve
-  :: [Ct]
+  :: PluginState
+  -> [Ct]
   -> [Ct]
   -> TcPluginM 'Solve TcPluginSolveResult
-polytroposSolve givens wanteds = do
+polytroposSolve state givens wanteds = do
   let allCts = givens ++ wanteds
-  traceMsg "polytropos-solve" $ text "num constraints: " <+> ppr (length allCts)
+  solved <- mapM (solveOne state) allCts
+  let (solved', _) = partitionEithers solved
+  pure $ TcPluginSolveResult
+    { tcPluginInsolubleCts = []
+    , tcPluginSolvedCts = solved'
+    , tcPluginNewCts = []
+    }
 
-  solved <- mapM solveOne allCts
-  let (solved', fskipped) = partitionEithers solved
-  traceMsg "polytropos-solve" $ text "solved: " <+> ppr (length solved')
-                         <+> text "skipped: " <+> ppr (length fskipped)
-  pure $ TcPluginSolveResult { tcPluginInsolubleCts = []
-                           , tcPluginSolvedCts = solved'
-                           , tcPluginNewCts = []
-                           }
-
-
--- | Solve a single constraint.
-solveOne :: Ct -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
-solveOne ct
+solveOne :: PluginState -> Ct -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
+solveOne state ct
   | not (isWanted (ctEvidence ct))
   = pure $ Right ()
   | otherwise
   = do
-    let pred = ctPred ct
-    case classifyPredType pred of
+    let predTy = ctPred ct
+    case classifyPredType predTy of
       ClassPred cls tys -> do
-        traceMsg "polytropos-solve" $ text "class: " <+> ppr (className cls)
-                               <+> text "tys: " <+> ppr tys
         case className cls of
           name
             | nameOccName name == mkTcOcc "FieldIndex"
-            -> solveFieldIndex ct tys
+            -> solveFieldIndex ct cls tys
             | nameOccName name == mkTcOcc "ConstructorIndex"
-            -> solveConstructorIndex ct tys
+            -> solveConstructorIndex ct cls tys
             | nameOccName name == mkTcOcc "RowEq"
-            -> solveRowEq ct tys
+            -> solveRowEq state ct cls tys
             | nameOccName name == mkTcOcc "RowShow"
-            -> solveRowShow ct tys
+            -> solveRowShow state ct cls tys
             | nameOccName name == mkTcOcc "RowEqSum"
-            -> solveRowEqSum ct tys
+            -> solveRowEqSum state ct cls tys
             | nameOccName name == mkTcOcc "RowShowSum"
-            -> solveRowShowSum ct tys
+            -> solveRowShowSum state ct cls tys
             | otherwise
             -> pure $ Right ()
       _ -> pure $ Right ()
-
 
 -------------------------------------------------------------------------------
 -- FieldIndex solver
 -------------------------------------------------------------------------------
 
--- | Solve @"FieldIndex" "n" row a@ by walking the row list.
 solveFieldIndex
   :: Ct
+  -> Class
   -> [Type]
   -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
-solveFieldIndex ct tys = do
-  traceMsg "polytropos-solve" $ text "solveFieldIndex"
+solveFieldIndex ct cls tys = do
   case tys of
-    [nTy, rowTy, aTy] -> do
-      n <- getSymbolLit nTy
-      case n of
+    [nTy, rowTy, _aTy] -> do
+      case isStrLitTy (unwrapSynonyms nTy) of
         Just fieldName -> do
-          let idx = findFieldIndex fieldName rowTy
-          case idx of
+          case findFieldIndex fieldName rowTy of
             Just i -> do
-              traceMsg "polytropos-solve" $
-                text "FieldIndex " <+> ppr fieldName <+>
-                text " = " <+> ppr i <+> text " (literal)"
               let iExpr = mkCoreConApps intDataCon [Lit (mkLit (fromIntegral i :: Integer))]
-              evTerm <- buildSimpleDict iExpr aTy
-              pure $ Left (evTerm, ct)
-            Nothing -> do
-              traceMsg "polytropos-solve" $
-                text "FieldIndex " <+> ppr fieldName <+>
-                text " not found in row"
-              pure $ Right ()
-        Nothing -> do
-          traceMsg "polytropos-solve" $
-            text "FieldIndex: could not extract field name"
-          pure $ Right ()
-    _ -> do
-      traceMsg "polytropos-solve" $
-        text "FieldIndex: unexpected number of types: " <+> ppr (length tys)
-      pure $ Right ()
-
+                  dictExpr = evDataConApp (classDataCon cls) tys [iExpr]
+              pure $ Left (EvExpr dictExpr, ct)
+            Nothing -> pure $ Right ()
+        Nothing -> pure $ Right ()
+    _ -> pure $ Right ()
 
 -------------------------------------------------------------------------------
 -- ConstructorIndex solver
 -------------------------------------------------------------------------------
 
--- | Solve @"ConstructorIndex" "n" row@ by walking the sum row list.
 solveConstructorIndex
   :: Ct
+  -> Class
   -> [Type]
   -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
-solveConstructorIndex ct tys = do
-  traceMsg "polytropos-solve" $ text "solveConstructorIndex"
+solveConstructorIndex ct cls tys = do
   case tys of
     [nTy, rowTy] -> do
-      n <- getSymbolLit nTy
-      case n of
+      case isStrLitTy (unwrapSynonyms nTy) of
         Just conName -> do
-          let idx = findConstructorIndex conName rowTy
-          case idx of
+          case findConstructorIndex conName rowTy of
             Just w -> do
-              traceMsg "polytropos-solve" $
-                text "ConstructorIndex " <+> ppr conName <+>
-                text " = " <+> ppr w <+> text " (literal)"
-              let coreExpr = mkCoreConApps wordDataCon [Lit (mkLit (fromIntegral w :: Integer))]
-              evTerm <- buildSimpleDict coreExpr (mkTyConTy wordTyCon)
-              pure $ Left (evTerm, ct)
-            Nothing -> do
-              traceMsg "polytropos-solve" $
-                text "ConstructorIndex " <+> ppr conName <+>
-                text " not found in row"
-              pure $ Right ()
-        Nothing -> do
-          traceMsg "polytropos-solve" $
-            text "ConstructorIndex: could not extract constructor name"
-          pure $ Right ()
-    _ -> do
-      traceMsg "polytropos-solve" $
-        text "ConstructorIndex: unexpected number of types: " <+> ppr (length tys)
-      pure $ Right ()
-
+              let wExpr = mkCoreConApps wordDataCon [Lit (mkLit (fromIntegral w :: Integer))]
+                  dictExpr = evDataConApp (classDataCon cls) tys [wExpr]
+              pure $ Left (EvExpr dictExpr, ct)
+            Nothing -> pure $ Right ()
+        Nothing -> pure $ Right ()
+    _ -> pure $ Right ()
 
 -------------------------------------------------------------------------------
 -- RowEq solver
 -------------------------------------------------------------------------------
 
--- | Walk a product row and extract field names with their types.
--- Returns a list of (index, fieldName, fieldType).
-walkRowWithTypes :: Type -> [(Int, FastString, Type)]
-walkRowWithTypes rowTy = go 0 rowTy
-  where
-    go :: Int -> Type -> [(Int, FastString, Type)]
-    go i ty = case splitTyConApp_maybe ty of
-      Just (tc, [headTy, _])
-        | isConsListTy tc ->
-            case splitTyConApp_maybe headTy of
-              Just (pairTc, [nameTy, fieldTy])
-                | isConsListTy pairTc ->
-                    case isStrLitTy nameTy of
-                      Just n -> (i, n, fieldTy) : go (i + 1) (listTail ty)
-                      Nothing -> go (i + 1) (listTail ty)
-              _ -> []
-      _ -> []
-
-    listTail :: Type -> Type
-    listTail ty = case splitTyConApp_maybe ty of
-      Just (_, (_ : tail : _)) -> tail
-      _ -> error "walkRowWithTypes: impossible: not a list type"
-
-
--- | Build the Core expression for RowEq.
---
--- The method type is: forall f a. RowRep f r row a -> RowRep f r row a -> Bool
---
--- The body compares:
--- 1. repTag of both (Word equality)
--- 2. repArity of both (Int equality)
--- 3. For each field i: fieldAt i (unRowRep r1) == fieldAt i (unRowRep r2)
---
--- All comparisons use (==) at the appropriate type, with noInlineUnsafeCo
--- to coerce field values from f x to x.
---
--- NOTE: This is a work-in-progress. The full implementation requires:
--- 1. Constructing the RowRep type properly
--- 2. Looking up Eq dictionaries for each field type
--- 3. Building the comparison chain with proper type applications
-buildRowEqBody
-  :: PluginState
-  -> [(Int, FastString, Type)]  -- ^ fields with their types
-  -> Type                       -- ^ the row type (for error messages)
-  -> TcPluginM 'Solve CoreExpr
-buildRowEqBody _state _fields _rowTy = do
-  -- For now, return a placeholder. The full implementation is complex
-  -- and requires proper Eq dictionary resolution.
-  error "buildRowEqBody: not yet implemented - requires Eq dictionary resolution"
-
-
--- | Build a comparison chain for RowEq.
--- NOTE: This is a stub. The full implementation requires Eq dictionary resolution.
-buildComparisonChain
-  :: PluginState
-  -> Var  -- ^ r1 binder
-  -> Var  -- ^ r2 binder
-  -> [Type]  -- ^ field types
-  -> TcPluginM 'Solve CoreExpr
-buildComparisonChain _state _r1Bndr _r2Bndr _fieldTypes = do
-  error "buildComparisonChain: not yet implemented"
-
-
--------------------------------------------------------------------------------
--- RowEq solver (stub - full implementation pending)
--------------------------------------------------------------------------------
-
--- | Solve @"RowEq" r row@ by building a comparison body.
---
--- This requires building a function body at the Core level.
 solveRowEq
-  :: Ct
+  :: PluginState
+  -> Ct
+  -> Class
   -> [Type]
   -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
-solveRowEq ct tys = do
-  traceMsg "polytropos-solve" $ text "solveRowEq"
-  case tys of
-    [rTy, rowTy] -> do
-      traceMsg "polytropos-solve" $ text "RowEq row: " <+> ppr rowTy
-      let fields = walkRowWithTypes rowTy
-      traceMsg "polytropos-solve" $ text "RowEq fields: " <+> ppr (length fields)
-                     <+> text "(names: " <+> ppr (map (\(_,n,_) -> n) fields) <+> text ")"
-      -- For now, trace and skip - full implementation requires Eq dictionary resolution
-      pure $ Right ()
-    _ -> do
-      traceMsg "polytropos-solve" $
-        text "RowEq: unexpected number of types: " <+> ppr (length tys)
-      pure $ Right ()
+solveRowEq state ct cls tys = do
+  let rowTy  = last tys
+      rTy    = tys !! (length tys - 2)
+      fields = walkRowWithTypes rowTy
 
+      scEvidence = evDataConApp (classDataCon (psRowFlavourCls state)) [rTy] []
+
+      repEqId = case classMethods cls of
+        (m : _) -> m
+        []      -> error "Polytropos.Plugin: RowEq class has no methods"
+      methodFullTy = piResultTys (varType repEqId) tys
+      (_, _, methodInDictTy) = splitFunTy methodFullTy
+      (tyVars, tauTy) = splitForAllTyCoVars methodInDictTy
+      (argTys, _) = splitFunTys tauTy
+      scaledR1Ty = argTys !! 0
+      scaledR2Ty = argTys !! 1
+
+  r1Name <- unsafeLiftTcM $ newName (mkVarOcc "r1")
+  r2Name <- unsafeLiftTcM $ newName (mkVarOcc "r2")
+  let r1Var = mkLocalId r1Name (scaledMult scaledR1Ty) (scaledThing scaledR1Ty)
+      r2Var = mkLocalId r2Name (scaledMult scaledR2Ty) (scaledThing scaledR2Ty)
+
+      kATy   = mkTyVarTy (tyVars !! 0)
+      fTy    = mkTyVarTy (tyVars !! 1)
+      aTy    = mkTyVarTy (tyVars !! 2)
+      kRowTy = typeKind rowTy
+
+      unRowRepTypeArgs = [Type kRowTy, Type kATy, Type fTy, Type rTy, Type rowTy, Type aTy]
+      rep1 = mkCoreApps (Var (psUnRowRep state)) (unRowRepTypeArgs ++ [Var r1Var])
+      rep2 = mkCoreApps (Var (psUnRowRep state)) (unRowRepTypeArgs ++ [Var r2Var])
+
+      repTypeArgs = [Type kATy, Type fTy, Type aTy]
+      tag1 = mkCoreApps (Var (psRepTag state)) (repTypeArgs ++ [rep1])
+      tag2 = mkCoreApps (Var (psRepTag state)) (repTypeArgs ++ [rep2])
+      eqTag = mkCoreApps (Var (psEqClass state)) [Type (mkTyConTy wordTyCon), Var (psFEqWord state), tag1, tag2]
+
+      arity1 = mkCoreApps (Var (psRepArity state)) (repTypeArgs ++ [rep1])
+      arity2 = mkCoreApps (Var (psRepArity state)) (repTypeArgs ++ [rep2])
+      eqArity = mkCoreApps (Var (psEqClass state)) [Type intTy, Var (psFEqInt state), arity1, arity2]
+
+      fieldComps = map (compareField rep1 rep2 fTy aTy kATy) fields
+
+      andFn e1 e2 = mkCoreApps (Var (psAnd state)) [e1, e2]
+      bodyExpr = foldl andFn (andFn eqTag eqArity) fieldComps
+      repEqExpr = mkCoreLams (tyVars ++ [r1Var, r2Var]) bodyExpr
+
+      dictExpr = evDataConApp (classDataCon cls) tys [scEvidence, repEqExpr]
+  pure $ Left (EvExpr dictExpr, ct)
+  where
+    compareField rep1 rep2 fTy aTy kATy (i, _, fieldTy) =
+      let fieldAtTypeArgs = [Type kATy, Type fTy, Type aTy, Type fieldTy]
+          idxExpr = mkCoreConApps intDataCon [Lit (mkLit (fromIntegral i))]
+          raw1 = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep1])
+          raw2 = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep2])
+          fFieldTy = mkAppTy fTy fieldTy
+          val1 = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw1]
+          val2 = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw2]
+          eqDict = getEqDict state fieldTy
+      in mkCoreApps (Var (psEqClass state)) [Type fieldTy, eqDict, val1, val2]
 
 -------------------------------------------------------------------------------
--- RowShow solver (stub)
+-- RowShow solver
 -------------------------------------------------------------------------------
 
--- | Walk a product row and extract field names with their types (for RowShow).
-walkRowForShow :: Type -> [(Int, FastString, Type)]
-walkRowForShow = walkRowWithTypes
-
-
--- | Solve @"RowShow" r row@ by building a show body.
 solveRowShow
-  :: Ct
+  :: PluginState
+  -> Ct
+  -> Class
   -> [Type]
   -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
-solveRowShow ct tys = do
-  traceMsg "polytropos-solve" $ text "solveRowShow"
-  case tys of
-    [rTy, rowTy] -> do
-      traceMsg "polytropos-solve" $ text "RowShow row: " <+> ppr rowTy
-      let fields = walkRowForShow rowTy
-      traceMsg "polytropos-solve" $ text "RowShow fields: " <+> ppr (length fields)
-                     <+> text "(names: " <+> ppr (map (\(_,n,_) -> n) fields) <+> text ")"
-      -- For now, trace and skip
-      pure $ Right ()
-    _ -> do
-      traceMsg "polytropos-solve" $
-        text "RowShow: unexpected number of types: " <+> ppr (length tys)
-      pure $ Right ()
+solveRowShow state ct cls tys = do
+  let rowTy  = last tys
+      rTy    = tys !! (length tys - 2)
+      fields = walkRowWithTypes rowTy
 
+      scEvidence = evDataConApp (classDataCon (psRowFlavourCls state)) [rTy] []
 
--------------------------------------------------------------------------------
--- RowEqSum solver (stub)
--------------------------------------------------------------------------------
+      repShowsPrecId = case classMethods cls of
+        (m : _) -> m
+        []      -> error "Polytropos.Plugin: RowShow class has no methods"
+      methodFullTy = piResultTys (varType repShowsPrecId) tys
+      (_, _, methodInDictTy) = splitFunTy methodFullTy
+      (tyVars, tauTy) = splitForAllTyCoVars methodInDictTy
+      (argTys, _) = splitFunTys tauTy
+      scaledPrecTy = argTys !! 0
+      scaledRTy    = argTys !! 1
 
--- | Walk a sum row and extract constructor info with their field types.
-walkSumRowWithTypes :: Type -> [(Int, FastString, Type)]
-walkSumRowWithTypes rowTy = go 0 rowTy
+  precName <- unsafeLiftTcM $ newName (mkVarOcc "p")
+  rName <- unsafeLiftTcM $ newName (mkVarOcc "r")
+  let precVar = mkLocalId precName (scaledMult scaledPrecTy) (scaledThing scaledPrecTy)
+      rVar    = mkLocalId rName (scaledMult scaledRTy) (scaledThing scaledRTy)
+
+      kATy   = mkTyVarTy (tyVars !! 0)
+      fTy    = mkTyVarTy (tyVars !! 1)
+      aTy    = mkTyVarTy (tyVars !! 2)
+      kRowTy = typeKind rowTy
+
+      unRowRepTypeArgs = [Type kRowTy, Type kATy, Type fTy, Type rTy, Type rowTy, Type aTy]
+      rep = mkCoreApps (Var (psUnRowRep state)) (unRowRepTypeArgs ++ [Var rVar])
+
+      rowName = case splitTyConApp_maybe rowTy of
+        Just (tc, _)
+          | let name = occNameString (getOccName tc)
+          , name /= ":" && name /= "[]" && name /= "''[]"
+          -> name
+        _ -> "R" ++ show (length fields)
+
+  prefixExpr <- unsafeLiftTcM $ mkStringExpr (rowName ++ " ")
+  let prefixShowS = mkCoreApps (Var (psShowString state)) [prefixExpr]
+      spaceShowS  = mkCoreApps (Var (psShowChar state)) [mkCharExpr ' ']
+
+      fieldShows = map (showField rep fTy aTy kATy) fields
+      showParts = case fieldShows of
+        [] -> [prefixShowS]
+        (f0 : fs) -> prefixShowS : f0 : concatMap (\f -> [spaceShowS, f]) fs
+
+      compFn f g = mkCoreApps (Var (psComp state)) [Type stringTy, Type stringTy, Type stringTy, f, g]
+      bodyExpr = foldr1 compFn showParts
+      repShowsPrecExpr = mkCoreLams (tyVars ++ [precVar, rVar]) bodyExpr
+
+      dictExpr = evDataConApp (classDataCon cls) tys [scEvidence, repShowsPrecExpr]
+  pure $ Left (EvExpr dictExpr, ct)
   where
-    go :: Int -> Type -> [(Int, FastString, Type)]
-    go i ty = case splitTyConApp_maybe ty of
-      Just (tc, [headTy, _])
-        | isConsListTy tc ->
-            case splitTyConApp_maybe headTy of
-              Just (pairTc, [nameTy, _])
-                | isConsListTy pairTc ->
-                    case isStrLitTy nameTy of
-                      Just n -> (i, n, nameTy) : go (i + 1) (listTail ty)
-                      Nothing -> go (i + 1) (listTail ty)
-              _ -> []
-      _ -> []
+    showField rep fTy aTy kATy (i, _, fieldTy) =
+      let fieldAtTypeArgs = [Type kATy, Type fTy, Type aTy, Type fieldTy]
+          idxExpr = mkCoreConApps intDataCon [Lit (mkLit (fromIntegral i))]
+          raw = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep])
+          fFieldTy = mkAppTy fTy fieldTy
+          val = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw]
+          showDict = getShowDict state fieldTy
+          zeroPrec = mkCoreConApps intDataCon [Lit (mkLit 0)]
+      in mkCoreApps (Var (psShowsPrecMeth state)) [Type fieldTy, showDict, zeroPrec, val]
 
-    listTail :: Type -> Type
-    listTail ty = case splitTyConApp_maybe ty of
-      Just (_, (_ : tail : _)) -> tail
-      _ -> error "walkSumRowWithTypes: impossible: not a list type"
+-------------------------------------------------------------------------------
+-- RowEqSum / RowShowSum stubs
+-------------------------------------------------------------------------------
 
-
--- | Solve @"RowEqSum" r row@ by building a sum comparison body.
 solveRowEqSum
-  :: Ct
+  :: PluginState
+  -> Ct
+  -> Class
   -> [Type]
   -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
-solveRowEqSum ct tys = do
-  traceMsg "polytropos-solve" $ text "solveRowEqSum"
-  case tys of
-    [rTy, rowTy] -> do
-      traceMsg "polytropos-solve" $ text "RowEqSum row: " <+> ppr rowTy
-      let fields = walkSumRowWithTypes rowTy
-      traceMsg "polytropos-solve" $ text "RowEqSum fields: " <+> ppr (length fields)
-      pure $ Right ()
-    _ -> do
-      traceMsg "polytropos-solve" $
-        text "RowEqSum: unexpected number of types: " <+> ppr (length tys)
-      pure $ Right ()
+solveRowEqSum _state _ct _cls _tys = pure $ Right ()
 
-
--------------------------------------------------------------------------------
--- RowShowSum solver (stub)
--------------------------------------------------------------------------------
-
--- | Solve @"RowShowSum" r row@ by building a sum show body.
 solveRowShowSum
-  :: Ct
+  :: PluginState
+  -> Ct
+  -> Class
   -> [Type]
   -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
-solveRowShowSum ct tys = do
-  traceMsg "polytropos-solve" $ text "solveRowShowSum"
-  case tys of
-    [rTy, rowTy] -> do
-      traceMsg "polytropos-solve" $ text "RowShowSum row: " <+> ppr rowTy
-      let fields = walkSumRowWithTypes rowTy
-      traceMsg "polytropos-solve" $ text "RowShowSum fields: " <+> ppr (length fields)
-      pure $ Right ()
-    _ -> do
-      traceMsg "polytropos-solve" $
-        text "RowShowSum: unexpected number of types: " <+> ppr (length tys)
-      pure $ Right ()
-
+solveRowShowSum _state _ct _cls _tys = pure $ Right ()
 
 -------------------------------------------------------------------------------
--- Row walking helpers (original, for FieldIndex/ConstructorIndex)
+-- Row walking
 -------------------------------------------------------------------------------
 
--- | Walk a product row and extract field names with their indices.
-walkRow :: Type -> [(Int, FastString)]
-walkRow rowTy = go 0 rowTy
+unwrapSynonyms :: Type -> Type
+unwrapSynonyms ty = case coreView ty of
+  Just ty' -> unwrapSynonyms ty'
+  Nothing  -> ty
+
+walkRowWithTypes :: Type -> [(Int, FastString, Type)]
+walkRowWithTypes rowTy =
+  zipWith extractField [0..] (extractPromotedList (unwrapSynonyms rowTy))
   where
-    go :: Int -> Type -> [(Int, FastString)]
-    go i ty = case splitTyConApp_maybe ty of
-      Just (tc, [headTy, _])
-        | isConsListTy tc ->
-            case splitTyConApp_maybe headTy of
-              Just (pairTc, [nameTy, _])
-                | isConsListTy pairTc ->
-                    case isStrLitTy nameTy of
-                      Just n -> (i, n) : go (i + 1) (listTail ty)
-                      Nothing -> go (i + 1) (listTail ty)
-              _ -> []
-      _ -> []
+    extractField i elemTy =
+      case splitTyConApp_maybe (unwrapSynonyms elemTy) of
+        Just (_, args)
+          | length args >= 2
+          , let nameTy = args !! (length args - 2)
+          , let fieldTy = args !! (length args - 1)
+          , Just n <- isStrLitTy (unwrapSynonyms nameTy)
+          -> (i, n, fieldTy)
+        _ -> error $ "walkRowWithTypes: malformed field entry: " ++ showSDocUnsafe (ppr elemTy)
 
-    listTail :: Type -> Type
-    listTail ty = case splitTyConApp_maybe ty of
-      Just (_, (_ : tail : _)) -> tail
-      _ -> error "walkRow: impossible: not a list type"
-
-
--- | Walk a sum row and extract constructor info.
-walkSumRow :: Type -> [(Int, FastString)]
-walkSumRow rowTy = go 0 rowTy
+walkSumRowWithTypes :: Type -> [(Int, FastString, Type)]
+walkSumRowWithTypes rowTy =
+  zipWith extractCon [0..] (extractPromotedList (unwrapSynonyms rowTy))
   where
-    go :: Int -> Type -> [(Int, FastString)]
-    go i ty = case splitTyConApp_maybe ty of
-      Just (tc, [headTy, _])
-        | isConsListTy tc ->
-            case splitTyConApp_maybe headTy of
-              Just (pairTc, [nameTy, _])
-                | isConsListTy pairTc ->
-                    case isStrLitTy nameTy of
-                      Just n -> (i, n) : go (i + 1) (listTail ty)
-                      Nothing -> go (i + 1) (listTail ty)
-              _ -> []
-      _ -> []
+    extractCon i elemTy =
+      case splitTyConApp_maybe (unwrapSynonyms elemTy) of
+        Just (_, args)
+          | length args >= 2
+          , let nameTy = args !! (length args - 2)
+          , let conRowTy = args !! (length args - 1)
+          , Just n <- isStrLitTy (unwrapSynonyms nameTy)
+          -> (i, n, conRowTy)
+        _ -> error $ "walkSumRowWithTypes: malformed constructor entry: " ++ showSDocUnsafe (ppr elemTy)
 
-    listTail :: Type -> Type
-    listTail ty = case splitTyConApp_maybe ty of
-      Just (_, (_ : tail : _)) -> tail
-      _ -> error "walkSumRow: impossible: not a list type"
-
-
--------------------------------------------------------------------------------
--- Utility functions
--------------------------------------------------------------------------------
-
--- | Extract a FastString literal from a type, if it's a type-level string.
-getSymbolLit :: Type -> TcPluginM 'Solve (Maybe FastString)
-getSymbolLit ty = do
-  traceMsg "polytropos-utils" $ text "getSymbolLit: " <+> ppr ty
-  case isStrLitTy ty of
-    Just fs -> pure (Just fs)
-    Nothing -> pure Nothing
-
-
--- | Find the field index of a named field in a row type.
-findFieldIndex
-  :: FastString
-  -> Type
-  -> Maybe Int
+findFieldIndex :: FastString -> Type -> Maybe Int
 findFieldIndex fieldName rowTy =
-  go 0 rowTy
-  where
-    go :: Int -> Type -> Maybe Int
-    go i ty = case splitTyConApp_maybe ty of
-      Just (tc, [headTy, _])
-        | isConsListTy tc ->
-            case splitTyConApp_maybe headTy of
-              Just (pairTc, [nameTy, _])
-                | isConsListTy pairTc ->
-                    case isStrLitTy nameTy of
-                      Just n | n == fieldName -> Just i
-                      _ -> go (i + 1) (listTail ty)
-              _ -> Nothing
-      _ -> Nothing
+  case [i | (i, n, _) <- walkRowWithTypes rowTy, n == fieldName] of
+    (i : _) -> Just i
+    []      -> Nothing
 
-    listTail :: Type -> Type
-    listTail ty = case splitTyConApp_maybe ty of
-      Just (_, (_ : tail : _)) -> tail
-      _ -> error "findFieldIndex: impossible: not a list type"
-
-
--- | Find the constructor index of a named constructor in a sum row type.
-findConstructorIndex
-  :: FastString
-  -> Type
-  -> Maybe Word
+findConstructorIndex :: FastString -> Type -> Maybe Word
 findConstructorIndex conName rowTy =
-  go 0 rowTy
-  where
-    go :: Word -> Type -> Maybe Word
-    go w ty = case splitTyConApp_maybe ty of
-      Just (tc, [headTy, _])
-        | isConsListTy tc ->
-            case splitTyConApp_maybe headTy of
-              Just (pairTc, [nameTy, _])
-                | isConsListTy pairTc ->
-                    case isStrLitTy nameTy of
-                      Just n | n == conName -> Just w
-                      _ -> go (w + 1) (listTail ty)
-              _ -> Nothing
-      _ -> Nothing
-
-    listTail :: Type -> Type
-    listTail ty = case splitTyConApp_maybe ty of
-      Just (_, (_ : tail : _)) -> tail
-      _ -> error "findConstructorIndex: impossible: not a list type"
-
-
--- | Check whether a type constructor is the built-in list type.
-isConsListTy :: TyCon -> Bool
-isConsListTy tc = showSDocUnsafe (ppr tc) == "[]"
-
-
--- | Build a simple dictionary from a CoreExpr.
-buildSimpleDict
-  :: CoreExpr
-  -> Type
-  -> TcPluginM 'Solve EvTerm
-buildSimpleDict coreExpr dictTy = do
-  dictVar <- newEvVar dictTy
-  let evBind = EvBind { eb_lhs = dictVar, eb_rhs = EvExpr coreExpr }
-  setEvBind evBind
-  pure (EvExpr (evId dictVar))
-
+  case [fromIntegral i | (i, n, _) <- walkSumRowWithTypes rowTy, n == conName] of
+    (w : _) -> Just w
+    []      -> Nothing
 
 -------------------------------------------------------------------------------
--- Tracing
+-- Dictionary resolution for basic types
 -------------------------------------------------------------------------------
 
-traceMsg :: String -> SDoc -> TcPluginM 'Solve ()
-traceMsg tag doc =
-  tcPluginTrace ("polytropos/" ++ tag) doc
+getEqDict :: PluginState -> Type -> CoreExpr
+getEqDict state ty
+  | ty `eqType` intTy = Var (psFEqInt state)
+  | ty `eqType` boolTy = Var (psFEqBool state)
+  | ty `eqType` mkTyConTy wordTyCon = Var (psFEqWord state)
+  | otherwise = error $ "polytropos: unsupported field type for Eq: " ++ showSDocUnsafe (ppr ty)
 
+getShowDict :: PluginState -> Type -> CoreExpr
+getShowDict state ty
+  | ty `eqType` intTy = Var (psFShowInt state)
+  | ty `eqType` boolTy = Var (psFShowBool state)
+  | otherwise = error $ "polytropos: unsupported field type for Show: " ++ showSDocUnsafe (ppr ty)
 
 -------------------------------------------------------------------------------
--- Utility
+-- Utilities
 -------------------------------------------------------------------------------
 
 partitionEithers :: [Either a b] -> ([a], [b])
@@ -727,7 +563,5 @@ partitionEithers [] = ([], [])
 partitionEithers (Left x : xs) = let (ls, rs) = partitionEithers xs in (x : ls, rs)
 partitionEithers (Right y : xs) = let (ls, rs) = partitionEithers xs in (ls, y : rs)
 
--- | Create an integer Literal from an Integer.
 mkLit :: Integer -> Literal
 mkLit i = LitNumber LitNumInt i
-
