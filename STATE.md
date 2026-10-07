@@ -4,9 +4,9 @@ Operational frontier. Read with `PLAN.md`; update before ending a session.
 
 ## Where we are
 
-Phase 3 Core & Syntax and Phase 4A Optics baseline completed! Tasks `task-01` through `task-08`
-have been autonomously executed, verified through deterministic gates, and merged via `yamaarashi-exec`.
-All 4 packages build cleanly on GHC 9.14.1 with `-Wall -Werror` and all 54 tests pass:
+Phases 3, 4A and 4B/4D foundations are in. Tasks `task-01` through `task-11`, `task-14` and
+`task-18` have been executed and verified through their deterministic gates. All 9 packages build
+cleanly on GHC 9.14.1 with `-Wall -Werror` and all 93 tests pass:
 - `polytropos-core` passes 32 tests (primitive SmallArray CoW updates, `setFieldsAt` batch updates,
   `MRep` transient builders, `Polytropos` consumer surface, `Record`, `Variant`).
 - `polytropos-plugin-smoke` passes 10 tests with `-fplugin=Polytropos.Plugin` (`RowEq`, `RowShow`,
@@ -14,6 +14,15 @@ All 4 packages build cleanly on GHC 9.14.1 with `-Wall -Werror` and all 54 tests
 - `polytropos-generics-test` passes 6 tests (`Generic` datatype generics bridge over flat `Rep`,
   `geq`, `gshowsPrec`, product and sum roundtrips).
 - `polytropos-optics-test` passes 6 tests (`optics-core` + `LabelOptic` `#field` lenses and variant prisms).
+- `polytropos-microlens-test` passes 5 tests (homogeneous `each` traversal, plugin-indexed `fieldLens`).
+- `polytropos-lens-test` passes 14 tests (positional `_1`..`_9`, name-keyed `At`/`Ixed`, `each`,
+  `fieldLens`, variant prisms).
+- `polytropos-aeson-test` passes 7 tests (O(N) record/variant codecs, 20-field roundtrip,
+  canonical row-order encoding, tagged variant shape).
+- `polytropos-beam-test` passes 6 tests (30-column `Beamable` table: skeleton arity, lockstep
+  `zipBeamFieldsM`, `allBeamValues`, row-symbol column names; compiles in a fraction of a second).
+- `polytropos-openapi3-test` passes 7 tests (record object schemas with properties/required in row
+  order, variant `oneOf` tagged unions, JSON roundtrip of the generated schemas).
 
 ## What exists
 
@@ -36,6 +45,17 @@ All 4 packages build cleanly on GHC 9.14.1 with `-Wall -Werror` and all 54 tests
 - `packages/polytropos-generics/` — Datatype generics library unifying nominal Haskell ADTs with `polytropos`
   `Rep` with zero boxed intermediate tree representations
 - `packages/polytropos-optics/` — Satellite package integrating with `optics-core` and `LabelOptic`
+- `packages/polytropos-microlens/` — Satellite package: `microlens` `Each` for homogeneous records
+  (`AllFieldsAre`-gated) and plugin-indexed `fieldLens`, zero deps beyond base/microlens/core/plugin
+- `packages/polytropos-lens/` — Satellite package: positional `Field1`..`Field9`, name-keyed
+  `At`/`Ixed`, `Each`, `fieldLens`, and `prismVariant` profunctor prisms over `lens`
+- `packages/polytropos-aeson/` — Satellite package: linear O(N) `ToJSON`/`FromJSON` for records
+  (row-order canonical objects) and variants (single-member tagged objects), no GHC.Generics tree
+- `packages/polytropos-beam/` — Satellite package: erased `Beamable` instance over `BeamTable r f`
+  (zero-cost newtype over `RowRep f ProductRowT r ()`), lockstep `zipBeamFieldsM` over flat arrays
+- `packages/polytropos-openapi3/` — Satellite package: `ToSchema` for records (object schema,
+  properties/required from row symbols) and variants (`oneOf` tagged unions), row-walked not
+  Generic-derived
 - `docs/NEWBIE_GUIDE.md` — quickstart and token-conservation workflow guide
 - `docs/MAINTAINER_GUIDE.md` — engineering governance and zero-contamination doctrine
 - `docs/notes/POLYTROPOS_DESIGN.md` — decisions D1–D10, costs, open questions
@@ -51,12 +71,15 @@ All 4 packages build cleanly on GHC 9.14.1 with `-Wall -Werror` and all 54 tests
 
 ## What is deliberately missing
 
-- Phase 4A remaining optics satellites: `polytropos-microlens` (`task-09`) and `polytropos-lens` (`task-10`).
-- Phase 4B Serialization Satellites: `polytropos-aeson` (`task-11`), `polytropos-cbor` (`task-12`), `polytropos-cassava` (`task-13`).
-- Phase 4C Database Satellites: `polytropos-beam` (`task-14`), `polytropos-hasql` (`task-15`), `polytropos-rel8` (`task-16`), `polytropos-persistent` (`task-17`).
-- Phase 4D Schema & Testing Satellites: `polytropos-openapi3` (`task-18`), `polytropos-quickcheck` (`task-19`).
+- Phase 4B remaining serialization satellites: `polytropos-cbor` (`task-12`) and
+  `polytropos-cassava` (`task-13`).
+- Phase 4C remaining database satellites: `polytropos-hasql` (`task-15`), `polytropos-rel8`
+  (`task-16`), `polytropos-persistent` (`task-17`).
+- Phase 4D remaining testing satellite: `polytropos-quickcheck` (`task-19`).
 
 ## Next action
 
-- Execute `task-09-satellite-microlens.yaml` via `bin/yamaarashi-exec run` to establish `polytropos-microlens`.
-- Continue sequential pipeline through `task-19`.
+- Execute `task-12-satellite-cbor.yaml` to establish `polytropos-cbor`; the serialization shape
+  (tagged single-member variant objects) should follow the `polytropos-aeson` conventions.
+- Continue through `task-13`, then the remaining database satellites (`task-15`..`task-17`),
+  then `task-19`.
