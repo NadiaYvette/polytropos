@@ -1,118 +1,79 @@
 <!--
 SPDX-License-Identifier: BSD-3-Clause
 -->
-Status: POLICY · v1.0 · 2026-10-05 — blessed; see `DOC_STRATEGY.md` §3 for what
-blessing certifies and §8 for the authority it transfers.
+# Commit Attribution
 
-# Commit attribution
+Status: POLICY · v2.0 · 2026-10-07 — updated to adopt the canonical `sarutahiko` AI attribution schema.  
+Related: `sarutahiko/docs/notes/INFRASTRUCTURE.md` §12, `AGENTS.md` advisory 4, `.githooks/commit-msg`, `.gitmessage`, `.agents/README.md`.
 
-One convention for AI attribution, shared by every assistant, REPL,
-orchestrator or framework that touches this repository.
+---
 
-## The rule
+## 1. The Attribution Convention
+
+Commits assisted by AI coding assistants or orchestrators use standard RFC 2822 git trailers:
 
 ```
-Assisted-by: LLM [TOOL1] [TOOL2]
+Assisted-by: <Tool> (<Provider> / <Model>)
+Orchestrated-by: <Engine>
 ```
 
-The trailing tokens are optional **analysis** tools — `coccinelle`, `sparse`,
-`smatch`, `clang-tidy`. The value itself is always the literal word `LLM`.
+### Examples
+- **Assisted by model with explicit provider:**
+  ```
+  Assisted-by: Antigravity (Anthropic / claude-4.6-opus)
+  ```
+  ```
+  Assisted-by: Antigravity (Google / gemini-3.8-pro)
+  ```
+- **Assisted where model is unspecified or varied across sessions:**
+  ```
+  Assisted-by: Freebuff
+  ```
+- **Orchestrated by a workflow/task engine:**
+  ```
+  Assisted-by: Utai Native (mistral/codestral-latest)
+  Orchestrated-by: Yamaarashi Flow Task Runner
+  ```
 
-This is the Linux kernel's rule, from
-`Documentation/process/coding-assistants.rst`. It is deliberately
-assistant-agnostic.
+---
 
-## Why the assistant is not named
+## 2. Rationale & Lineage
 
-Until 3 August 2026 the kernel's documented format read
-`Assisted-by: Claude:claude-3-opus coccinelle sparse` — agent name plus model
-version. Christian Brauner's patch, merged that day, deleted both fields. The
-stated reason: the requirement "provides free advertising to proprietary
-software companies while adding little or no useful information."
+This attribution schema is inherited directly from the `sarutahiko` program (`INFRASTRUCTURE.md` §12 and `AGENTS.md` advisory 3).
 
-Naming the assistant is therefore wrong here, not merely verbose. The hook
-rejects it. What a reviewer actually needs to know — that a machine was in the
-loop, and which commit to scrutinise — is preserved.
+In multi-agent and heterogeneous developer environments, attribution serves critical engineering and audit functions:
+1. **Provenance & Auditability:** Distinguishing which tool driver and underlying model generated or assisted code facilitates diagnosing model-specific regressions, hallucinations, or stylistic quirks.
+2. **Orchestrator Distinction:** Disentangles the *coding assistant model* (`Assisted-by:`) from the *workflow orchestration engine* (`Orchestrated-by:`).
+3. **Accuracy without Misattribution:** Identifies the actual tool and provider in use rather than generic or misattributed labels.
 
-### Which assistant, then?
+---
 
-The trailer answers "was a machine involved?", not "which one?" So when the
-*identity* of the assistant is the information a reader needs, it goes in the
-document, not the commit. That is the case for imported transcripts: an
-archived conversation is one assistant's work by definition, and naming it in
-the provenance header is what makes the archive honest about what it holds.
+## 3. Disallowed Trailers
 
-Concretely: `docs/transcripts/gemini-*.md` name Gemini in their provenance
-header and carry `Assisted-by: LLM` on the commit that imported them. The
-trailer describes *that commit*; the header describes *the archived material*.
-Keep the two separate and neither has to bend.
+| Trailer | Why Forbidden |
+|---|---|
+| `Co-authored-by: <AI-Tool>` | Claims legal co-authorship. An AI tool cannot hold copyright or certify the Developer Certificate of Origin (DCO). |
+| `Co-developed-by: <AI-Tool>` | Same legal defect as `Co-authored-by`. |
+| `Signed-off-by: <AI-Tool>` | Certifies the DCO. Only a human author can legally sign off on a commit. |
+| Robot emojis (`🤖 Generated with ...`) | Decoration carrying no structured semantic metadata; rejected by upstream tooling. |
 
-## Three trailers that are wrong
+*Note:* `Signed-off-by:` with a human committer's name and email is fully permitted and unaffected.
 
-| Trailer | Why not |
-| --- | --- |
-| `Co-authored-by: <assistant>` | Claims authorship. An assistant cannot be a co-author. |
-| `Co-developed-by: <assistant>` | Same claim, softer wording. Still wrong. |
-| `Signed-off-by: <assistant>` | Certifies the Developer Certificate of Origin. The kernel: "AI agents MUST NOT add Signed-off-by tags. Only humans can legally certify the Developer Certificate of Origin." |
+---
 
-`Signed-off-by:` with your own name is correct and unaffected.
+## 4. Repository Enforcement
 
-A robot-emoji footer (`🤖 Generated with … 🤖`) is also rejected. It carries no
-information, and some upstreams (QEMU's `checkpatch.pl` among them) now refuse
-it outright.
+The attribution convention is supported and enforced through:
 
-## Enforcement
-
-Four pieces, all opt-in locally, because a repository cannot ship git config:
-
-```sh
-git config core.hooksPath .githooks          # enforce on commit
-git config commit.template .gitmessage       # guidance while writing
-git config trailer.Assisted-by.cmd 'echo LLM' # stamp with --trailer Assisted-by
-git config commit.warnMissingAssistedBy true  # opt-in reminder; off by default
-```
-
-Then either hand-write the trailer or stamp it:
-
-```sh
-git commit --trailer Assisted-by -m "..."
-```
-
-Two behaviours of `trailer.<key>.cmd` that will bite you if you forget them,
-both found by experiment rather than by reading the docs:
-
-- The command's output is the trailer **value**, not a whole trailer line.
-  `echo "Assisted-by: LLM"` produces `Assisted-by: Assisted-by: LLM`. Use
-  `echo LLM`.
-- The command is **prepended** to an existing value of the same trailer, so
-  re-running it over `Assisted-by: LLM coccinelle` yields
-  `Assisted-by: LLM LLM coccinelle`. If a trailer is already present, add
-  `--if-exists doNothing`.
-
-The hook parses trailers with `git interpret-trailers --parse`, which implies
-`--only-input`; that deliberately bypasses the `trailer.<key>.cmd` config so the
-hook inspects what was literally written rather than what git would rewrite.
-
-## Attribution inside documents
-
-Imported material records its own origin. A transcript's provenance header
-names the assistant, the venue and the date; a port's `LICENSE` names the
-upstream holders. See `PROVENANCE.md` for the licensing half and
-`docs/registers/PACKAGES.md` for the register.
-
-This is not an exception to the rule above — it is where the rule points when
-the identity matters. The trailer says a machine helped write the diff. The
-header says whose words are being preserved. Neither tries to do both.
-
-## Scope
-
-The hook checks attribution only. It does not require a trailer: a commit
-written entirely by a human must stay committable, so absence is exit 0 unless
-`commit.warnMissingAssistedBy` is set. Nothing here detects or forbids AI use —
-it standardises the disclosure when there is something to disclose.
-
-## Cross-references
-
-- `AGENTS.md` advisory 4 — the one-line rule agents are pointed at.
-- `.gitmessage` — the template; `git commit` strips its `#` lines.
-- `.githooks/commit-msg` — the enforcement, with the rationale in its header.
+1. **Git Message Template (`.gitmessage`):**
+   Provides instructions and trailer format directly in the commit editor.
+   ```sh
+   git config commit.template .gitmessage
+   ```
+2. **Git Commit Hook (`.githooks/commit-msg`):**
+   Validates trailer syntax, ensures no AI tools appear in `Co-authored-by:` or `Signed-off-by:`, verifies presence of valid `Assisted-by:` trailers on assisted commits, and permits optional `Orchestrated-by:`.
+   ```sh
+   git config core.hooksPath .githooks
+   ```
+3. **Agent Guidance (`AGENTS.md` & `.agents/`):**
+   Orientation projection pointing assistant sessions to this policy while keeping root context footprint minimal.
