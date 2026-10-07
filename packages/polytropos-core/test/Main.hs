@@ -3,6 +3,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 -- | Tests for @Polytropos.Core@.
 --
@@ -144,14 +145,20 @@ productTests = testGroup "products"
       unslot (fieldAt 0 (unRowRep ab)) @?= (7 :: Int)
   , testCase "fieldAt reads slot 1" $
       unslot (fieldAt 1 (unRowRep ab)) @?= True
-  , testCase "setFieldAt replaces the addressed slot" $
-      unslot (fieldAt 0 (setFieldAt 0 (slot (9 :: Int)) (unRowRep ab))) @?= (9 :: Int)
-  , testCase "setFieldAt leaves other slots alone" $
-      unslot (fieldAt 1 (setFieldAt 0 (slot (9 :: Int)) (unRowRep ab))) @?= True
-  , testCase "setFieldAt leaves the tag alone" $
+  , testCase "setFieldAt updates index 0 and leaves index 1 unchanged" $ do
+      let r = setFieldAt 0 (slot (9 :: Int)) (unRowRep ab)
+      unslot (fieldAt 0 r) @?= (9 :: Int)
+      unslot (fieldAt 1 r) @?= True
+  , testCase "setFieldAt updates index 1 and leaves index 0 unchanged" $ do
+      let r = setFieldAt 1 (slot False) (unRowRep ab)
+      unslot (fieldAt 0 r) @?= (7 :: Int)
+      unslot (fieldAt 1 r) @?= False
+  , testCase "setFieldAt preserves tag" $ do
+      repTag (setFieldAt 0 (slot (9 :: Int)) (unRowRep ab)) @?= 0
       repTag (setFieldAt 1 (slot False) (unRowRep ab)) @?= 0
-  , testCase "setFieldAt leaves the arity alone" $
+  , testCase "setFieldAt preserves arity" $ do
       repArity (setFieldAt 0 (slot (9 :: Int)) (unRowRep ab)) @?= 2
+      repArity (setFieldAt 1 (slot False) (unRowRep ab)) @?= 2
   , testCase "the empty product has arity zero" $
       repArity (productRep ([] :: [Identity Any])) @?= 0
   ]
@@ -167,7 +174,7 @@ sumTests = testGroup "sums"
   , testCase "projectRep succeeds on a matching tag" $
       (case projectRep 1 (injectRep 1 [slot True]) of
          Just [_] -> True
-         Nothing   -> False) @?= True
+         _        -> False) @?= True
   , testCase "projectRep fails on a mismatched tag" $
       (case projectRep 0 (injectRep 1 [slot True]) of
          Just _  -> False

@@ -263,20 +263,13 @@ fieldAt i r = noInlineUnsafeCo (indexSmallArray (repVals r) i)
 
 -- | Replace the payload slot at a compile-time-known index.
 --
--- @O(n)@: the array is rebuilt from a list. A plugin that knows the arity can
--- do better, and note §2, 'Known cost' of the
--- rebuild-in-place-avoiding representation.
+-- @O(n)@: primitive Copy-on-Write via 'thawSmallArray' and 'writeSmallArray',
+-- performing a single contiguous array allocation and single in-place slot write.
 setFieldAt :: forall f a. Int -> f Any -> Rep f a -> Rep f a
-setFieldAt i x (Rep t v) = Rep t (smallArrayFromList (go 0 (toListSlots v)))
-  where
-    go :: Int -> [f Any] -> [f Any]
-    go j ys
-      | j == i    = case ys of
-          _ : ys' -> x : ys'
-          []      -> [x]
-      | otherwise = case ys of
-          y : ys' -> y : go (succ j) ys'
-          []      -> []
+setFieldAt i !x (Rep t v) = Rep t $ runSmallArray $ do
+  m <- thawSmallArray v 0 (sizeofSmallArray v)
+  writeSmallArray m i x
+  pure m
 
 -- | Project a constructor, or 'Nothing' if the tag does not match.
 --
