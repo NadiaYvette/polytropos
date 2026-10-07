@@ -1,0 +1,31 @@
+cabal-version: 3.14
+name: polytropos-generics
+version: 0.1.0.0
+synopsis: Structural datatype generics via polytropos
+license: NONE
+build-type: Simple
+
+library
+  exposed-modules:
+    Polytropos.Generics
+  build-depends:
+    base,
+    polytropos-core,
+    primitive
+  hs-source-dirs: src
+  default-language: GHC2024
+  ghc-options: -Wall -Werror
+
+test-suite polytropos-generics-test
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  build-depends:
+    base,
+    polytropos-core,
+    polytropos-generics,
+    primitive,
+    tasty,
+    tasty-hunit
+  hs-source-dirs: test
+  default-language: GHC2024
+  ghc-options: -Wall -Werror
