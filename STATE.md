@@ -27,6 +27,8 @@ Both packages build cleanly on GHC 9.14.1 and all tests pass:
 - `packages/polytropos-plugin/tests/smoke/Main.hs` — smoke test suite verifying
   typechecker plugin generation of `RowEq` and `RowShow` dictionaries for `R2`
 - `docs/notes/POLYTROPOS_DESIGN.md` — decisions D1–D10, costs, open questions
+- `docs/notes/DESIGN_REVIEW_ECOSYSTEM_SYNTHESIS.md` — comprehensive design review,
+  architectural audit, and ecosystem deployment assessment
 - `docs/notes/PHASE2_SKETCH.md` — Phase 2 sketch (all refinements resolved)
 - `benchmark/variants/` — the four-arm compile-time harness the design rests on
 - `docs/registers/PACKAGES.md`, `docs/notes/PROVENANCE.md`, `THIRD_PARTY.md` —
