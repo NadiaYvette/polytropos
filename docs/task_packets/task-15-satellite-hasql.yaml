@@ -25,7 +25,7 @@ packages:
   - packages/polytropos-core
 
 executor: agy
-model: "mistral/codestral-latest"
+model: gemini-3.8-flash-high
 skills:
   - tricorder
   - code-navigation
