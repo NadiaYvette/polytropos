@@ -1,0 +1,42 @@
+cabal-version: 3.14
+name: polytropos-openapi3
+version: 0.1.0.0
+build-type: Simple
+synopsis: OpenAPI 3.0 schema generation for polytropos open records and variants
+description:
+  Satellite package generating OpenAPI 3.0 schema specifications directly
+  from @polytropos@ open records and variants: object schemas from record
+  rows and @oneOf@ tagged-union schemas from sum rows, without GHC.Generics
+  tree explosion on large schema objects (50+ fields).
+license: BSD-3-Clause
+
+library
+  default-language: GHC2024
+  hs-source-dirs: src
+  exposed-modules: Polytropos.OpenApi
+  ghc-options: -Wall -Werror
+  build-depends:
+    base >= 4.14 && < 5,
+    openapi3 >= 3.2,
+    text,
+    lens,
+    polytropos-core,
+    polytropos-plugin
+
+test-suite polytropos-openapi3-test
+  type: exitcode-stdio-1.0
+  default-language: GHC2024
+  hs-source-dirs: test
+  main-is: Main.hs
+  ghc-options: -Wall -Werror -fplugin=Polytropos.Plugin
+  build-depends:
+    base,
+    aeson,
+    openapi3,
+    text,
+    lens,
+    polytropos-core,
+    polytropos-openapi3,
+    polytropos-plugin,
+    tasty,
+    tasty-hunit
