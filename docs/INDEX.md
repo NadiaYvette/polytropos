@@ -6,6 +6,8 @@ Status: LIVING DOCUMENT · v0.1 · 2026-10-05
 
 | Path | Genre | Stage | Tier | Flags |
 |---|---|---|---|---|
+| `NEWBIE_GUIDE.md` | guide | live | cross-cutting | — |
+| `MAINTAINER_GUIDE.md` | guide | live | cross-cutting | — |
 | `notes/POLYTROPOS_DESIGN.md` | design | draft | cross-cutting | §4 answered; §7 Q1–Q3 closed; §7 Q4 nuanced; §7 Q5 open |
 | `notes/DESIGN_REVIEW_CLAUDE-OPUS-4.6.md` | review | draft | cross-cutting | — |
 | `notes/COMMIT_ATTRIBUTION.md` | convention | blessed | cross-cutting | — |
@@ -17,8 +19,12 @@ Status: LIVING DOCUMENT · v0.1 · 2026-10-05
 
 ## Part 2 — Reading paths
 
-**Newcomer.** `README.md` → design note §§0–2 (what and how it is represented)
-→ §6 (why a plugin) → §7 (what is still open).
+**Newcomer.** `README.md` → `NEWBIE_GUIDE.md` (workflow & token conservation)
+→ design note §§0–2 (what and how it is represented) → §6 (why a plugin)
+→ §7 (what is still open).
+
+**Maintainer.** `MAINTAINER_GUIDE.md` (governance & engineering invariants)
+→ design note in full → `DOC_STRATEGY.md`.
 
 **Anyone changing the documentation.** `notes/DOC_STRATEGY.md` governs genres,
 lifecycle, canonicity and tone. Its §4 precedence rule — code wins at runtime, the

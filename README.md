@@ -121,8 +121,14 @@ Package roles, directory conventions, and reuse rules are documented in
 
 ## Documentation & Reading Paths
 
-- **Newcomer / Overview**: Start here, then read [`docs/notes/POLYTROPOS_DESIGN.md`](docs/notes/POLYTROPOS_DESIGN.md)
+- **Newcomer / Contributor**: Start with [`docs/NEWBIE_GUIDE.md`](docs/NEWBIE_GUIDE.md)
+  for token-conservation workflows, symbol navigation, and build commands.
+- **Maintainer / Lead**: See [`docs/MAINTAINER_GUIDE.md`](docs/MAINTAINER_GUIDE.md)
+  for engineering governance, plugin invariants, and the zero-contamination doctrine.
+- **Architectural Overview**: Read [`docs/notes/POLYTROPOS_DESIGN.md`](docs/notes/POLYTROPOS_DESIGN.md)
   for canonical architectural decisions (D1–D10) and open questions.
+- **Design Review**: Read [`docs/notes/DESIGN_REVIEW_CLAUDE-OPUS-4.6.md`](docs/notes/DESIGN_REVIEW_CLAUDE-OPUS-4.6.md)
+  for the comprehensive design review and ecosystem deployment synthesis.
 - **Empirical Evidence**: [`benchmark/variants/README.md`](benchmark/variants/README.md)
   demonstrates the compile-time scaling of plugin-emitted literals vs. type-level search.
 - **Ideation & Transcripts**:

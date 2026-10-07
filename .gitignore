@@ -5,3 +5,5 @@ dist-newstyle/
 cabal.project.freeze
 .ghc-pkg-env/
 run-smoke.sh
+tags
+TAGS

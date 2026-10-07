@@ -26,6 +26,8 @@ Both packages build cleanly on GHC 9.14.1 and all tests pass:
     reading payload slots from `repVals` via `indexSmallArray` and chaining equality / show calls
 - `packages/polytropos-plugin/tests/smoke/Main.hs` — smoke test suite verifying
   typechecker plugin generation of `RowEq` and `RowShow` dictionaries for `R2`
+- `docs/NEWBIE_GUIDE.md` — quickstart and token-conservation workflow guide
+- `docs/MAINTAINER_GUIDE.md` — engineering governance and zero-contamination doctrine
 - `docs/notes/POLYTROPOS_DESIGN.md` — decisions D1–D10, costs, open questions
 - `docs/notes/DESIGN_REVIEW_CLAUDE-OPUS-4.6.md` — comprehensive design review,
   architectural audit, and ecosystem deployment assessment from the Claude Opus 4.6
