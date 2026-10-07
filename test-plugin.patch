@@ -1,0 +1,82 @@
+--- packages/polytropos-plugin/src/Polytropos/Plugin.hs
++++ packages/polytropos-plugin/src/Polytropos/Plugin.hs
+@@ -194,6 +194,9 @@
+   Just ty' -> unwrapSynonyms ty'
+   Nothing  -> ty
+ 
++isPromotedList :: Type -> Bool
++isPromotedList ty = case splitTyConApp_maybe (unwrapSynonyms ty) of Just (tc, _) -> isPromotedListTyCon tc; Nothing -> False
++
+ walkRowWithTypes :: Type -> [(Int, FastString, Type)]
+ walkRowWithTypes rowTy =
+   zipWith extractField [0..] (extractPromotedList (unwrapSynonyms rowTy))
+@@ -269,7 +272,7 @@
+ solveFieldIndex ct cls tys = do
+   case tys of
+     [_k, nTy, rowTy, _aTy] -> do
+-      case isStrLitTy (unwrapSynonyms nTy) of
++      case (isStrLitTy (unwrapSynonyms nTy), isPromotedList (unwrapSynonyms rowTy)) of
+-        Just fieldName -> do
++        (Just fieldName, True) -> do
+           case findFieldIndex fieldName rowTy of
+             Just i -> do
+               let iExpr = mkCoreConApps intDataCon [Lit (mkLit (fromIntegral i :: Integer))]
+@@ -279,7 +282,7 @@
+-            Nothing -> pure $ Right ()
+-        Nothing -> pure $ Right ()
++            _ -> pure $ Right ()
++        _ -> pure $ Right ()
+     _ -> pure $ Right ()
+ 
+ -------------------------------------------------------------------------------
+@@ -293,8 +296,8 @@
+ solveConstructorIndex ct cls tys = do
+   case tys of
+     [_k, nTy, rowTy] -> do
+-      case isStrLitTy (unwrapSynonyms nTy) of
+-        Just conName -> do
++      case (isStrLitTy (unwrapSynonyms nTy), isPromotedList (unwrapSynonyms rowTy)) of
++        (Just conName, True) -> do
+           case findConstructorIndex conName rowTy of
+             Just w -> do
+               let wExpr = mkCoreConApps wordDataCon [Lit (mkLit (fromIntegral w :: Integer))]
+@@ -303,8 +306,8 @@
+-            Nothing -> pure $ Right ()
+-        Nothing -> pure $ Right ()
++            _ -> pure $ Right ()
++        _ -> pure $ Right ()
+     _ -> pure $ Right ()
+ 
+ -------------------------------------------------------------------------------
+@@ -319,7 +322,9 @@
+ solveRowEq state ct cls tys = do
+   let rowTy  = last tys
+       rTy    = tys !! (length tys - 2)
++  if not (isPromotedList (unwrapSynonyms rowTy)) then pure (Right ()) else do
+       fields = walkRowWithTypes rowTy
+ 
+       scEvidence = evDataConApp (classDataCon (psRowFlavourCls state)) [rTy] []
+@@ -370,7 +375,9 @@
+ solveRowShow state ct cls tys = do
+   let rowTy = last tys
+       rTy   = tys !! (length tys - 2)
++  if not (isPromotedList (unwrapSynonyms rowTy)) then pure (Right ()) else do
+       fields = walkRowWithTypes rowTy
+ 
+       scEvidence = evDataConApp (classDataCon (psRowFlavourCls state)) [rTy] []
+@@ -406,7 +413,9 @@
+ solveRowEqSum state ct cls tys = do
+   let rowTy = last tys
+       rTy   = tys !! (length tys - 2)
++  if not (isPromotedList (unwrapSynonyms rowTy)) then pure (Right ()) else do
+       cons = walkSumRowWithTypes rowTy
+ 
+       scEvidence = evDataConApp (classDataCon (psRowFlavourCls state)) [rTy] []
+@@ -462,7 +471,9 @@
+ solveRowShowSum state ct cls tys = do
+   let rowTy = last tys
+       rTy   = tys !! (length tys - 2)
++  if not (isPromotedList (unwrapSynonyms rowTy)) then pure (Right ()) else do
+       cons = walkSumRowWithTypes rowTy
+ 
+       scEvidence = evDataConApp (classDataCon (psRowFlavourCls state)) [rTy] []

@@ -307,7 +307,7 @@ solveFieldIndex
   -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
 solveFieldIndex ct cls tys = do
   case tys of
-    [nTy, rowTy, _aTy] -> do
+    [_k, nTy, rowTy, _aTy] -> do
       case isStrLitTy (unwrapSynonyms nTy) of
         Just fieldName -> do
           case findFieldIndex fieldName rowTy of
@@ -330,7 +330,7 @@ solveConstructorIndex
   -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
 solveConstructorIndex ct cls tys = do
   case tys of
-    [nTy, rowTy] -> do
+    [_k, nTy, rowTy] -> do
       case isStrLitTy (unwrapSynonyms nTy) of
         Just conName -> do
           case findConstructorIndex conName rowTy of
@@ -717,9 +717,23 @@ unwrapSynonyms ty = case coreView ty of
   Just ty' -> unwrapSynonyms ty'
   Nothing  -> ty
 
+
+
+
+myIsPromotedList :: Type -> Bool
+myIsPromotedList ty = case myExtractPromotedList ty of Just _ -> True; Nothing -> False
+
+myExtractPromotedList :: Type -> Maybe [Type]
+myExtractPromotedList ty = case splitTyConApp_maybe (unwrapSynonyms ty) of
+  Just (tc, [_, x, xs]) | occNameString (getOccName tc) == ":" -> do
+    rest <- myExtractPromotedList xs
+    return (x : rest)
+  Just (tc, [_]) | occNameString (getOccName tc) == "[]" -> Just []
+  _ -> Nothing
+
 walkRowWithTypes :: Type -> [(Int, FastString, Type)]
 walkRowWithTypes rowTy =
-  zipWith extractField [0..] (extractPromotedList (unwrapSynonyms rowTy))
+  case myExtractPromotedList (unwrapSynonyms rowTy) of { Just xs -> zipWith extractField [0..] xs; Nothing -> [] }
   where
     extractField i elemTy =
       case splitTyConApp_maybe (unwrapSynonyms elemTy) of
@@ -733,7 +747,7 @@ walkRowWithTypes rowTy =
 
 walkSumRowWithTypes :: Type -> [(Int, FastString, Type)]
 walkSumRowWithTypes rowTy =
-  zipWith extractCon [0..] (extractPromotedList (unwrapSynonyms rowTy))
+  case myExtractPromotedList (unwrapSynonyms rowTy) of { Just xs -> zipWith extractCon [0..] xs; Nothing -> [] }
   where
     extractCon i elemTy =
       case splitTyConApp_maybe (unwrapSynonyms elemTy) of

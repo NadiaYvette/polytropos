@@ -1,0 +1,29 @@
+cabal-version: 3.14
+name: polytropos-optics
+version: 0.1.0.0
+build-type: Simple
+
+library
+  default-language: GHC2024
+  hs-source-dirs: src
+  exposed-modules: Polytropos.Optics
+  ghc-options: -Wall -Werror
+  build-depends:
+    base >= 4.14 && < 5,
+    polytropos-core,
+    optics-core >= 0.4
+
+test-suite polytropos-optics-test
+  type: exitcode-stdio-1.0
+  default-language: GHC2024
+  hs-source-dirs: test
+  main-is: Main.hs
+  ghc-options: -Wall -Werror -fplugin=Polytropos.Plugin
+  build-depends:
+    base,
+    polytropos-core,
+    polytropos-optics,
+    polytropos-plugin,
+    optics-core,
+    tasty,
+    tasty-hunit
