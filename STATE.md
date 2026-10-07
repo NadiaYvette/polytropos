@@ -36,6 +36,9 @@ Both packages build cleanly on GHC 9.14.1 and all tests pass:
 - `benchmark/variants/` — the four-arm compile-time harness the design rests on
 - `docs/registers/PACKAGES.md`, `docs/notes/PROVENANCE.md`, `THIRD_PARTY.md` —
   layout rules, licence obligations, attribution index
+- `.agents/rules/` — subdivided AI coding assistant operational rules:
+  `commit-attribution.md`, `code-navigation.md`, `compiler-verification.md`,
+  `documentation-precedence.md`, and `plugin-invariants.md`
 
 ## What is deliberately missing
 

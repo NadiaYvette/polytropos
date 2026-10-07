@@ -41,6 +41,11 @@ perspective. The §3 widening/narrowing asymmetry is still the load-bearing open
 sketched in `PHASE2_SKETCH.md`. The remaining §7 open items are Q4 (`DictAny` fate)
 and Q5 (polytropos/large-anon coexistence).
 
+**AI Coding Assistant.** `AGENTS.md` (bounded ~4 KB orientation projection) →
+[`.agents/README.md`](../.agents/README.md) → subdivided domain rules in
+`.agents/rules/` (`commit-attribution.md`, `code-navigation.md`,
+`compiler-verification.md`, `documentation-precedence.md`, `plugin-invariants.md`).
+
 **Someone new to the idea.** The transcripts in `transcripts/` record the
 ideation context: `transcripts/gemini-powerful-abstraction-techniques-in-haskell.md`
 discusses the architectural motivation for high-leverage abstractions (open ADTs,
