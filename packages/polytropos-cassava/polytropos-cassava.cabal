@@ -1,0 +1,43 @@
+cabal-version: 3.14
+name: polytropos-cassava
+version: 0.1.0.0
+build-type: Simple
+synopsis: cassava CSV codecs for polytropos open records
+description:
+  Satellite package connecting @polytropos@ open records to the standard
+  Haskell CSV library @cassava@ without intermediate nominal conversions:
+  'FromNamedRecord' looks up each field label in the CSV header map in O(1),
+  and 'ToNamedRecord' serializes field names and values straight from the
+  flat 'Polytropos.Core.Rep' payload. Unlike the aeson satellite, the codecs
+  here are genuinely heterogeneous: each field's own 'FromField'/'ToField'
+  instance is used, per the @AllFields@ constraint walk.
+license: BSD-3-Clause
+
+library
+  default-language: GHC2024
+  hs-source-dirs: src
+  exposed-modules: Polytropos.Cassava
+  ghc-options: -Wall -Werror
+  build-depends:
+    base >= 4.14 && < 5,
+    cassava >= 0.5,
+    bytestring,
+    polytropos-core,
+    polytropos-plugin
+
+test-suite polytropos-cassava-test
+  type: exitcode-stdio-1.0
+  default-language: GHC2024
+  hs-source-dirs: test
+  main-is: Main.hs
+  ghc-options: -Wall -Werror -fplugin=Polytropos.Plugin
+  build-depends:
+    base,
+    cassava,
+    bytestring,
+    vector,
+    polytropos-core,
+    polytropos-cassava,
+    polytropos-plugin,
+    tasty,
+    tasty-hunit
