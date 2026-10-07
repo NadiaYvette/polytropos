@@ -71,6 +71,11 @@ import GHC.Plugins
   , occNameString
   )
 
+import GHC.Unit.Types
+  ( mkModule
+  , moduleUnit
+  )
+
 import GHC.Core.Class
   ( classMethods
   )
@@ -167,6 +172,7 @@ data PluginState = PluginState
   , psFShowInt      :: !Var    -- ^ $fShowInt
   , psFShowBool     :: !Var    -- ^ $fShowBool
   , psRowFlavourCls :: !Class  -- ^ RowFlavour class
+  , psHasFieldCls   :: !Class  -- ^ GHC.Records.HasField class
   }
 
 -------------------------------------------------------------------------------
@@ -199,6 +205,10 @@ polytroposInit = do
   rowFlavourName <- lookupOrig coreMod (mkTcOcc "RowFlavour")
   psRowFlavourCls <- tcLookupClass rowFlavourName
 
+  let ghcRecordsMod = mkModule (moduleUnit gHC_CLASSES) (mkModuleName "GHC.Internal.Records")
+  hasFieldOcc <- lookupOrig ghcRecordsMod (mkTcOcc "HasField")
+  psHasFieldCls <- tcLookupClass hasFieldOcc
+
   pure PluginState
     { psRepTag        = psRepTag
     , psRepArity      = psRepArity
@@ -217,6 +227,7 @@ polytroposInit = do
     , psFShowInt      = psFShowInt
     , psFShowBool     = psFShowBool
     , psRowFlavourCls = psRowFlavourCls
+    , psHasFieldCls   = psHasFieldCls
     }
 
 findModule :: String -> Maybe String -> TcPluginM 'Init Module
@@ -279,6 +290,8 @@ solveOne state ct
             -> solveRowEqSum state ct cls tys
             | nameOccName name == mkTcOcc "RowShowSum"
             -> solveRowShowSum state ct cls tys
+            | nameOccName name == mkTcOcc "HasField"
+            -> solveHasField state ct cls tys
             | otherwise
             -> pure $ Right ()
       _ -> pure $ Right ()
@@ -632,6 +645,70 @@ solveRowShowSum state ct cls tys = do
       in mkCoreApps (Var (psShowsPrecMeth state)) [Type fieldTy, showDict, zeroPrec, val]
 
 -------------------------------------------------------------------------------
+-- HasField solver
+-------------------------------------------------------------------------------
+
+solveHasField
+  :: PluginState
+  -> Ct
+  -> Class
+  -> [Type]
+  -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
+solveHasField state ct cls tys = do
+  let len = length tys
+  if len >= 3 then do
+    let fieldTy = last tys
+        recTy   = tys !! (len - 2)
+        nTy     = tys !! (len - 3)
+    case isStrLitTy (unwrapSynonyms nTy) of
+      Just fieldName -> do
+        case splitTyConApp_maybe (unwrapSynonyms recTy) of
+          Just (tc, args)
+            | occNameString (getOccName tc) == "RowRep"
+            , length args >= 4 -> do
+              let aTy   = last args
+                  rowTy = args !! (length args - 2)
+                  rTy   = args !! (length args - 3)
+                  fTy   = args !! (length args - 4)
+                  kATy  = typeKind aTy
+                  kRowTy = typeKind rowTy
+              case splitTyConApp_maybe (unwrapSynonyms rTy) of
+                Just (tcR, []) | occNameString (getOccName tcR) == "ProductRowT" -> do
+                  case findFieldType fieldName rowTy of
+                    Just (i, actualFieldTy) -> do
+                      let getFieldId = case classMethods cls of
+                            (m : _) -> m
+                            [] -> error "Polytropos.Plugin: HasField has no methods"
+                          methodFullTy = piResultTys (varType getFieldId) tys
+                          (_, _, methodInDictTy) = splitFunTy methodFullTy
+                          (tyVars, tauTy) = splitForAllTyCoVars methodInDictTy
+                          (argTys, _) = splitFunTys tauTy
+                          scaledRTy = argTys !! 0
+
+                      rName <- unsafeLiftTcM $ newName (mkVarOcc "rec")
+                      let rVar = mkLocalId rName (scaledMult scaledRTy) (scaledThing scaledRTy)
+
+                          unRowRepTypeArgs = [Type kRowTy, Type kATy, Type fTy, Type rTy, Type rowTy, Type aTy]
+                          rep = mkCoreApps (Var (psUnRowRep state)) (unRowRepTypeArgs ++ [Var rVar])
+
+                          fieldAtTypeArgs = [Type kATy, Type fTy, Type aTy, Type actualFieldTy]
+                          idxExpr = mkCoreConApps intDataCon [Lit (mkLit (fromIntegral i :: Integer))]
+                          raw = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep])
+
+                          fFieldTy = mkAppTy fTy actualFieldTy
+                          val = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw]
+
+                          getFieldExpr = mkCoreLams (tyVars ++ [rVar]) val
+                          dictExpr = evDataConApp (classDataCon cls) tys [getFieldExpr]
+
+                      pure $ Left (EvExpr dictExpr, ct)
+                    Nothing -> pure $ Right ()
+                _ -> pure $ Right ()
+          _ -> pure $ Right ()
+      Nothing -> pure $ Right ()
+  else pure $ Right ()
+
+-------------------------------------------------------------------------------
 -- Row walking
 -------------------------------------------------------------------------------
 
@@ -678,6 +755,12 @@ findConstructorIndex :: FastString -> Type -> Maybe Word
 findConstructorIndex conName rowTy =
   case [fromIntegral i | (i, n, _) <- walkSumRowWithTypes rowTy, n == conName] of
     (w : _) -> Just w
+    []      -> Nothing
+
+findFieldType :: FastString -> Type -> Maybe (Int, Type)
+findFieldType fieldName rowTy =
+  case [(i, ty) | (i, n, ty) <- walkRowWithTypes rowTy, n == fieldName] of
+    (res : _) -> Just res
     []      -> Nothing
 
 -------------------------------------------------------------------------------

@@ -2,6 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE OverloadedRecordDot #-}
 
 -- | Smoke test: exercise RowEq / RowShow through the TcPlugin on R2.
 --
@@ -31,6 +32,10 @@ ab = RowRep (productRep [slot (7 :: Int), slot True])
 other :: RowRep Identity ProductRowT R2 (Int, Bool)
 other = RowRep (productRep [slot (7 :: Int), slot False])
 
+type RD = '[ "x" := Int, "y" := Bool ]
+rDot :: RowRep Identity ProductRowT RD (Int, Bool)
+rDot = RowRep (productRep [slot (42 :: Int), slot True])
+
 main :: IO ()
 main = defaultMain $ testGroup "plugin RowEq/RowShow smoke"
   [ testGroup "Products"
@@ -52,6 +57,12 @@ main = defaultMain $ testGroup "plugin RowEq/RowShow smoke"
           repShowsPrecSum 0 sumC1 "" @?= "C1 7"
       , testCase "repShowsPrecSum (RowShowSum) renders C2 properly" $
           repShowsPrecSum 0 sumC2 "" @?= "C2 True"
+      ]
+  , testGroup "OverloadedRecordDot"
+      [ testCase "r.x == 42" $
+          rDot.x @?= Identity (42 :: Int)
+      , testCase "r.y == True" $
+          rDot.y @?= Identity True
       ]
   ]
 
