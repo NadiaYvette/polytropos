@@ -1,0 +1,373 @@
+%% ROW_ROLE_DEFNS_DRAFT.ott
+%%
+%% Minimal row + role judgement draft, in ett.ott-style syntax.
+%%
+%% This is NOT an attempt to extend corespec-roles/spec/ett.ott itself.
+%% It is a polytropos-local formal sketch, written in the same surface
+%% syntax so that the judgement shapes are concrete and reviewable.
+%%
+%% Intent / scope (matches ROW_ROLE_JUDGEMENT_SKETCH.md §5):
+%%   - closed vs open row kinds
+%%   - row inclusion  r1 ⊆ r2
+%%   - a couple of widening rules
+%%   - the two-point role lattice Nom ≤ Rep
+%%   - role-subsumption for row constraints (the Sub-style rule)
+%%
+%% Deliberately left out (see ROW_ROLE_JUDGEMENT_SKETCH.md §4):
+%%   - per-label roles
+%%   - full row-polymorphic quantification
+%%   - row pattern matching
+%%   - full ICFP 2019 dependent-type apparatus
+%%   - OCaml's Reither / object-row encoding
+%%   - any completeness/soundness claim
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% 0. Reference notes (not part of Ott grammar)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% Row algebra source:
+%%   OCaml typechecker, typing/ctype.ml:
+%%     merge_row_fields / merge_rf
+%%     subtype_row
+%%     unify_row / unify_row_field
+%%     row_rep, row_more, row_closed, row_fixed
+%%     static_row
+%%   Plus the polytropos note:
+%%     docs/notes/OCAML_ROW_TAIL_SUBTYPE_MECHANISM.md
+%%
+%% Role/erasure source:
+%%   Weirich et al., "A Role for Dependent Types in Haskell" (ICFP 2019)
+%%   and its Coq/Ott development at ~/src/corespec-roles.
+%%   Imported pieces:
+%%     - two-role lattice Nom/Rep with <= R1 R2
+%%     - definitional equality a == b : A / R
+%%     - Sub rule for role-subsumption
+%%     - separate roleing judgement
+%%     - erase_tm / erase_constraint
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% 1. Metavariables
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% We do not re-define the full ICFP 2019 metavar set here.
+%% We only introduce the metavariables this draft needs.
+
+metavar label, l, m, n ::= {{ com row labels }}
+  {{ lex alphanum }}
+
+metavar tvar, ρ, α, β ::= {{ com row tail variables }}
+  {{ lex alphanum }}
+
+indexvar index, i ::= {{ com literal positions }}
+  {{ tex \mathit{[[index]]} }}
+  {{ coq nat }}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% 2. Row kinds
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% A row is either closed or open.
+%%
+%% This is the OCaml-flavored split:
+%%   closed row  ~ row_fields only, tail effectively Tnil / fixed
+%%   open row    ~ row_fields plus a tail variable ρ
+%%
+%% In this draft we treat a row as a separate syntactic category because
+%% polytropos's current shipped row vocabulary has no row tail at all.
+%% The immediate goal of this draft is to state that missing piece
+%% concretely, not to claim it is already implemented.
+
+row, r, s ::= {{ com rows }}
+
+  %% closed row: finite ordered map from labels to types.
+  %% Corresponds to OCaml's static-row/end-of-row case where tail
+  %% is not a unification variable.
+  ( l :> A  ,  r )        ::   :: RowCons
+
+  %% empty closed row. Corresponds to an empty known field set.
+  ()                      ::   :: RowNil
+
+  %% open row: known fields plus a row tail variable.
+  %% The tail stands for "zero or more additional unknown labels".
+  ( l :> A  ,  r )  ρ     :: S :: RowOpen
+
+  %% An open row written with an explicit tail binder, for use in
+  %% contexts where we want the tail variable to be syntactically
+  %% apparent. This is the shape we expect the plugin/constraint
+  %% layer to manipulate.
+  ρ                       ::   :: RowTail
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% 3. Row inclusion judgement
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% Central judgement of this draft:
+%%
+%%     r1 ⊆ r2
+%%
+%% Read: a value whose row is r1 can be used where a value whose row
+%% is r2 is expected.
+%%
+%% This is NOT equality. It is the relation computed (with constraints)
+%% by OCaml's subtype_row after merging fields with merge_row_fields.
+%%
+%% Important design alignment with OCaml:
+%%   - Inclusion decomposes label-by-label after the two field sets are
+%%     aligned.
+%%   - Leftover fields on one side are handled by the open/closed shape
+%%     of the other side's tail.
+%%   - The tail is not magic; inclusion does not "unify away" a closed row
+%%     into an open one.
+
+defn
+r1 ⊆ r2 ::   :: RowIncl :: 'RowIncl_'
+{{ com row inclusion }}
+{{ tex [[r1]] \\subseteq [[r2]] }}
+by
+
+%% Empty closed rows are included in anything that admits no
+%% extra-label mismatch on the closed side.
+%% This is the empty-closed-row base case (closed-to-closed nil).
+()
+  ⊆ r
+
+%% A known field must appear on the right with a compatible type.
+%% In this draft, "compatible type" is represented by equality A == B
+%% at the relevant role. This is the label-by-label decomposition
+%% that OCaml's merge_row_fields + subtype_row performs.
+( l :> A  ,  r1 )  ⊆  ( l :> B  ,  r2 )
+  -----------------------------------------
+  r1 ⊆ r2
+
+%% Closed-to-open widening.
+%% A fully known closed row can be widened to an open row whose known
+%% part is at least as big. In OCaml terms, this is the direction
+%% where a static row can be seen as an open row with a fresh/bound
+%% tail variable.
+r  ⊆  ( r )  ρ
+
+%% Open-to-open inclusion.
+%% Two open rows are included when their known fields align and their
+%% tails can be merged. The tail merge is delegated to a tail judgement
+%% (see §5). This is the "both sides have row variable" case.
+( r1 )  ρ1  ⊆  ( r2 )  ρ2
+  -----------------------------
+  r1 ⊆ r2    ρ1 ⊆₊ ρ2
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% 4. Row-tail interaction judgements — boundary contract for the plugin
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% This section is deliberately NOT a row-specific unifier.
+%% It is a boundary contract: it states the tail-side assumptions the plugin
+%% may rely on when it solves row constraints, and the limitations that keep
+%% the row algebra from drifting into a separate row calculus.
+%%
+%% Design alignment:
+%%   - OCaml does not unify row tails inside subtype_row.
+%%     subtype_row aborts to a deferred constraint when the tails are not
+%%     directly comparable, and the normal unifier later resolves them.
+%%     See OCAML_ROW_TAIL_SUBTYPE_MECHANISM.md.
+%%   - The plugin's job is analogous: it should treat the tail as a tunable
+%%     point in the constraint layer, not as something the inclusion judgement
+%%     magically solves.
+%%
+%% Tail shapes the plugin boundary may distinguish:
+%%   tail-nil   — static closed tail, no further labels possible
+%%   tail-var ρ — open tail that can be widened/merged under constraint
+%%   tail-fixed — closed/fixed tail that must not be widened
+
+defn
+ρ1 ⊆₊ ρ2 ::   :: RowTailIncl :: 'RowTailIncl_'
+{{ com row tail inclusion }}
+
+%% Two identical open tail variables are compatible.
+%% Plugin contract: if both sides expose the same open tail variable, the
+%% plugin may treat the tail as compatible without inventing a new row.
+ρ  ⊆₊  ρ
+
+%% An open tail variable may absorb a known closed remainder.
+%% Plugin contract: this is the construction that makes open rows genuinely
+%% open. The plugin should allow it, but only as widening under constraint,
+%% not as unconditional row equality.
+ρ  ⊆₊  ()
+
+%% A fresh open tail may be compatible with an existing tail variable.
+%% Plugin contract: this is the widening step on the tail itself. It is
+%% intentionally permissive in the judgement language. In the plugin this
+%% must be gated by constraint emission, not by unconditional acceptance.
+ρ  ⊆₊  ρ'
+
+%% Closed/fixed tails must NOT be widened.
+%% Plugin contract: if either side is a closed/fixed tail, the plugin:
+%%   - must NOT turn it into an open tail
+%%   - must NOT accept leftover fields against it unless it is already an
+%%     open shape compatible under constraint
+%% This mirrors OCaml's static_row / fixed_explanation gating.
+ρ  ⊆₊  ρ'       when ρ is not tail-fixed, ρ' is tail-var
+
+%% Non-identical closed/fixed tails are NOT silently merged.
+%% Plugin contract: if both sides are closed/fixed and not identical,
+%% the plugin either emits a deferred constraint or rejects the inclusion,
+%% exactly as OCaml's subtype_row does for non-comparable tail constructors.
+(ρ1 is tail-fixed, ρ2 is tail-fixed, ρ1 ≠ ρ2)
+  ⊆₊  ρ2      ← deferred constraint or reject
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% 5. Widening as a derived/direct rule
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% Widening is the constructive direction of inclusion.
+%%
+%% For this draft we state it directly rather than as a separate
+%% metatheorem, because the point is to have something falsifiable:
+%% the judgement set should be able to express "closed row → open row".
+%%
+%% Plugin boundary note:
+%%   Widening in the judgement language is not the same as the plugin
+%%   deciding a row is already widened. The plugin should treat widening
+%%   as a controlled transition:
+%%     - closed row → open row may be allowed when the row is not fixed
+%%     - tail widening is allowed only through the tail contract in §4
+%%     - once a row is fixed/closed, narrowing may be attempted but
+%%       widening back out is not allowed by fiat
+
+defn
+r ⇝ w                ::   :: RowWiden :: 'RowWiden_'
+{{ com row widening }}
+{{ tex [[r]] \\rightsquigarrow [[w]] }}
+
+%% Widen a closed row to an open row by attaching a tail variable.
+r  ⇝  ( r )  ρ
+
+%% Widen a tail variable into a larger tail variable.
+%% This is the tail-only widening analogue.
+ρ  ⇝  ρ'
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% 6. Role lattice
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% We adopt the two-point role lattice from ICFP 2019.
+%%
+%%   Nom  -- nominal equality only; no coercion through abstraction
+%%   Rep  -- representational equality; coercion-safe
+%%
+%% This is the lattice already present in corespec-roles/spec/ett.ott
+%% as JSubRole / SubRole. We restate it here only so this draft is
+%% self-contained.
+
+defn
+R1 ≤ R2  ::  :: SubRole :: 'SubRole_'
+{{ com role subsumption }}
+{{ tex [[R1]] \\leq [[R2]] }}
+
+------------ :: NomBot
+Nom  ≤  R
+
+------------ :: RepTop
+R  ≤  Rep
+
+------------ :: Refl
+R  ≤  R
+
+R1 ≤ R2
+R2 ≤ R3
+--------- :: Trans
+R1 ≤ R3
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% 7. Row constraints
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% Minimal row constraint forms for this draft.
+%%
+%% We do not commit to a full constraint language yet. We only add the
+%% two shapes needed for the immediate question:
+%%   - row equality
+%%   - row inclusion
+%%
+%% The role index is kept on equality only, because the minimal
+%% hypothesis is that inclusion is a structural relation, while
+%% equality/coercion evidence may need a role.
+
+constraint, φ ::= {{ com row constraints }}
+
+  r1 ~ r2 : A / R     ::   :: RowEq
+  {{ com row equality at role R }}
+
+  r1 ⊆ r2             ::   :: RowInclC
+  {{ com row inclusion constraint }}
+
+  ( φ )               :: S :: RowCParen
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% 8. Role-subsumption for row constraints
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% The key rule that imports the role lattice into the row-constraint
+%% layer. It mirrors ICFP 2019's Sub rule, but restricted to the row
+%% constraint forms this draft has.
+%%
+%% This is where closed-row equality vs closed-open compatibility may
+%% acquire different roles:
+%%   - exact closed-row equality is likely Nom
+%%   - closed-row/compatible-open compatibility may be Rep under inclusion
+
+defn
+φ1 ≤ φ2  ::  :: RowConstrSub :: 'RowConstrSub_'
+{{ com row constraint subsumption }}
+
+%% Role-subsumption on row equality, exactly the ICFP 2019 Sub shape.
+r ~ s : A / R1      R1 ≤ R2
+---------------------------------
+r ~ s : A / R2
+
+%% Inclusion constraints do not change by role alone in this minimal
+%% draft. That is a design choice, not a theorem. The draft leaves a
+%% gap here on purpose: whether inclusion itself should be role-indexed
+%% is one of the things this draft is meant to expose.
+r1 ⊆ r2              r1 ⊆ r2
+---------------------------------
+r1 ⊆ r2
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% 9. What this draft does and does not yet commit to
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% Commits to:
+%%   - a closed vs open row distinction in the syntax
+%%   - row inclusion as a judgement, not equality
+%%   - at least one closed-to-open widening rule
+%%   - the Nom ≤ Rep lattice
+%%   - a role-subsumption rule for row equality
+%%
+%% Does not commit to:
+%%   - whether polytropos will actually adopt row tails in code
+%%   - how the tail judgement ρ1 ⊆₊ ρ2 is solved
+%%   - per-label roles
+%%   - row polymorphism
+%%   - any claim that the above is a complete or proved system
+%%
+%% Alignment checks:
+%%   - Row side: OCaml's merge_row_fields / subtype_row / unify_row
+%%     semantics, as recorded in OCAML_ROW_TAIL_SUBTYPE_MECHANISM.md.
+%%   - Role side: ICFP 2019 Sub rule and the Nom/Rep lattice from
+%%     corespec-roles/spec/ett.ott (JSubRole / SubRole).
+%%
+%% Falsifiability criterion (from ROW_ROLE_JUDGEMENT_SKETCH.md §5):
+%% If this draft cannot state closed-to-open widening and nominal
+%% closed-row equality without stepping on itself, it is not ready.
+%%
+%% Plugin-facing falsifiability test:
+%%   1. Can the draft state closed-to-open widening without pretending the
+%%      tail judgement solves the tail?
+%%   2. Can it state a closed-row equality case without collapsing closedness?
+%%   3. Can it state which tail shapes the plugin may widen and which it must
+%%      defer/reject?
+%% If any of those is unclear, the draft is not yet usable as a plugin
+%% boundary contract.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% end of draft
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
