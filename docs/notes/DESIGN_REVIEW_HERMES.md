@@ -71,6 +71,16 @@ polytropos aims to implement row-polymorphic open ADTs (Algebraic Data Types) or
 
 5. **Document Trade-offs**: Clearly communicate in documentation where the hybrid approach introduces complexity versus pure structural or pure nominal variants, so users can make informed choices.
 
+## Additional Reference Points Beyond Large-Records
+
+The large-records stack is the most load-bearing precedent for the plugin architecture, but it is not the only row/variant precedent on the system. For polytropos specifically the more directly comparable references are:
+
+- `row-types` — open records and variants implemented entirely with closed type families and runtime `Text`-keyed storage; `Var` and `Rec`, plus `trial`, `diversify`, `erase`, and `metamorph`-style recursion schemes over rows. This is the clearest existing model of “what structural variants look like without a plugin.”
+- `open-adt` — a fixed-point layer on top of a variant-of-functors row, with TH-generated constructor patterns that are polymorphic in the row; its own stated motivation is improving compile-time scaling versus earlier variant libraries. Useful as “what a non-plugin open-ADT layer already tries to do, and where it hurts.”
+- `data-diverse` — a farther, less complete reference; its `Which`/`Many` split and `IndexOf`/`PositionOf`/`UniqueMember` machinery is best read as “another indexing/lookup idiom,” not as a core model.
+
+Read alongside the large-records guidance above, these point at the actual design gap: the plugin’s job is not to be “more like large-anon” in the abstract; it is to deliver comparable variant ergonomics to `row-types`/`open-adt` with better compile-time scaling and a first-class variant-facing interpretation.
+
 ## Conclusion
 polytropos presents an ambitious and promising direction by attempting to bring the sophisticated compile-time machinery of large-anon to the domain of variant records. The explicit focus on practical applications (effect systems, codecs, compilers) is a strength that should help ground the design in real-world needs. Success will depend on carefully navigating the nominal/structural hybrid semantics while preserving the performance and ergonomic benefits that make large-anon powerful for records. The design notes suggest thoughtful consideration of these trade-offs, and proceeding with a plugin-first approach (as demonstrated in large-anon) appears to be the right strategy.
 

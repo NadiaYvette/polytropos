@@ -21,3 +21,12 @@ allow-newer: cborg:base, serialise:base, serialise:time, serialise:containers, s
 -- against the template-haskell 2.24 / aeson 2.2.5.1 pair GHC 9.14 ships.
 allow-newer: persistent:template-haskell
 constraints: any.aeson ==2.2.5.1
+-- rel8 1.8 (and its rel8-internal / opaleye / postgresql-simple / hasql
+-- dependency cone) predates GHC 9.14's base 4.22; all compile unchanged
+-- against the installed versions. rel8-internal 1.8 also needs the hasql
+-- 1.x Statement API that hasql 2.x removed, so hasql is pinned to 1.9.3.2,
+-- and the whole PostgreSQL stack is pinned to postgresql-binary 0.14.2
+-- (0.15 removed the Monad Composite instance hasql 1.9's deriving needs;
+-- 0.14.2 provides it and the valueParser API polytropos-hasql tests use).
+allow-newer: rel8:base, rel8-internal:base, rel8-internal:hasql, rel8-internal:postgresql-binary, opaleye:base, postgresql-simple:base, postgresql-simple:template-haskell, postgresql-simple:containers, hasql:postgresql-binary, postgresql-binary:base, postgresql-binary:containers, postgresql-binary:bytestring, postgresql-binary:text, postgresql-binary:time, postgresql-binary:vector, postgresql-binary:hashable, postgresql-binary:scientific, postgresql-binary:aeson, postgresql-binary:base16, postgresql-binary:bytestring-strict-tree, postgresql-binary:case-insensitive, postgresql-binary:crypton, postgresql-binary:dlist, postgresql-binary:iproute, postgresql-binary:network-ip, postgresql-binary:these, postgresql-binary:uuid-types
+constraints: any.hasql ==1.9.3.2, any.postgresql-binary ==0.14.2

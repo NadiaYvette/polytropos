@@ -15,6 +15,7 @@ Status: LIVING DOCUMENT · v0.1 · 2026-10-05
 | `notes/COMMIT_ATTRIBUTION.md` | convention | blessed | cross-cutting | — |
 | `notes/PROVENANCE.md` | convention | blessed | cross-cutting | — |
 | `notes/DOC_STRATEGY.md` | strategy | blessed | cross-cutting | — |
+| `notes/OCAML_ROW_TAIL_SUBTYPE_MECHANISM.md` | notes | draft | cross-cutting | — |
 | `registers/PACKAGES.md` | register | live | cross-cutting | — |
 | `transcripts/gemini-large-data-hybrid-variant-records-spec.md` | transcript | archive | cross-cutting | inconsistent |
 | `transcripts/gemini-powerful-abstraction-techniques-in-haskell.md` | transcript | archive | cross-cutting | — |
