@@ -25,6 +25,9 @@ Orchestrated-by: <Engine>
   ```
   Assisted-by: Antigravity (Google / gemini-3.8-pro)
   ```
+  ```
+  Assisted-by: Freebuff (Upstage AI / Solar Pro 4)
+  ```
 - **Assisted where model is unspecified or varied across sessions:**
   ```
   Assisted-by: Freebuff

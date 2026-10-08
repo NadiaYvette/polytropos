@@ -24,6 +24,10 @@ Orchestrated-by: <Engine>
   ```
   Assisted-by: Freebuff
   ```
+- **Freebuff with Solar Pro 4:**
+  ```
+  Assisted-by: Freebuff (Upstage AI / Solar Pro 4)
+  ```
 - **With Orchestration Engine:**
   ```
   Assisted-by: Utai Native (mistral/codestral-latest)
