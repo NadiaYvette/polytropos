@@ -8,6 +8,10 @@
 %%
 %% Intent / scope (matches ROW_ROLE_JUDGEMENT_SKETCH.md §5):
 %%   - closed vs open row kinds
+%%   - HKD-style functor parameter per row field (future-oriented): a row
+%%     whose entry kind is @f ty@ for some field functor @f@, so the same
+%%     judgement vocabulary can express product/variant rows without fixing
+%%     @f ~ Identity@.
 %%   - row inclusion  r1 ⊆ r2
 %%   - a couple of widening rules
 %%   - the two-point role lattice Nom ≤ Rep
@@ -20,6 +24,25 @@
 %%   - full ICFP 2019 dependent-type apparatus
 %%   - OCaml's Reither / object-row encoding
 %%   - any completeness/soundness claim
+%%
+%% NOTE on HKD-style functor parameters (open extension):
+%%   The judgement layer below is deliberately phrased at the row-syntax
+%%   level (label :> type), not at the GHC vocabulary level (label := f ty).
+%%   That is intentional: the judgement does not need to know the GHC
+%%   spelling of the entry kind in order to state inclusion/equality/widening.
+%%   When polytropos adopts HKD-aware rows (for example ProductRowHKD f,
+%%   SumRowHKD f, or a RowType-flavored variant), the entry-kind change is
+%%   a vocabulary change in the type layer, not a judgement change here.
+%%   Concretely:
+%%     - current shipped vocabulary:  Row    = [Pair Symbol Type]
+%%                                  SumRow = [Pair Symbol Row]
+%%     - HKD-aware target vocabulary (sketch, not committed spelling):
+%%         ProductRowHKD f = [Pair Symbol (f Type)]
+%%         SumRowHKD f     = [Pair Symbol (ProductRowHKD f)]
+%%   The draft leaves the exact spelling open (see PLAN.md / spec sketch
+%%   §7.1) and only commits to the judgement-level property that the entry
+%%   kind may be parameterized by a field functor, so the same inclusion/
+%%   equality/widening judgements can be reused across @f@ instantiations.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% 0. Reference notes (not part of Ott grammar)
@@ -893,6 +916,32 @@ r1 ⊆ r2
 %%   - treating two open rows with different tail variables as equal (the
 %%     equality judgement ≃₊ forbids this, even when ⊆₊ allows mutual
 %%     compatibility)
+%%
+%% HKD-awareness note (cross-reference to the immediate-next-step spec):
+%%   The judgement vocabulary here is parametric over the entry kind, so it
+%%   already accommodates HKD-style rows without a judgement rewrite. The
+%%   remaining work is in the type/vocabulary layer and the plugin's row-walk/
+%%   evidence-supply layer, not in §3–§7 as stated. See
+%%   plans/2026-10-09-plugin-gap-spec.md §2 for the HKD-aware row-vocabulary
+%%   sketch the user asked to target, and docs/notes/PHASE2_SKETCH.md for the
+%%   Option D / RowType-flavored vocabulary already assumed there.
+%%   Concretely, the judgement's entry-kind metavariable stays at @A@ for now;
+%%   when the vocabulary becomes HKD-aware, @A@ is read as @f ty@ in the
+%%   appropriate entry-kind, and the same ⊆/≃/⊆₊/≃₊ rules apply without
+%%   change. That is the design property the review asked for.
+%%
+%% HKD-awareness note (cross-reference to the immediate-next-step spec):
+%%   The judgement vocabulary here is parametric over the entry kind, so it
+%%   already accommodates HKD-style rows without a judgement rewrite. The
+%%   remaining work is in the type/vocabulary layer and the plugin's row-walk/
+%%   evidence-supply layer, not in §3–§7 as stated. See
+%%   plans/2026-10-09-plugin-gap-spec.md §2 for the HKD-aware row-vocabulary
+%%   sketch the user asked to target, and docs/notes/PHASE2_SKETCH.md for the
+%%   Option D / RowType-flavored vocabulary already assumed there.
+%%   Concretely, the judgement's entry-kind metavariable stays at @A@ for now;
+%%   when the vocabulary becomes HKD-aware, @A@ is read as @f ty@ in the
+%%   appropriate entry-kind, and the same ⊆/≃/⊆₊/≃₊ rules apply without
+%%   change. That is the design property the review asked for.
 %%
 %% Dependency direction:
 %%   - row-shape layer → shared row-algebra layer (calls in)

@@ -118,6 +118,7 @@ import GHC.TcPlugin.API
   , emptyUFM
   , lookupOrig
   , tcLookupId
+  , tcLookupTyCon
   , findImportedModule
   , resolveImport
   , FindResult(..)
@@ -127,6 +128,7 @@ import GHC.TcPlugin.API
   , evDataConApp
   , newName
   , mkLocalId
+  , mkTyConTy
   )
 
 import GHC.TcPlugin.API.Internal
@@ -170,8 +172,10 @@ data PluginState = PluginState
   , psFEqWord       :: !Var    -- ^ $fEqWord
   , psFShowInt      :: !Var    -- ^ $fShowInt
   , psFShowBool     :: !Var    -- ^ $fShowBool
-  , psRowFlavourCls :: !Class  -- ^ RowFlavour class
-  , psHasFieldCls   :: !Class  -- ^ GHC.Records.HasField class
+  , psRowFlavourCls   :: !Class  -- ^ RowFlavour class
+  , psHasFieldCls     :: !Class  -- ^ GHC.Records.HasField class
+  , psSmallArrayTyCon :: !Var    -- ^ Data.Primitive.SmallArray.SmallArray
+  , psDictAnyTyCon    :: !Var    -- ^ Polytropos.Core.DictAny
   }
 
 -------------------------------------------------------------------------------
@@ -208,6 +212,14 @@ polytroposInit = do
   hasFieldOcc <- lookupOrig ghcRecordsMod (mkTcOcc "HasField")
   psHasFieldCls <- tcLookupClass hasFieldOcc
 
+  primMod <- findModule "Data.Primitive.SmallArray" Nothing
+  smallArrayOcc <- lookupOrig primMod (mkTcOcc "SmallArray")
+  psSmallArrayTyCon <- tcLookupTyCon smallArrayOcc
+
+  coreMod <- findPolytroposCoreModule
+  dictAnyOcc <- lookupOrig coreMod (mkTcOcc "DictAny")
+  psDictAnyTyCon <- tcLookupTyCon dictAnyOcc
+
   pure PluginState
     { psRepTag        = psRepTag
     , psRepArity      = psRepArity
@@ -226,7 +238,9 @@ polytroposInit = do
     , psFShowInt      = psFShowInt
     , psFShowBool     = psFShowBool
     , psRowFlavourCls = psRowFlavourCls
-    , psHasFieldCls   = psHasFieldCls
+    , psHasFieldCls     = psHasFieldCls
+    , psSmallArrayTyCon = psSmallArrayTyCon
+    , psDictAnyTyCon    = psDictAnyTyCon
     }
 
 findModule :: String -> Maybe String -> TcPluginM 'Init Module
@@ -291,6 +305,8 @@ solveOne state ct
             -> solveRowShowSum state ct cls tys
             | nameOccName name == mkTcOcc "HasField"
             -> solveHasField state ct cls tys
+            | nameOccName name == mkTcOcc "AllFields"
+            -> solveAllFields state ct cls tys
             | otherwise
             -> pure $ Right ()
       _ -> pure $ Right ()
@@ -708,6 +724,49 @@ solveHasField state ct cls tys = do
   else pure $ Right ()
 
 -------------------------------------------------------------------------------
+-- AllFields solver (generic field-class dictionary supply)
+-------------------------------------------------------------------------------
+
+solveAllFields
+  :: PluginState
+  -> Ct
+  -> Class
+  -> [Type]
+  -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
+solveAllFields state ct cls tys = do
+  case tys of
+    [rTy, rowTy, cTy] -> do
+      let fields = walkRowWithTypes rowTy
+      -- Build one DictAny c per field, then pack them into a SmallArray (DictAny c).
+      -- This is the first concrete sketch of generic field-class dictionary supply;
+      -- the per-field dict is intentionally parametric on the class argument for now.
+      dictAnyCons <- forM fields $ \(i, _nameFS, fieldTy) -> do
+        let dictExpr = mkReflEqDict cTy
+        pure dictExpr
+      let smallArrayTy = mkTyConTy (psSmallArrayTyCon state) `mkAppTy` (mkAppTy (mkTyConTy (psDictAnyTyCon state)) cTy)
+      let arrExpr = mkSmallArrayFromList dictAnyCons
+      let fieldDictsExpr = mkCoreApps (Var (psNoInlineCo state))
+                                       [Type (mkTyConTy (psSmallArrayTyCon state))
+                                       , Type (mkAppTy (mkTyConTy (psDictAnyTyCon state)) cTy)
+                                       , arrExpr]
+      let methodId = case classMethods cls of
+            (m : _) -> m
+            [] -> error "Polytropos.Plugin: AllFields class has no methods"
+          methodFullTy = piResultTys (varType methodId) tys
+          (_, _, methodInDictTy) = splitFunTy methodFullTy
+          (tyVars, tauTy) = splitForAllTyCoVars methodInDictTy
+          (argTys, _) = splitFunTys tauTy
+      vars <- forM (zip [0..] tyVars) $ \(idx, tv) -> do
+        let name = mkVarOcc ("tv" ++ show idx)
+        pure $ mkLocalId name (scaledMult (argTys !! idx)) (mkTyVarTy tv)
+      bodyExpr <- pure $ foldl (\acc var -> Lam var acc) (Var fieldDictsExpr) vars
+      let dictExpr = evDataConApp (classDataCon cls) tys [bodyExpr]
+      pure $ Left (EvExpr dictExpr, ct)
+    _ -> pure $ Right ()
+  where
+    mkReflEqDict cTy = error $ "polytropos: AllFields solver placeholder -- " ++ showSDocUnsafe (ppr cTy) ++ " not yet supplyable"
+
+-------------------------------------------------------------------------------
 -- Row walking
 -------------------------------------------------------------------------------
 
@@ -780,13 +839,13 @@ getEqDict state ty
   | ty `eqType` intTy = Var (psFEqInt state)
   | ty `eqType` boolTy = Var (psFEqBool state)
   | ty `eqType` mkTyConTy wordTyCon = Var (psFEqWord state)
-  | otherwise = error $ "polytropos: unsupported field type for Eq: " ++ showSDocUnsafe (ppr ty)
+  | otherwise = error $ "polytropos: unsupported field type for Eq: " ++ showSDocUnsafe (ppr ty) ++ " (generic field-class dict supply not yet implemented)"
 
 getShowDict :: PluginState -> Type -> CoreExpr
 getShowDict state ty
   | ty `eqType` intTy = Var (psFShowInt state)
   | ty `eqType` boolTy = Var (psFShowBool state)
-  | otherwise = error $ "polytropos: unsupported field type for Show: " ++ showSDocUnsafe (ppr ty)
+  | otherwise = error $ "polytropos: unsupported field type for Show: " ++ showSDocUnsafe (ppr ty) ++ " (generic field-class dict supply not yet implemented)"
 
 -------------------------------------------------------------------------------
 -- Utilities

@@ -58,6 +58,8 @@ module Polytropos
   , RowShow(..)
   , RowFlavour(..)
   , Field(..)
+  , AllFields(..)
+  , DictAllFields
   ) where
 
 import Polytropos.Core

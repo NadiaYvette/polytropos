@@ -76,6 +76,8 @@ module Polytropos.Core (
   , FieldIndex(..)
   , ConstructorIndex(..)
   , DictAny(..)
+  , AllFields(..)
+  , DictAllFields
     -- * Utilities
   , noInlineUnsafeCo
   ) where
@@ -85,14 +87,13 @@ import Control.Monad.ST            (ST)
 import Data.Foldable               (toList)
 import Data.Kind                   (Constraint, Type)
 import Data.Primitive.SmallArray
+-- import Data.Tagged                 (Tagged(..))
 import GHC.Exts                    (Any)
 import GHC.OverloadedLabels        (IsLabel(..))
 import GHC.TypeLits                (Symbol)
 import Unsafe.Coerce               (unsafeCoerce)
 
-{-------------------------------------------------------------------------------
-  §1  The row vocabulary
--------------------------------------------------------------------------------}
+{-------------------------------------------------------------------------------\n  §1  The row vocabulary\n-------------------------------------------------------------------------------}
 
 -- | A type-level pair: a name bound to a type.
 --
@@ -122,17 +123,20 @@ type Row = [Pair Symbol Type]
 -- The tag of a constructor is its position in this list. Constructor arities
 -- are therefore the lengths of the nested product rows, and may differ
 -- (see note §3, D7).
+--
+-- NOTE: In the HKD-aware vocabulary this becomes a row whose payload entry is
+-- itself a parameterised product row (see `ProductRowHKD`). For now this is
+-- the current legacy definition so the existing smoke continues to compile.
+--
 type SumRow = [Pair Symbol Row]
 
-{-------------------------------------------------------------------------------
-  §1b  Row flavours (Option D vocabulary)
+-- | A product row parameterised by a field functor @f@ (HKD-style).
+--
+-- Each entry is @\"name\" := f ty@, and the plugin solves field-class evidence
+-- over this shape rather than only over bare @Type@ rows.
+type ProductRowHKD (f :: Type -> Type) = [Pair Symbol (f Type)]
 
-  Concrete row flavours, not kind-polymorphic. Each flavour carries a
-  type-level list of entries; the flavour tells the plugin what kind of
-  entries to expect.
-
-  See PHASE2_SKETCH.md, Piece 1, §1a.
--------------------------------------------------------------------------------}
+{-------------------------------------------------------------------------------\n  §1b  Row flavours (Option D vocabulary)\n\n  Concrete row flavours, not kind-polymorphic. Each flavour carries a\n  type-level list of entries; the flavour tells the plugin what kind of\n  entries to expect.\n\n  See PHASE2_SKETCH.md, Piece 1, §1a.\n-------------------------------------------------------------------------------}
 
 -- | The kind of row flavours (Option D).
 --
@@ -141,7 +145,7 @@ type SumRow = [Pair Symbol Row]
 -- 'RowRep' and the evidence classes.
 data RowType
   = ProductRowT        -- ^ field name → field type
-  | SumRowT            -- ^ constructor name → field-row
+  | SumRowT            -- ^ constructor name → fieldrow
   | HandlerRowT        -- ^ constructor name → handler type
   | ResultRowT         -- ^ constructor name → result type
 
@@ -153,15 +157,15 @@ class RowFlavour (r :: RowType) where
   -- | The kind of entries in a row of this flavour.
   type EntryKind (r :: RowType) :: Type
 
--- | A product-row entry: a field name paired with a field type.
+-- | A productrow entry: a field name paired with a field type.
 instance RowFlavour ProductRowT where
   type EntryKind ProductRowT = Pair Symbol Type
 
--- | A sum-row entry: a constructor name paired with its field-row.
+-- | A sumrow entry: a constructor name paired with its fieldrow.
 instance RowFlavour SumRowT where
   type EntryKind SumRowT = Pair Symbol Row
 
--- | A handler-row entry: a handler type (see 'HandlerType').
+-- | A handlerrow entry: a handler type (see 'HandlerType').
 -- instance RowFlavour HandlerRowT where  -- reserved for Phase 4
 --  type EntryKind HandlerRowT = HandlerType  -- not yet implemented
 
@@ -169,8 +173,8 @@ instance RowFlavour SumRowT where
 -- instance RowFlavour ResultRowT where  -- reserved for Phase 4
 --  type EntryKind ResultRowT = ResultType  -- not yet implemented
 
--- | A handler type: "handler for constructor n, with field types fs,
--- returning result type res in monad m".
+-- | A handler type: \"handler for constructor n, with field types fs,
+-- returning result type res in monad m\".
 --
 -- This is the entry kind of 'HandlerRowT'. Each handler entry carries the
 -- constructor name, field types, result type, and monad explicitly, so that
@@ -179,22 +183,14 @@ instance RowFlavour SumRowT where
 data HandlerType (n :: Symbol) (fs :: Row) (res :: Type) (m :: Type -> Type)
   = HandlerType
 
--- | A result type: "result for constructor n, of type res".
+-- | A result type: \"result for constructor n, of type res\".
 --
 -- This is the entry kind of 'ResultRowT'. Each result entry carries the
 -- constructor name and the result type.
 data ResultType (n :: Symbol) (res :: Type)
   = ResultType
 
-{-------------------------------------------------------------------------------
-  §1c  The row-carrying wrapper (Case 3)
-
-  'Rep' stays erased (it does not know its row). The wrapper 'RowRep' carries
-  the row in its type, so that the evidence classes can work over 'RowRep'
-  without a 'Proxy' argument (obligation 4, design note §6).
-
-  See PHASE2_SKETCH.md, Piece 1, §1c.
--------------------------------------------------------------------------------}
+{-------------------------------------------------------------------------------\n  §1c  The row-carrying wrapper (Case 3)\n\n  'Rep' stays erased (it does not know its row). The wrapper 'RowRep' carries\n  the row in its type, so that the evidence classes can work over 'RowRep'\n  without a 'Proxy' argument (obligation 4, design note §6).\n\n  See PHASE2_SKETCH.md, Piece 1, §1c.\n-------------------------------------------------------------------------------}
 
 -- | Typed, row-carrying wrapper around 'Rep'.
 --
@@ -257,9 +253,7 @@ repArity = sizeofSmallArray . vals
   where
     vals (Rep _ v) = v
 
-{-------------------------------------------------------------------------------
-  §2b  Ephemeral transient representation
--------------------------------------------------------------------------------}
+{-------------------------------------------------------------------------------\n  §2b  Ephemeral transient representation\n-------------------------------------------------------------------------------}
 
 -- | Ephemeral mutable representation for in-place construction and deserialization.
 data MRep s (f :: Type -> Type) a = MRep
@@ -289,9 +283,7 @@ modifyRep (Rep t v) act = Rep t $ runSmallArray $ do
   act (MRep t m)
   pure m
 
-{-------------------------------------------------------------------------------
-  §3  Construction
--------------------------------------------------------------------------------}
+{-------------------------------------------------------------------------------\n  §3  Construction\n-------------------------------------------------------------------------------}
 
 -- | Build a product from its field values, in row order.
 --
@@ -303,9 +295,7 @@ productRep xs = Rep 0 (smallArrayFromList xs)
 injectRep :: Word -> [f Any] -> Rep f a
 injectRep t xs = Rep t (smallArrayFromList xs)
 
-{-------------------------------------------------------------------------------
-  §4  Access
--------------------------------------------------------------------------------}
+{-------------------------------------------------------------------------------\n  §4  Access\n-------------------------------------------------------------------------------}
 
 -- | Read the payload slot at a compile-time-known index.
 --
@@ -361,14 +351,7 @@ projectRep t (Rep t' v)
 matchRep :: (Word -> [f Any] -> a) -> Rep f a -> a
 matchRep k r = k (repTag r) (toListSlots (repVals r))
 
-{-------------------------------------------------------------------------------
-  §5  Evidence classes
-
-  The instance bodies are intended to be produced as integer literals by the
-  TcPlugin, the same way @large-anon@ produces @DictRowHasField@. Until the
-  plugin exists, the defaults are @undefined@; the concrete instances in the
-  test suite are hand-written and stand in for what the plugin will emit.
--------------------------------------------------------------------------------}
+{-------------------------------------------------------------------------------\n  §5  Evidence classes\n\n  The instance bodies are intended to be produced as integer literals by the\n  TcPlugin, the same way @large-anon@ produces @DictRowHasField@. Until the\n  plugin exists, the defaults are @undefined@; the concrete instances in the\n  test suite are hand-written and stand in for what the plugin will emit.\n-------------------------------------------------------------------------------}
 
 -- | Field-wise equality for a product row.
 --
@@ -431,9 +414,42 @@ class ConstructorIndex (n :: Symbol) (row :: k) where
 data DictAny (c :: Type -> Constraint) where
   DictAny :: c x => DictAny c
 
-{-------------------------------------------------------------------------------
-  §6  Utilities
--------------------------------------------------------------------------------}
+-- | Evidence that every field in a row satisfies a class.
+--
+-- This is the generic dictionary-supply class the plugin is expected to solve
+-- for fully-known rows. Its evidence is a flat array of type-erased field
+-- dictionaries, in row order, so callers can map/fold over all fields without
+-- writing per-row instances by hand.
+--
+-- The class is kind-polymorphic in the row parameter so the same surface can
+-- be reused for the legacy @Row@ rows and for the HKD-aware product and sum rows
+-- once those are layered on top. The row flavour parameter remains so the
+-- plugin can distinguish product vs sum rows. The dictionary type is
+-- deliberately simple for now so the smoke test can compile against it.
+class RowFlavour r => AllFields (r :: RowType) (row :: k) (c :: Type -> Constraint) where
+  fieldDicts :: DictAllFields c
+  fieldDicts = undefined
+
+-- | The evidence type for 'AllFields': a flat array of type-erased per-field
+-- dictionaries, in row order.
+type DictAllFields (c :: Type -> Constraint) = SmallArray (DictAny c)
+
+-- | A stand-in proxy for the row flavour. This is used in the smoke test as a
+-- placeholder for the row-flavour parameter of 'AllFields' until the row
+-- vocabulary is finalised and the class is re-indexed.
+data ProxyRowFlavour (r :: RowType) = ProxyRowFlavour
+  deriving (Show)
+
+-- | The row-flavour proxy for product rows, used in the smoke test.
+type ProductRowProxy = ProxyRowFlavour ProductRowT
+
+-- | The row-flavour proxy for sum rows, for use in the smoke test once sum
+-- rows are exercised.
+type SumRowProxy = ProxyRowFlavour SumRowT
+
+-- | A type-level proxy for the TwoInts row, used in the smoke test as a
+-- placeholder until the row vocabulary is finalised.
+{-------------------------------------------------------------------------------\n  §6  Utilities\n-------------------------------------------------------------------------------}
 
 -- | @unsafeCoerce@ that survives GHC's Core linter.
 --
