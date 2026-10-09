@@ -95,6 +95,10 @@ module Polytropos.Core (
   , DictAllFields
   , SubRow(..)
   , SubSum(..)
+  , KnownHash(..)
+  , labelHash
+  , hashVal
+  , fnv1a64
   , ProxyRowFlavour(..)
   , ProductRowProxy
   , SumRowProxy
@@ -106,9 +110,12 @@ module Polytropos.Core (
 
 import Control.Monad               (forM_)
 import Control.Monad.ST            (ST)
+import Data.Bits                   (xor)
+import Data.Char                   (ord)
 import Data.Foldable               (toList)
 import Data.Kind                   (Constraint, Type)
 import Data.Primitive.SmallArray
+import Data.Word                   (Word64)
 -- import Data.Tagged                 (Tagged(..))
 import GHC.Exts                    (Any)
 import GHC.OverloadedLabels        (IsLabel(..))
@@ -569,7 +576,51 @@ class SubSum (sub :: k1) (super :: k2) where
   -- if it does not belong to @sub@ (narrowing).
   subSumNarrowIndices :: [Maybe Word]
   subSumNarrowIndices = undefined
-{-------------------------------------------------------------------------------\n  §6  Utilities\n-------------------------------------------------------------------------------}
+
+{-------------------------------------------------------------------------------
+  §5c  Compile-time label hashing
+-------------------------------------------------------------------------------}
+
+-- | Class providing a compile-time hash for a label 'Symbol'.
+--
+-- The @TcPlugin@ solves this by evaluating the hash (FNV-1a 64-bit) of the literal
+-- symbol at compile time and emitting a literal 'Word' dictionary.
+--
+-- == Purpose and Non-Purpose
+--
+-- * __Purpose:__ @'KnownHash'@ provides O(1) integer keys for dynamic/HAMT label
+--   dispatch, label interning, and name-based field lookup without requiring
+--   'GHC.TypeLits.KnownSymbol' dictionary plumbing or runtime string hashing in hot paths.
+--
+-- * __Non-purpose:__ @'KnownHash'@ is /not/ used for slot offset indexing in
+--   records and sums. Record slot access in @polytropos@ is statically determined
+--   at compile time by 'FieldIndex' and 'ConstructorIndex' (0, 1, 2, ...), which are
+--   dense, collision-free literal offsets into 'Polytropos.Rep.repVals'.
+type KnownHash :: Symbol -> Constraint
+class KnownHash (s :: Symbol) where
+  -- | Literal compile-time hash for label @s@.
+  knownHash :: Word
+  knownHash = undefined
+
+-- | Ergonomic helper to extract the compile-time hash of a label via a proxy
+-- (such as 'Field' or 'Data.Proxy.Proxy').
+labelHash :: forall (s :: Symbol) proxy. KnownHash s => proxy s -> Word
+labelHash _ = knownHash @s
+
+-- | Synonymous with 'labelHash' for compatibility with large-record conventions.
+hashVal :: forall (s :: Symbol) proxy. KnownHash s => proxy s -> Word
+hashVal _ = knownHash @s
+
+-- | FNV-1a 64-bit hash of a 'String', matching the hash computed at compile-time
+-- by the @TcPlugin@ for 'KnownHash'.
+fnv1a64 :: String -> Word
+fnv1a64 str = fromIntegral (foldl' step (14695981039346656037 :: Word64) str)
+  where
+    step !h !c = (h `xor` fromIntegral (ord c)) * 1099511628211
+
+{-------------------------------------------------------------------------------
+  §6  Utilities
+-------------------------------------------------------------------------------}
 
 -- | @unsafeCoerce@ that survives GHC's Core linter.
 --

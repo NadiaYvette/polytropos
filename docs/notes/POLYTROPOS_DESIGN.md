@@ -230,6 +230,15 @@ from the value's type. Closing the gap is a §6 job (obligation 4).
 sub-typing: the TcPlugin emits literal projection slot indices `[Int]` for products,
 and literal injection tags `[Word]` / narrowing maps `[Maybe Word]` for sums.
 
+`KnownHash (s :: Symbol)` provides compile-time literal label hashing (FNV-1a 64-bit):
+the TcPlugin solves `KnownHash` by evaluating the hash of the label literal at compile time
+and emitting a literal `Word` dictionary.
+- **Purpose:** O(1) integer keys for dynamic/HAMT label dispatch, name-based indexing,
+  and interning without requiring `KnownSymbol` dictionary passing or runtime string hashing
+  in hot paths.
+- **Non-purpose:** Not used for row slot indexing in records and sums; slot offsets are
+  determined statically and densely by `FieldIndex` and `ConstructorIndex` (0, 1, 2, ...).
+
 ---
 
 ## 6. The plugin — the load-bearing part

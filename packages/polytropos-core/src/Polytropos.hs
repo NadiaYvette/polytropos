@@ -80,6 +80,11 @@ module Polytropos
   , FieldNames
   , SimpleFieldTypes
   , FieldTypes
+    -- * Label Hashing
+  , KnownHash(..)
+  , labelHash
+  , hashVal
+  , fnv1a64
   ) where
 
 import Polytropos.Core

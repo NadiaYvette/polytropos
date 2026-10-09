@@ -134,13 +134,15 @@ runtime keys without plumbing `KnownSymbol` everywhere and without runtime strin
 hashing in hot paths. If polytropos wants efficient name-based dispatch or
 interning, this is the shape to adopt.
 
-**Current state:** `Field n` and `IsLabel` exist for ergonomics, but there is no
-`KnownHash`-style compile-time hash supply in the plugin story yet.
+**Current state:** Done. `KnownHash (s :: Symbol)` defined in `Polytropos.Core` and
+solved by `Polytropos.Plugin` with literal FNV-1a 64-bit `Word` dictionaries.
+Verified with smoke tests in `polytropos-plugin-smoke` and purpose/non-purpose
+documented in `POLYTROPOS_DESIGN.md`.
 
 **What "done" looks like:**
 
-- A compile-time hash class/mechanism for row labels.
-- A stated purpose: what it is used for, and what it is not used for.
+- A compile-time hash class/mechanism for row labels (done: `KnownHash(..)`).
+- A stated purpose: what it is used for, and what it is not used for (done in `POLYTROPOS_DESIGN.md`).
 
 **Primary files:** `packages/polytropos-core/src/Polytropos/Core.hs`,
 `packages/polytropos-plugin/src/Polytropos/Plugin.hs`.

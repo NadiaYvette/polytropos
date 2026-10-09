@@ -21,6 +21,18 @@ module Polytropos.Plugin
 
 import Prelude
 
+import Data.Bits
+  ( xor
+  )
+
+import Data.Char
+  ( ord
+  )
+
+import Data.Word
+  ( Word64
+  )
+
 import Control.Monad
   ( forM
   , zipWithM
@@ -434,6 +446,8 @@ solveOne state ct
             -> noNew <$> solveSubRow ct cls tys
             | nameOccName name == mkTcOcc "SubSum"
             -> noNew <$> solveSubSum ct cls tys
+            | nameOccName name == mkTcOcc "KnownHash"
+            -> noNew <$> solveKnownHash ct cls tys
             | otherwise
             -> pure $ Right ()
       _ -> pure $ Right ()
@@ -978,6 +992,40 @@ solveSubSum ct cls tys
       = length fs1 == length fs2 &&
         and [ n1 == n2 && t1 `eqType` t2 | ((_, n1, t1), (_, n2, t2)) <- zip fs1 fs2 ]
       | otherwise = False
+
+-------------------------------------------------------------------------------
+-- KnownHash solver
+-------------------------------------------------------------------------------
+
+-- | FNV-1a 64-bit hash for a type-level label symbol.
+--
+-- Standard FNV-1a 64-bit parameters:
+--   offset_basis = 14695981039346656037 (0xcbf29ce484222325)
+--   prime        = 1099511628211        (0x100000001b3)
+fnv1a64FS :: FastString -> Word
+fnv1a64FS fs = fromIntegral (foldl' step (14695981039346656037 :: Word64) (unpackFS fs))
+  where
+    step !h !c = (h `xor` fromIntegral (ord c)) * 1099511628211
+
+solveKnownHash
+  :: Ct
+  -> Class
+  -> [Type]
+  -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
+solveKnownHash ct cls tys = do
+  let mSTy = case tys of
+        [s]    -> Just s
+        [_, s] -> Just s
+        _      -> Nothing
+  case mSTy of
+    Just sTy -> case isStrLitTy (unwrapSynonyms sTy) of
+      Just fs -> do
+        let h = fnv1a64FS fs
+            wExpr = mkCoreConApps wordDataCon [Lit (mkLit (fromIntegral h :: Integer))]
+            dictExpr = evDataConApp (classDataCon cls) tys [wExpr]
+        pure $ Left (EvExpr dictExpr, ct)
+      Nothing -> pure $ Right ()
+    Nothing -> pure $ Right ()
 
 walkRowWithTypes_maybe :: Type -> Maybe [(Int, FastString, Type)]
 walkRowWithTypes_maybe rowTy = do

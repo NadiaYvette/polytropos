@@ -16,6 +16,7 @@ module Main (main) where
 import Data.Functor.Identity (Identity(..))
 import Data.Kind (Type)
 import Data.Primitive.SmallArray (SmallArray, sizeofSmallArray, indexSmallArray)
+import Data.Proxy (Proxy(..))
 import Data.Type.Equality ((:~:)(Refl))
 import GHC.Exts (Any)
 import GHC.TypeLits (Symbol)
@@ -166,6 +167,22 @@ main = defaultMain $ testGroup "plugin RowEq/RowShow smoke"
           case mNarrow of
             Nothing -> pure ()
             Just _  -> error "expected Nothing in narrowVariant"
+      ]
+  , testGroup "Compile-time label hashing (KnownHash)"
+      [ testCase "knownHash solves on literal symbols and matches fnv1a64" $ do
+          knownHash @"x" @?= fnv1a64 "x"
+          knownHash @"greeting" @?= fnv1a64 "greeting"
+          knownHash @"a" @?= fnv1a64 "a"
+          knownHash @"veryLongFieldNameForTestingCompileTimeHashing"
+            @?= fnv1a64 "veryLongFieldNameForTestingCompileTimeHashing"
+      , testCase "labelHash and hashVal proxies extract the literal hash" $ do
+          labelHash (Field @"greeting") @?= fnv1a64 "greeting"
+          hashVal (Field @"greeting") @?= fnv1a64 "greeting"
+          labelHash (Proxy @"a") @?= fnv1a64 "a"
+      , testCase "different labels yield distinct non-zero hashes" $ do
+          knownHash @"x" /= 0 @?= True
+          knownHash @"y" /= 0 @?= True
+          knownHash @"x" /= knownHash @"y" @?= True
       ]
   ]
 
