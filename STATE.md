@@ -5,13 +5,14 @@ Operational frontier. Read with `PLAN.md`; update before ending a session.
 ## Where we are
 
 Phases 3, 4A and 4B/4D foundations are in. Tasks `task-01` through `task-19` have been executed
-and verified through their deterministic gates. Milestone §1.1 of `plans/2026-10-09-plugin-gap-roadmap.md`
-(`AllFields` generic field-class dictionary supply) is implemented and verified. All packages build
-cleanly on GHC 9.14.1 with `-Wall -Werror`:
+and verified through their deterministic gates. Milestones §1.1 (`AllFields` generic field-class dictionary supply)
+and §1.2 (HKD-aware row vocabulary) of `plans/2026-10-09-plugin-gap-roadmap.md` are implemented and verified.
+All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
 - `polytropos-core` passes 32 tests (primitive SmallArray CoW updates, `setFieldsAt` batch updates,
   `MRep` transient builders, `Polytropos` consumer surface, `Record`, `Variant`).
-- `polytropos-plugin-smoke` passes 12 tests with `-fplugin=Polytropos.Plugin` (`RowEq`, `RowShow`,
-  `RowEqSum`, `RowShowSum`, native `OverloadedRecordDot`, and `AllFields` generic dictionary supply).
+- `polytropos-plugin-smoke` passes 17 tests with `-fplugin=Polytropos.Plugin` (`RowEq`, `RowShow`,
+  `RowEqSum`, `RowShowSum`, native `OverloadedRecordDot` on bare and `RecordF Maybe` records,
+  `AllFields` generic dictionary supply across standard and HKD product rows, and `FieldIndex`/`ConstructorIndex` on HKD rows).
 - `polytropos-generics-test` passes 6 tests (`Generic` datatype generics bridge over flat `Rep`,
   `geq`, `gshowsPrec`, product and sum roundtrips).
 - `polytropos-optics-test` passes 6 tests (`optics-core` + `LabelOptic` `#field` lenses and variant prisms).
@@ -29,14 +30,16 @@ cleanly on GHC 9.14.1 with `-Wall -Werror`:
 
 ## What exists
 
-- `packages/polytropos-core/src/Polytropos/Core.hs` — `Row`, `SumRow`, `Rep`,
-  `RowType`, `RowFlavour`, `RowRep`, `HandlerType`, `ResultType`,
-  `productRep`, `injectRep`, `fieldAt`, `setFieldAt` (primitive CoW), `setFieldsAt` (batch update),
-  `MRep`, `thawRep`, `freezeRep`, `writeFieldAt`, `modifyRep` (ST transients), `setFieldSumAt`,
-  `projectRep`, `matchRep`, `RowEq`, `RowShow`, `RowEqSum`, `RowShowSum`, `FieldIndex`,
-  `ConstructorIndex`, `Field(..)`, `IsLabel`, `DictAny`, `noInlineUnsafeCo`
+- `packages/polytropos-core/src/Polytropos/Core.hs` — `RowOf`, `Row`, `ProductRow`,
+  `ProductRowHKD`, `SumRowOf`, `SumRow`, `SumRowHKD`, `SumRowF`, `Rep`,
+  `RowType` (`ProductRowT`, `SumRowT`, `ProductRowHKDT`, `SumRowHKDT`), `RowFlavour`, `RowRep`,
+  `HandlerType`, `ResultType`, `productRep`, `injectRep`, `fieldAt`, `setFieldAt` (primitive CoW),
+  `setFieldsAt` (batch update), `MRep`, `thawRep`, `freezeRep`, `writeFieldAt`, `modifyRep` (ST transients),
+  `setFieldSumAt`, `projectRep`, `matchRep`, `RowEq`, `RowShow`, `RowEqSum`, `RowShowSum`, `FieldIndex`,
+  `ConstructorIndex`, `Field(..)`, `IsLabel`, `DictAny`, `AllFields`, `noInlineUnsafeCo`
 - `packages/polytropos-core/src/Polytropos.hs` — Human-facing consumer module:
-  `Record`, `Variant`, `emptyRecord`, `insertField`, `injectVariant`, pattern synonyms, and re-exports
+  `Record`, `RecordF`, `Variant`, `VariantF`, `emptyRecord`, `emptyRecordF`, `insertField`, `insertFieldF`,
+  `injectVariant`, `injectVariantF`, `projectVariant`, `projectVariantF`, pattern synonyms, and re-exports
 - `packages/polytropos-core/test/Main.hs` — 32 unit tests verifying representations, batch mutations,
   transients, and consumer API
 - `packages/polytropos-plugin/src/Polytropos/Plugin.hs` — TcPlugin that solves:
@@ -81,11 +84,10 @@ cleanly on GHC 9.14.1 with `-Wall -Werror`:
 
 ## What is deliberately missing
 
-- Plugin gap roadmap (§1.2): HKD-aware row vocabulary (`Row f`, `SumRow f`).
 - Plugin gap roadmap (§1.3): Type-level row metadata families (`FieldTypes`) and plugin rewriting.
 - Plugin gap roadmap (§1.4): Subrow/projection evidence for sums/variants (`SubRow`, narrowing indices).
 - Plugin gap roadmap (§1.5): Compile-time label hashing (`KnownHash`).
 
 ## Next action
 
-- Advance to milestone §1.2 in `plans/2026-10-09-plugin-gap-roadmap.md`: HKD-aware row vocabulary.
+- Advance to milestone §1.3 in `plans/2026-10-09-plugin-gap-roadmap.md`: Type-level row metadata + plugin rewriting.

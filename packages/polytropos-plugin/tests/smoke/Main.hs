@@ -12,6 +12,7 @@
 module Main (main) where
 
 import Data.Functor.Identity (Identity(..))
+import Data.Kind (Type)
 import Data.Primitive.SmallArray (SmallArray, sizeofSmallArray, indexSmallArray)
 import GHC.Exts (Any)
 import Test.Tasty (defaultMain, testGroup)
@@ -64,6 +65,10 @@ main = defaultMain $ testGroup "plugin RowEq/RowShow smoke"
           rDot.x @?= Identity (42 :: Int)
       , testCase "r.y == True" $
           rDot.y @?= Identity True
+      , testCase "rHKD.msg == Just \"ok\" on RecordF Maybe" $
+          rHKD.msg @?= Just ("ok" :: String)
+      , testCase "rHKD.code == Nothing on RecordF Maybe" $
+          rHKD.code @?= (Nothing :: Maybe Int)
       ]
   , testGroup "AllFields generic dictionary supply"
       [ testCase "supplies Show dictionaries for homogeneous product row" $
@@ -76,6 +81,19 @@ main = defaultMain $ testGroup "plugin RowEq/RowShow smoke"
           in do
             sizeofSmallArray arr @?= 3
             showAllFields arr (repVals (unRowRep heteroVal)) @?= "\"hello\" 99 True"
+      , testCase "supplies Show dictionaries for HKD product row (Maybe String, Maybe Int)" $
+          let arr = fieldDicts @ProductRowHKDT @(HKDProductRow Maybe) @Show
+          in do
+            sizeofSmallArray arr @?= 2
+            showAllFieldsHKD arr (repVals (unRowRep hkdVal)) @?= "Just \"ok\" Nothing"
+      ]
+  , testGroup "HKD Row Vocabulary"
+      [ testCase "FieldIndex resolves on HKD product row" $ do
+          fieldIndex @_ @"msg" @(HKDProductRow Maybe) @(Maybe String) @?= 0
+          fieldIndex @_ @"code" @(HKDProductRow Maybe) @(Maybe Int) @?= 1
+      , testCase "ConstructorIndex resolves on HKD sum row" $ do
+          constructorIndex @_ @"Success" @(HKDSumRow Maybe) @?= 0
+          constructorIndex @_ @"Failure" @(HKDSumRow Maybe) @?= 1
       ]
   ]
 
@@ -116,3 +134,32 @@ sumC1diff = RowRep (injectRep 0 [slot (8 :: Int)])
 
 sumC2 :: RowRep Identity SumRowT S2 a
 sumC2 = RowRep (injectRep 1 [slot True])
+
+type HKDProductRow (f :: Type -> Type) = '[ "msg" := f String, "code" := f Int ] :: ProductRow f
+
+type HKDSumRow (f :: Type -> Type) = '[ "Success" := HKDProductRow f, "Failure" := '[] ] :: SumRowHKD f
+
+slotMaybe :: Maybe a -> Maybe Any
+slotMaybe = noInlineUnsafeCo
+
+hkdVal :: RowRep Maybe ProductRowHKDT (HKDProductRow Maybe) ()
+hkdVal = RowRep (productRep [slotMaybe (Just ("ok" :: String)), slotMaybe (Nothing :: Maybe Int)])
+
+rHKD :: RowRep Maybe ProductRowHKDT (HKDProductRow Maybe) ()
+rHKD = hkdVal
+
+showAllFieldsHKD :: DictAllFields Show
+                 -> SmallArray (Maybe Any)
+                 -> String
+showAllFieldsHKD arr slots =
+  go 0
+  where
+    n = sizeofSmallArray slots
+    go i
+      | i == n = ""
+      | otherwise =
+          case indexSmallArray arr i of
+            DictAny ->
+              let x :: Any
+                  x = noInlineUnsafeCo (indexSmallArray slots i)
+              in show x <> if i + 1 == n then "" else " " <> go (i + 1)

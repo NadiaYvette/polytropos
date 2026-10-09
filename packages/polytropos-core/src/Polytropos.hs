@@ -47,12 +47,20 @@
 module Polytropos
   ( -- * Ergonomic Types & Patterns
     type Record
+  , type RecordF
   , type Variant
+  , type VariantF
   , data Variant
+  , data VariantF
     -- * Construction
   , emptyRecord
+  , emptyRecordF
   , insertField
+  , insertFieldF
   , injectVariant
+  , injectVariantF
+  , projectVariant
+  , projectVariantF
     -- * Re-exports
   , RowEq(..)
   , RowShow(..)
@@ -64,22 +72,44 @@ module Polytropos
 
 import Polytropos.Core
 import Data.Functor.Identity (Identity(..))
+import Data.Kind (Type)
 import GHC.Exts (toList)
 import Unsafe.Coerce (unsafeCoerce)
 
--- | An open record type, parametrised by a row @r@.
+-- | An open record type, parametrised by a functor @f@ and a row @r@.
+--
+-- A 'RecordF' is a flat, contiguous array of fields where each field slot
+-- contains a value wrapped in @f@.
+type RecordF (f :: Type -> Type) (r :: Row) = RowRep f ProductRowHKDT r ()
+
+-- | An open record type, parametrised by a row @r@ with bare field values (@f ~ Identity@).
 --
 -- A 'Record' is a flat, contiguous array of fields. Its memory layout is a
 -- single pointer to a small array of payload slots, plus an erased constructor
 -- tag (which is always 0 for products).
 type Record (r :: Row) = RowRep Identity ProductRowT r ()
 
--- | An open variant type, parametrised by a sum row @s@.
+-- | An open variant type, parametrised by a functor @f@ and a sum row @s@.
+--
+-- A 'VariantF' is a single value that can be any one of the constructors
+-- defined in the sum row @s@, with each field slot wrapped in @f@.
+type VariantF (f :: Type -> Type) (s :: SumRow) = RowRep f SumRowHKDT s ()
+
+-- | An open variant type, parametrised by a sum row @s@ with bare field values (@f ~ Identity@).
 --
 -- A 'Variant' is a single value that can be any one of the constructors
 -- defined in the sum row @s@. Its memory layout is exactly identical to a
 -- 'Record', except the tag distinguishes which constructor is currently active.
 type Variant (s :: SumRow) = RowRep Identity SumRowT s ()
+
+-- | Construct an empty HKD record.
+emptyRecordF :: RecordF f '[]
+emptyRecordF = RowRep (productRep [])
+
+-- | Insert a new field wrapped in @f@ into an HKD record.
+insertFieldF :: Field n -> f a -> RecordF f r -> RecordF f ((n ':= a) ': r)
+insertFieldF _ fa (RowRep r) =
+  RowRep (productRep (unsafeCoerce fa : toList (repVals r)))
 
 -- | Construct an empty record.
 --
@@ -98,6 +128,23 @@ emptyRecord = RowRep (productRep [])
 insertField :: Field n -> a -> Record r -> Record ((n ':= a) ': r)
 insertField _ a (RowRep r) =
   RowRep (productRep (Identity (unsafeCoerce a) : toList (repVals r)))
+
+-- | Inject an HKD record into an HKD variant for a specific constructor.
+injectVariantF :: forall n s fs f. ConstructorIndex n s => Field n -> RecordF f fs -> VariantF f s
+injectVariantF _ (RowRep r) =
+  RowRep (injectRep (constructorIndex @_ @n @s) (toList (repVals r)))
+
+-- | Project an HKD record from an HKD variant.
+projectVariantF :: forall n s fs f. ConstructorIndex n s => Field n -> VariantF f s -> Maybe (RecordF f fs)
+projectVariantF _ (RowRep r) =
+  case projectRep (constructorIndex @_ @n @s) r of
+    Just vals -> Just (RowRep (productRep vals))
+    Nothing   -> Nothing
+
+-- | Pattern synonym for matching and constructing HKD variants safely.
+pattern VariantF :: forall n s fs f. ConstructorIndex n s => Field n -> RecordF f fs -> VariantF f s
+pattern VariantF f r <- ( (\v -> (Field :: Field n, projectVariantF (Field :: Field n) v)) -> (f, Just r) )
+  where VariantF f r = injectVariantF f r
 
 -- | Inject a record of fields into a variant for a specific constructor.
 --

@@ -37,10 +37,15 @@
 module Polytropos.Core (
     -- * Rows
     Pair(..)
-  , Row
-  , SumRow
-  , ProductRowHKD
   , Field(..)
+  , RowOf
+  , Row
+  , ProductRow
+  , ProductRowHKD
+  , SumRowOf
+  , SumRow
+  , SumRowHKD
+  , SumRowF
     -- * Row flavours (Option D vocabulary)
   , RowType(..)
   , RowFlavour(..)
@@ -87,6 +92,8 @@ module Polytropos.Core (
   , ProxyRowFlavour(..)
   , ProductRowProxy
   , SumRowProxy
+  , ProductRowHKDProxy
+  , SumRowHKDProxy
     -- * Utilities
   , noInlineUnsafeCo
   ) where
@@ -119,12 +126,30 @@ data Field (n :: Symbol) = Field
 instance (l ~ l') => IsLabel l (Field l') where
   fromLabel = Field
 
+-- | A poly-kinded row whose entries have kind @k@.
+--
+-- Poly-kinded over entry kind @k@, mirroring @large-anon@'s @Row k@.
+type RowOf k = [Pair Symbol k]
+
 -- | A /product/ row: an ordered list of field names and field types.
 --
 -- Order is the identity of the row; two rows with the same fields in a
 -- different order are different rows. This is deliberate — it is what lets a
 -- field index be a compile-time constant.
-type Row = [Pair Symbol Type]
+type Row = RowOf Type
+
+-- | An HKD-aware product row parameterised by a field functor @f@.
+--
+-- In an HKD-aware product row, each field value is wrapped in the functor @f@.
+-- Since @f ty@ has kind 'Type' for any @ty :: Type@, this is an alias for
+-- a row where field types are parameterised by @f@.
+type ProductRow (f :: Type -> Type) = RowOf Type
+
+-- | Synonym for 'ProductRow'.
+type ProductRowHKD (f :: Type -> Type) = ProductRow f
+
+-- | A poly-kinded sum row whose constructor payloads have product kind @prod@.
+type SumRowOf prod = [Pair Symbol prod]
 
 -- | A /sum/ row: an ordered list of constructor names, each carrying the
 -- product row of that constructor's fields.
@@ -132,18 +157,14 @@ type Row = [Pair Symbol Type]
 -- The tag of a constructor is its position in this list. Constructor arities
 -- are therefore the lengths of the nested product rows, and may differ
 -- (see note §3, D7).
---
--- NOTE: In the HKD-aware vocabulary this becomes a row whose payload entry is
--- itself a parameterised product row (see `ProductRowHKD`). For now this is
--- the current legacy definition so the existing smoke continues to compile.
---
-type SumRow = [Pair Symbol Row]
+type SumRow = SumRowOf Row
 
--- | A product row parameterised by a field functor @f@ (HKD-style).
---
--- Each entry is @\"name\" := f ty@, and the plugin solves field-class evidence
--- over this shape rather than only over bare @Type@ rows.
-type ProductRowHKD (f :: Type -> Type) = [Pair Symbol (f Type)]
+-- | An HKD-aware sum row parameterised by a field functor @f@.
+-- Each constructor carries an HKD product row.
+type SumRowHKD (f :: Type -> Type) = SumRowOf (ProductRow f)
+
+-- | Synonym for 'SumRowHKD'.
+type SumRowF (f :: Type -> Type) = SumRowHKD f
 
 {-------------------------------------------------------------------------------\n  §1b  Row flavours (Option D vocabulary)\n\n  Concrete row flavours, not kind-polymorphic. Each flavour carries a\n  type-level list of entries; the flavour tells the plugin what kind of\n  entries to expect.\n\n  See PHASE2_SKETCH.md, Piece 1, §1a.\n-------------------------------------------------------------------------------}
 
@@ -157,6 +178,8 @@ data RowType
   | SumRowT            -- ^ constructor name → fieldrow
   | HandlerRowT        -- ^ constructor name → handler type
   | ResultRowT         -- ^ constructor name → result type
+  | ProductRowHKDT     -- ^ field name → f (field type)
+  | SumRowHKDT         -- ^ constructor name → ProductRow f
 
 -- | The class that abstracts over row flavours.
 --
@@ -173,6 +196,14 @@ instance RowFlavour ProductRowT where
 -- | A sumrow entry: a constructor name paired with its fieldrow.
 instance RowFlavour SumRowT where
   type EntryKind SumRowT = Pair Symbol Row
+
+-- | An HKD-aware productrow entry: a field name paired with an applied functor type.
+instance RowFlavour ProductRowHKDT where
+  type EntryKind ProductRowHKDT = Pair Symbol Type
+
+-- | An HKD-aware sumrow entry: a constructor name paired with an HKD productrow.
+instance RowFlavour SumRowHKDT where
+  type EntryKind SumRowHKDT = Pair Symbol Row
 
 -- | A handlerrow entry: a handler type (see 'HandlerType').
 -- instance RowFlavour HandlerRowT where  -- reserved for Phase 4
@@ -466,6 +497,12 @@ type ProductRowProxy = ProxyRowFlavour ProductRowT
 -- | The row-flavour proxy for sum rows, for use in the smoke test once sum
 -- rows are exercised.
 type SumRowProxy = ProxyRowFlavour SumRowT
+
+-- | The row-flavour proxy for HKD product rows.
+type ProductRowHKDProxy = ProxyRowFlavour ProductRowHKDT
+
+-- | The row-flavour proxy for HKD sum rows.
+type SumRowHKDProxy = ProxyRowFlavour SumRowHKDT
 
 -- | A type-level proxy for the TwoInts row, used in the smoke test as a
 -- placeholder until the row vocabulary is finalised.

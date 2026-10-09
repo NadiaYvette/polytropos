@@ -46,8 +46,15 @@ the commit that records it.
 ```haskell
 data Pair a b = a := b
 
-type Row    = [Pair Symbol Type]   -- a product: fields in order
-type SumRow = [Pair Symbol Row]    -- a sum: constructors, each a product row
+type RowOf k         = [Pair Symbol k]
+type Row             = RowOf Type                      -- bare product: fields in order
+type ProductRow f    = RowOf Type                      -- HKD product row parameterised by f
+type ProductRowHKD f = ProductRow f
+
+type SumRowOf prod   = [Pair Symbol prod]
+type SumRow          = SumRowOf Row                    -- bare sum: constructors, each a product row
+type SumRowHKD f     = SumRowOf (ProductRow f)         -- HKD sum: constructors with HKD product rows
+type SumRowF f       = SumRowHKD f
 ```
 
 **D1 — order is identity.** Two product rows with the same fields in a
@@ -60,10 +67,15 @@ may have different types).
 flattening, so a constructor's arity is the length of its own row. This keeps
 `Rep` uniform: there is no separate "sum field list" to keep in sync.
 
-**D3 — the `f` functor parameter is deferred.** `large-anon` threads `f` through
-its rows so `Record f r` can box or delay fields. `Rep` carries `f`, but `Row`
-does not yet, so `f ~ Identity` is the only inhabited case. Deferred, not
-decided against: `Rep f` with `f = Maybe` already means something.
+**D3 — the `f` functor parameter (resolved in §1.2).** `large-anon` threads `f`
+through its rows so `Record f r` can box, validate, or delay fields. In
+`polytropos`, `f` lives in `Rep f a`, `RowRep f r row a`, `RecordF f r`, and
+`VariantF f s`. The row vocabulary is explicitly HKD-aware via `ProductRow f`,
+`SumRowHKD f`, and promoted row flavours `ProductRowHKDT` / `SumRowHKDT`.
+Evidence classes (`FieldIndex`, `ConstructorIndex`, `AllFields`) and plugin solving
+operate directly over HKD rows, allowing generic field-class dictionary supply
+(e.g. `Show` over `Maybe Int` fields) and `OverloadedRecordDot` projection on
+HKD records.
 
 ---
 

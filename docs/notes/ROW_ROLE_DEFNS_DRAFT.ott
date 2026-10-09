@@ -25,24 +25,29 @@
 %%   - OCaml's Reither / object-row encoding
 %%   - any completeness/soundness claim
 %%
-%% NOTE on HKD-style functor parameters (open extension):
-%%   The judgement layer below is deliberately phrased at the row-syntax
-%%   level (label :> type), not at the GHC vocabulary level (label := f ty).
+%% NOTE on HKD-style functor parameters (§1.2 landed implementation):
+%%   The judgement layer below is phrased at the row-syntax level
+%%   (label :> type), not at the GHC vocabulary level (label := f ty).
 %%   That is intentional: the judgement does not need to know the GHC
 %%   spelling of the entry kind in order to state inclusion/equality/widening.
-%%   When polytropos adopts HKD-aware rows (for example ProductRowHKD f,
-%%   SumRowHKD f, or a RowType-flavored variant), the entry-kind change is
-%%   a vocabulary change in the type layer, not a judgement change here.
-%%   Concretely:
-%%     - current shipped vocabulary:  Row    = [Pair Symbol Type]
-%%                                  SumRow = [Pair Symbol Row]
-%%     - HKD-aware target vocabulary (sketch, not committed spelling):
-%%         ProductRowHKD f = [Pair Symbol (f Type)]
-%%         SumRowHKD f     = [Pair Symbol (ProductRowHKD f)]
-%%   The draft leaves the exact spelling open (see PLAN.md / spec sketch
-%%   §7.1) and only commits to the judgement-level property that the entry
-%%   kind may be parameterized by a field functor, so the same inclusion/
-%%   equality/widening judgements can be reused across @f@ instantiations.
+%%   In Polytropos.Core, the HKD-aware row vocabulary is realized as:
+%%     - Poly-kinded row shape:     RowOf k         = [Pair Symbol k]
+%%     - Bare product row:          Row             = RowOf Type
+%%     - HKD product row:           ProductRow f    = RowOf Type
+%%                                  ProductRowHKD f = ProductRow f
+%%     - Poly-kinded sum row:       SumRowOf prod   = [Pair Symbol prod]
+%%     - Bare sum row:              SumRow          = SumRowOf Row
+%%     - HKD sum row:               SumRowHKD f     = SumRowOf (ProductRow f)
+%%                                  SumRowF f       = SumRowHKD f
+%%     - Promoted row flavours:     ProductRowHKDT, SumRowHKDT
+%%     - HKD wrappers in Polytropos:
+%%         RecordF f r  = RowRep f ProductRowHKDT r ()
+%%         VariantF f s = RowRep f SumRowHKDT s ()
+%%   The entry kind metavariable @A@ in the Ott grammar abstracts over the
+%%   payload type of each field: @A@ is instantiated with @f ty@ when @f@
+%%   is threaded through the row. The row inclusion (⊆), row equality (≃),
+%%   and tail contracts (⊆₊, ≃₊) remain invariant across all functor @f@
+%%   instantiations.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% 0. Reference notes (not part of Ott grammar)
@@ -917,31 +922,39 @@ r1 ⊆ r2
 %%     equality judgement ≃₊ forbids this, even when ⊆₊ allows mutual
 %%     compatibility)
 %%
-%% HKD-awareness note (cross-reference to the immediate-next-step spec):
-%%   The judgement vocabulary here is parametric over the entry kind, so it
-%%   already accommodates HKD-style rows without a judgement rewrite. The
-%%   remaining work is in the type/vocabulary layer and the plugin's row-walk/
-%%   evidence-supply layer, not in §3–§7 as stated. See
-%%   plans/2026-10-09-plugin-gap-spec.md §2 for the HKD-aware row-vocabulary
-%%   sketch the user asked to target, and docs/notes/PHASE2_SKETCH.md for the
-%%   Option D / RowType-flavored vocabulary already assumed there.
-%%   Concretely, the judgement's entry-kind metavariable stays at @A@ for now;
-%%   when the vocabulary becomes HKD-aware, @A@ is read as @f ty@ in the
-%%   appropriate entry-kind, and the same ⊆/≃/⊆₊/≃₊ rules apply without
-%%   change. That is the design property the review asked for.
+%% HKD-awareness architecture note (§1.2 landed implementation):
+%%   The formal judgement vocabulary in this draft is parametric over the
+%%   entry kind @A@, which establishes the formal foundation for HKD-style
+%%   rows without requiring a separate judgement system.
 %%
-%% HKD-awareness note (cross-reference to the immediate-next-step spec):
-%%   The judgement vocabulary here is parametric over the entry kind, so it
-%%   already accommodates HKD-style rows without a judgement rewrite. The
-%%   remaining work is in the type/vocabulary layer and the plugin's row-walk/
-%%   evidence-supply layer, not in §3–§7 as stated. See
-%%   plans/2026-10-09-plugin-gap-spec.md §2 for the HKD-aware row-vocabulary
-%%   sketch the user asked to target, and docs/notes/PHASE2_SKETCH.md for the
-%%   Option D / RowType-flavored vocabulary already assumed there.
-%%   Concretely, the judgement's entry-kind metavariable stays at @A@ for now;
-%%   when the vocabulary becomes HKD-aware, @A@ is read as @f ty@ in the
-%%   appropriate entry-kind, and the same ⊆/≃/⊆₊/≃₊ rules apply without
-%%   change. That is the design property the review asked for.
+%%   1. Entry-Kind Parametricity:
+%%      - In bare product rows (Row), each entry is l :> τ with τ : Type.
+%%      - In HKD product rows (ProductRow f), each entry is l :> f τ with
+%%        f : Type → Type and τ : Type. The applied type f τ has kind Type,
+%%        so the entry kind @A@ is instantiated as @f τ@.
+%%      - In HKD sum rows (SumRowHKD f), constructor payloads are themselves
+%%        HKD product rows. The constructor entry is c :> ProductRow f.
+%%
+%%   2. Invariance of the Row Algebra:
+%%      Because entry equality in the shared row-algebra layer (Section 3)
+%%      is defined element-wise by label identity and entry-type equivalence
+%%      (a₁ ≃ a₂), width subtyping (r₁ ⊆ r₂), permutation equivalence (r₁ ≃ r₂),
+%%      and tail decomposition (ρ₁ ⊆₊ ρ₂, ρ₁ ≃₊ ρ₂) apply without change
+%%      when entries are parameterised by @f@. The structural properties of
+%%      rows are decoupled from the specific functor @f@ applied to field payloads.
+%%
+%%   3. TcPlugin Solving Mechanics:
+%%      - Literal Indexing: FieldIndex and ConstructorIndex inspect the
+%%        type-level list of entries and match purely on the label (FastString),
+%%        emitting zero-based integer literals for fields and word literals
+%%        for constructor tags regardless of @f@.
+%%      - Generic Evidence Supply: For AllFields r row c, the plugin walks
+%%        the row using walkRowWithTypes to retrieve each field type (f τ),
+%%        emits sub-wanted constraints for (c (f τ)), and packages the
+%%        resulting dictionaries into a flat DictAllFields SmallArray.
+%%      - Overloaded Record Dot: The plugin solves HasField for RecordF f r
+%%        by projecting the raw payload f Any at the compile-time slot index
+%%        and coercing to the expected field type f τ.
 %%
 %% Dependency direction:
 %%   - row-shape layer → shared row-algebra layer (calls in)

@@ -702,7 +702,7 @@ solveHasField state ct cls tys = do
                   kATy  = typeKind aTy
                   kRowTy = typeKind rowTy
               case splitTyConApp_maybe (unwrapSynonyms rTy) of
-                Just (tcR, []) | occNameString (getOccName tcR) == "ProductRowT" -> do
+                Just (tcR, []) | occNameString (getOccName tcR) `elem` ["ProductRowT", "ProductRowHKDT"] -> do
                   case findFieldType fieldName rowTy of
                     Just (i, actualFieldTy) -> do
                       let getFieldId = case classMethods cls of
