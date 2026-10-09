@@ -168,7 +168,7 @@ by
 %% tail variable.
 %%
 %% Under Reading B, this rule is a widening rule inside the judgement,
-%% NOT a claim that the closed row was already open. See §6.
+%% NOT a claim that the closed row was already open. See §8.
 r  ⊆  ( r )  ρ
 
 %% Open-to-open inclusion — Reading B version.
@@ -200,8 +200,8 @@ r  ⊆  ( r )  ρ
 %%   2. If the known fields are compatible, the closed tail must widen to
 %%      the open tail, which is a tail judgement ρ_closed ⊆₊ ρ_open.
 %% This rule is stated here to expose the case explicitly; whether it is
-%% derivable from the rules above is a separate question (see §10).
-%% NOTE: This rule is deliberately provisional. See §10.
+%% derivable from the rules above is a separate question (see §12).
+%% NOTE: This rule is deliberately provisional. See §12.
 ( l1 :> A  ,  r1 )  ⊆  ( l2 :> B  ,  r2 )  ρ
   ---------------------------------------------
   ... (label compatibility condition) ...   r1 ⊆ ( r2 ) ρ   ρ_closed ⊆₊ ρ
@@ -361,8 +361,186 @@ defn
 %% This section is NOT a rule. It is the §5 design decision stated so that
 %% later commits can check whether the code matches it.
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% 6. Widening as a derived/direct rule
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% 6. Row equality judgement — distinct from inclusion, with tail exactness
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% GOAL (from the session decision):
+%%   Add a row equality judgement that is DISTINCT from bidirectional
+%%   inclusion, with tail exactness, so that nominal equivalence at the row
+%%   level can be stated precisely even where it complicates the inference
+%%   rule set.
+%%
+%% Motivation (Haskell nominal-type backward compatibility):
+%%   Haskell's declared nominal types rely on the ability to state that two
+%%   row shapes are equal in the strict sense required for nominal equality:
+%%   same known fields, same types at the relevant role, AND tails that are
+%%   exactly the same — not merely mutually compatible under widening.
+%%   Without a distinct equality judgement, the draft can only state
+%%   inclusion (directional, widening-allowed) and a row-equality constraint
+%%   form with role-subsumption (§11), but cannot certify that two open rows
+%%   with different tail variables are or are not nominally equal.
+%%   For the shipped literal-index plugin, this matters because a literal
+%%   index assignment is only sound if the row shape is exactly what the
+%%   plugin thinks it is — which is an exactness property, not a
+%%   compatibility property.
+
+defn
+r1 ≃ r2  ::  :: RowEqJ :: 'RowEqJ_'
+{{ com row equality judgement }}
+{{ tex [[r1]] \\simeq [[r2]] }}
+
+%% Empty closed rows are equal.
+()  ≃  ()
+
+%% Known fields must match exactly, label-by-label, with type equality at
+%% the relevant role, and the tails must be exactly equal (not merely
+%% compatible).
+%%
+%% This is the label-by-label decomposition shared with inclusion (§3), but
+%% with equality on the tail instead of inclusion.
+%%   - The type-equality A == B is at the role relevant to the context in
+%%     which the equality judgement is invoked. See §9 (role lattice) and
+%%     §11 (role-subsumption on the row-equality constraint form).
+%%   - The tail equality ρ1 ≃₊ ρ2 is STRICT: two distinct tail variables are
+%%     NOT equal, even if both are open. Tail equality requires either the
+%%     same variable or unification by the constraint layer.
+( l :> A  ,  r1 )  ≃  ( l :> B  ,  r2 )
+  -----------------------------------------
+  A == B        r1 ≃ r2        ρ1 ≃₊ ρ2
+
+%% NOTE: This rule is stated for the case where the row syntax carries a
+%% tail variable (open row). For closed rows (no tail variable in the
+%% syntax), the tail-equality premise is vacuous — see the closed-row
+%% equality rules below.
+
+%% Closedrow equality — exact, no tail variable.
+%% Two closed rows are equal when their known fields match exactly and
+%% there is no tail variable to compare (the tail is empty/fixed).
+%%
+%% This is the exactness property the session decision wanted: a closed row
+%% is equal to another closed row only when they are structurally identical,
+%% including the absent tail. This is what nominal equality requires.
+( l1 :> A  ,  r1 )  ≃  ( l2 :> B  ,  r2 )
+  -----------------------------------------
+  l1 = l2        A == B        r1 ≃ r2
+
+%% Two empty closed rows are equal (already stated above as () ≃ (), but
+%% repeated here for the closed-row decomposition completeness).
+()  ≃  ()
+
+%% Closedrow equality does NOT hold between a closed row and an open row
+%% with the same known fields. The open row's tail is not known to be empty,
+%% so the exactness condition fails.
+%%
+%% This is the case that would be wrong under a bidirectional-inclusion
+%% definition of equality: { a : Int } is included in { a : Int | ρ }, and
+%% { a : Int | ρ } includes { a : Int } only if ρ ⊆₊ (), which ⊆₊ allows
+%% (open tail absorbs closed nil, §4). So bidirectional inclusion would
+%% declare them equal. The equality judgement does not, because the open
+%% row's tail ρ is not ≃₊ ().
+%%
+%% Plugin-facing test: a literal-index plugin must NOT treat { a : Int } and
+%% { a : Int | ρ } as the same row shape, even if ρ is later unified with
+%% the empty tail. The equality judgement refuses until ρ ≃₊ (), which
+%% requires ρ to be unified with the empty tail — at which point ρ is no
+%% longer a distinct variable and the two rows are both closed.
+( l :> A  ,  r1 )  ≃  ( l :> B  ,  r2 )  ρ
+  -----------------------------------------
+  (not derivable — closed row ≠ open row at nominal equality)
+
+%% Openrow equality — tail exactness required.
+%% Two open rows are equal when their known fields match exactly AND their
+%% tails are exactly equal (ρ1 ≃₊ ρ2).
+%%
+%% This is what distinguishes equality from bidirectional inclusion:
+%%   - (r1) ρ1 ⊆ (r2) ρ2  AND  (r2) ρ2 ⊆ (r1) ρ1  can both hold with
+%%     ρ1 ≠ ρ2 (mutual widening compatibility, §4), so bidirectional
+%%     inclusion would wrongly declare them equal.
+%%   - (r1) ρ1 ≃ (r2) ρ2  requires ρ1 ≃₊ ρ2, which requires ρ1 = ρ2 or
+%%     solver unification, so the equality judgement is sound for nominal
+%%     use.
+( r1 )  ρ1  ≃  ( r2 )  ρ2
+  -----------------------------------------
+  r1 ≃ r2        ρ1 ≃₊ ρ2
+
+%% Summary of the exactness distinction:
+%%   Inclusion  ⊆   : tail relationship is  ρ1 ⊆₊ ρ2  (compatibility under
+%%                     widening; distinct open tails CAN be mutually
+%%                     compatible).
+%%   Equality   ≃   : tail relationship is  ρ1 ≃₊ ρ2  (exactness; distinct
+%%                     open tails are NOT equal).
+%%   Bidirectional inclusion  (⊆ ∧ ⊆)  would use ⊆₊ in both directions,
+%%   which does not imply ≃₊. Hence equality cannot be defined as mutual
+%%   inclusion without adding exactness to the inclusion judgement, which
+%%   would break the Reading B design (§3).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% 7. Tail equality judgement — strict, distinct from tail inclusion
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% GOAL (from the session decision):
+%%   Add a tail equality judgement ≃₊ that is STRICT, distinct from the
+%%   tail inclusion judgement ⊆₊ (§4).
+%%
+%% This is the explicit cost the session decision accepted: having two tail
+%% judgements, one for compatibility (⊆₊, used by inclusion) and one for
+%% exactness (≃₊, used by equality), which must be kept consistent by the
+%% condition in the consistency rule below.
+
+defn
+ρ1 ≃₊ ρ2  ::  :: TailEqJ :: 'TailEqJ_'
+{{ com tail equality judgement — strict }}
+
+%% Two identical open tail variables are equal.
+ρ  ≃₊  ρ
+
+%% Two distinct open tail variables are NOT equal.
+%% This is the exactness requirement. Unlike ⊆₊ (§4), which allows
+%% ρ ⊆₊ ρ' for distinct ρ, ρ', the equality judgement does not.
+%%
+%% Constraint layer: if the plugin needs to establish ρ1 ≃₊ ρ2 for distinct
+%% tail variables, it must ask the solver to unify them. If unification
+%% succeeds and yields ρ1 = ρ2, then ≃₊ holds. If unification fails or
+%% yields distinct variables, ≃₊ does not hold.
+ρ  ≃₊  ρ'       (when ρ ≠ ρ')  ← NOT derivable; requires solver unification
+
+%% A tail variable is NOT equal to the closed nil tail.
+%% This is the exactness requirement: an open tail is not known to be empty.
+%%
+%% Contrast with ⊆₊ (§4): ρ ⊆₊ () IS allowed (open tail absorbs closed nil,
+%% as a widening step). ≃₊ does NOT allow it, because the open tail is not
+%% known to be empty.
+ρ  ≃₊  ()       ← NOT derivable
+
+%% Closed/fixed tails: equality requires identity.
+%% If both sides are closed/fixed, they are equal only if they are identical.
+%% This mirrors the closed-row equality exactness condition above.
+ρ1 ≃₊ ρ2       when ρ1 is tail-fixed, ρ2 is tail-fixed, ρ1 = ρ2
+
+%% Non-identical closed/fixed tails are NOT equal.
+(ρ1 is tail-fixed, ρ2 is tail-fixed, ρ1 ≠ ρ2)
+  ≃₊  ρ2      ← NOT derivable
+
+%% Relationship between ⊆₊ and ≃₊ (consistency constraint):
+%%   If ρ1 ≃₊ ρ2 then ρ1 ⊆₊ ρ2 and ρ2 ⊆₊ ρ1.
+%%   The converse does NOT hold: mutual ⊆₊ does not imply ≃₊.
+%%   This is the consistency condition that keeps the two tail judgements
+%%   from drifting. The draft commits to stating it, not to having enforced
+%%   it mechanically.
+%%
+%% Plugin boundary note:
+%%   The plugin should maintain this consistency invariant: whenever it
+%%   establishes ρ1 ≃₊ ρ2 (for the equality judgement), it must also have
+%%   established ρ1 ⊆₊ ρ2 and ρ2 ⊆₊ ρ1 (for the inclusion judgement),
+%%   because ≃₊ is strictly stronger. The converse is not required and
+%%   would be wrong.
+ρ1 ≃₊ ρ2
+-------------
+ρ1 ⊆₊ ρ2        ρ2 ⊆₊ ρ1
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% 8. Widening as a derived/direct rule
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% Widening is the constructive direction of inclusion.
@@ -393,7 +571,7 @@ r  ⇝  ( r )  ρ
 ρ  ⇝  ρ'
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% 7. Role lattice
+%% 9. Role lattice
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% We adopt the two-point role lattice from ICFP 2019.
@@ -425,7 +603,7 @@ R2 ≤ R3
 R1 ≤ R3
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% 8. Row constraints
+%% 10. Row constraints
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% Minimal row constraint forms for this draft.
@@ -450,7 +628,7 @@ constraint, φ ::= {{ com row constraints }}
   ( φ )               :: S :: RowCParen
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% 9. Role-subsumption for row constraints
+%% 11. Role-subsumption for row constraints
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% The key rule that imports the role lattice into the row-constraint
@@ -480,15 +658,17 @@ r1 ⊆ r2              r1 ⊆ r2
 r1 ⊆ r2
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% 10. What this draft does and does not yet commit to
+%% 12. What this draft does and does not yet commit to
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% Commits to:
 %%   - a closed vs open row distinction in the syntax
-%%   - row inclusion as a judgement, not equality
-%%   - at least one closed-to-open widening rule
-%%   - the Nom ≤ Rep lattice
-%%   - a role-subsumption rule for row equality
+%%   - row inclusion as a judgement, not equality (§3)
+%%   - a row equality judgement distinct from inclusion, with tail exactness
+%%     (§6), and a strict tail equality judgement ≃₊ (§7)
+%%   - at least one closed-to-open widening rule (§8)
+%%   - the Nom ≤ Rep lattice (§9)
+%%   - a role-subsumption rule for row equality (§11)
 %%
 %% Does not commit to:
 %%   - whether polytropos will actually adopt row tails in code
@@ -497,18 +677,34 @@ r1 ⊆ r2
 %%   - row polymorphism
 %%   - any claim that the above is a complete or proved system
 %%
-%% Open gap flagged by the §3 Reading B decision:
-%%   The falsifiability criterion asks the draft to state "nominal closed-row
-%%   equality" as well as closed-to-open widening. The draft currently has:
-%%     - row INCLUSION as a judgement (§3), and
-%%     - row EQUALITY as a CONSTRAINT FORM (§8), with role-subsumption
-%%       on that constraint form (§9).
-%%   It does NOT yet have a closed-row EQUALITY judgement distinct from
-%%   inclusion. Whether that judgement is needed is exactly the question
-%%   Reading B was meant to clarify: if inclusion is constraint-emission-
-%%   aware, then the equality case may be subsumed by inclusion + role, or
-%%   it may need its own rule. The draft leaves that question open rather
-%%   than pretend it is settled.
+%% Gap CLOSED by §6/§7 (session decision: distinct equality judgement with
+%% tail exactness):
+%%   The falsifiability criterion asked the draft to state "nominal closed-row
+%%   equality" as well as closed-to-open widening. The draft now has:
+%%     - row INCLUSION as a judgement (§3), constraint-emission-aware
+%%       (Reading B), using the compatibility tail judgement ⊆₊ (§4);
+%%     - row EQUALITY as a CONSTRAINT FORM (§10), with role-subsumption
+%%       on that constraint form (§11);
+%%     - a closed-row EQUALITY JUDGEMENT distinct from inclusion (§6),
+%%       using the STRICT tail equality judgement ≃₊ (§7), so that nominal
+%%       equivalence can be stated precisely without collapsing closedness
+%%       or relying on bidirectional inclusion.
+%%   The gap flagged by the Reading B decision is now closed: the draft can
+%%   state nominal closed-row equality without stepping on itself, because
+%%   the equality judgement's exactness condition (≃₊) is distinct from
+%%   inclusion's compatibility condition (⊆₊), and the two are kept
+%%   consistent by the consistency rule in §7.
+%%
+%% Remaining open question (not a gap, but a design judgment):
+%%   The equality judgement's exactness condition is strict: two open rows
+%%   with different tail variables are NOT equal, even if both tails are
+%%   "open." This is correct for nominal equality, but it means the equality
+%%   judgement cannot fire until the tail variables are unified by the
+%%   constraint layer. Whether this is too restrictive for the plugin's use
+%%   cases — i.e., whether the plugin ever needs to state equality on two
+%%   open rows before their tails are unified — is a question for the plugin
+%%   design, not for this draft. The draft commits to the exactness
+%%   condition, not to having verified that it is sufficient.
 %%
 %% Alignment checks:
 %%   - Row side: OCaml's merge_row_fields / subtype_row / unify_row
@@ -530,26 +726,41 @@ r1 ⊆ r2
 %% boundary contract.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% 11. Boundary contract summary (plain terms)
+%% 13. Boundary contract summary (plain terms)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%% This section restates the §2/§3/§4 decisions as a single boundary contract
-%% between the row-shape layer and the constraint layer, so that a reader who
-%% skipped the judgement rules can still see what the draft is committing to.
+%% This section restates the §2/§3/§4 decisions together with the §6/§7
+%% equality-judgement decision as a single boundary contract between the
+%% row-shape layer and the constraint layer, so that a reader who skipped
+%% the judgement rules can still see what the draft is committing to.
 %%
 %% The two-layer model:
 %%   - The row-shape / representation layer owns row syntax, closed vs open
-%%     distinction, known-field decomposition, and the widening rules that
-%%     turn a closed row into an open row. It does NOT solve tail variables.
-%%   - The constraint layer owns tail judgements ρ1 ⊆₊ ρ2, constraint emission,
-%%     and the discharge of unsolved tail relationships. It does NOT own the
-%%     row syntax or the field-index layout.
+%%     distinction, known-field decomposition, the widening rules (§8) that
+%%     turn a closed row into an open row, and the equality judgement (§6).
+%%     It does NOT solve tail variables.
+%%   - The constraint layer owns the TWO tail judgements — the compatibility
+%%     judgement ρ1 ⊆₊ ρ2 (§4, used by inclusion) and the strict equality
+%%     judgement ρ1 ≃₊ ρ2 (§7, used by equality) — together with constraint
+%%     emission and the discharge of unsolved tail relationships. It does NOT
+%%     own the row syntax or the field-index layout.
 %%   - The shared row-algebra layer (§5) owns the pure row-algebra primitives
 %%     (union, difference, label membership, tail construction, closed/open
 %%     discrimination) that both layers call into, so neither layer
 %%     independently re-derives the algebra.
 %%
-%% The hand-off:
+%% The two tail judgements (the cost of the §6/§7 decision):
+%%   - ⊆₊ (compatibility, §4): used by inclusion. ρ1 ⊆₊ ρ2 holds when the
+%%     tails are compatible under widening. Distinct open tails CAN satisfy
+%%     ρ1 ⊆₊ ρ2 and ρ2 ⊆₊ ρ1 simultaneously (mutual widening compatibility).
+%%   - ≃₊ (exactness, §7): used by equality. ρ1 ≃₊ ρ2 holds only when the
+%%     tails are exactly the same — the same variable, or unified by the
+%%     solver. Distinct open tails do NOT satisfy ≃₊.
+%%   - Consistency: if ρ1 ≃₊ ρ2 then ρ1 ⊆₊ ρ2 and ρ2 ⊆₊ ρ1 (§7).
+%%     The converse does NOT hold: mutual ⊆₊ does not imply ≃₊.
+%%     This is what makes equality distinct from bidirectional inclusion.
+%%
+%% The hand-off (inclusion, §3):
 %%   When the inclusion judgement §3 fires on two open rows with different
 %%   tails, the row-shape layer:
 %%     1. decomposes the known fields label-by-label
@@ -560,12 +771,31 @@ r1 ⊆ r2
 %%     - widening one tail under the §4 tail contract, or
 %%     - rejecting the inclusion if the tail shapes are non-comparable
 %%
+%% The hand-off (equality, §6):
+%%   When the equality judgement §6 fires on two open rows with different
+%%   tails, the row-shape layer:
+%%     1. decomposes the known fields label-by-label with EXACT equality
+%%        (not inclusion) on the known fields
+%%     2. emits ρ1 ≃₊ ρ2 into the constraint layer as a constraint
+%%     3. does NOT attempt to solve ρ1 ≃₊ ρ2 itself
+%%   The constraint layer then discharges ρ1 ≃₊ ρ2 by:
+%%     - unifying the two tail variables (if unification succeeds and yields
+%%       identical variables, ≃₊ holds; otherwise ≃₊ does not hold)
+%%   Unlike inclusion, equality does NOT allow widening as a discharge path:
+%%   two distinct open tails are never ≃₊, even if they are mutually
+%%   ⊆₊-compatible.
+%%
 %% What the plugin is responsible for:
-%%   - inspecting the row shape and decomposing known fields
+%%   - inspecting the row shape and decomposing known fields (for both
+%%     inclusion and equality)
 %%   - emitting tail judgements as constraints when the known-field
 %%     decomposition succeeds but the tails are not identical
+%%     (⊆₊ for inclusion, ≃₊ for equality)
 %%   - rejecting or deferring when the tail shapes are non-comparable
 %%     (both sides closed/fixed and not identical)
+%%   - maintaining the consistency invariant: whenever it establishes
+%%     ρ1 ≃₊ ρ2 for equality, it must also have established ρ1 ⊆₊ ρ2 and
+%%     ρ2 ⊆₊ ρ1 for inclusion
 %%
 %% What the plugin is NOT responsible for:
 %%   - solving unification of row-tail variables (that is the solver's job)
@@ -573,18 +803,22 @@ r1 ⊆ r2
 %%   - re-deriving the row algebra independently of the shared layer
 %%   - pretending that widening is unconditional (it is gated by the §4
 %%     tail contract)
+%%   - treating two open rows with different tail variables as equal (the
+%%     equality judgement ≃₊ forbids this, even when ⊆₊ allows mutual
+%%     compatibility)
 %%
 %% Dependency direction:
 %%   - row-shape layer → shared row-algebra layer (calls in)
 %%   - constraint layer  → shared row-algebra layer (calls in)
-%%   - row-shape layer → constraint layer (hands off tail judgements)
+%%   - row-shape layer → constraint layer (hands off both ⊆₊ and ≃₊
+%%     judgements)
 %%   - constraint layer  → row-shape layer (no direct dependency; only
 %%     receives emitted constraints)
 %%   - shared row-algebra layer → neither consumer (pure, no dependency)
 %%
-%% This is the dependency topology the session decisions §2/§3/§4 imply.
-%% Whether it is the right topology is still open (see §5's trade-off
-%% statement). The draft commits to stating it, not to having implemented it.
+%% The two tail judgements are the explicit cost the session decision
+%% accepted for having a distinct equality judgement with tail exactness.
+%% The draft commits to stating that cost, not to having minimized it.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% end of draft
