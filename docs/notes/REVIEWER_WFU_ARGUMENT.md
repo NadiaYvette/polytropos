@@ -126,12 +126,17 @@ the argument; they are not derived from one another.
 
 ### 2.3 "Tilde at a role" constraint form — GHC-native citation
 
-**Citation (GHC, not corespec):** GHC compiler source for equality
-predicates and the role machinery on the constraint/coercion side:
+**Canonical citation (GHC, not corespec):** the draft's §0 GHC anchor is
+the canonical GHC-native paragraph for "the plugin emits ~ constraints at
+roles, which GHC already supports." The paragraph below is the same
+content as §0's GHC anchor; keep these two in sync.
+
+**GHC compiler source for equality predicates and the role machinery on
+the constraint/coercion side:**
 
 - `compiler/Language/Haskell/Syntax/Basic.hs` — `data Role = Nominal |
-  Representational | Phantom` (with the note that the constructor order
-  coincides with the *super*typing relation on roles)
+  Representational | Phantom` (constructor order coincides with the
+  *super*typing relation on roles)
 - `compiler/GHC/Core/Predicate.hs` — `data EqRel = NomEq | ReprEq`,
   `eqRelRole :: EqRel -> Role`, `mkEqPredRole :: Role -> Type -> Type
   -> PredType`, `mkNomEqPred`, `mkReprEqPred`; the `EqPred EqRel Type
@@ -140,8 +145,8 @@ predicates and the role machinery on the constraint/coercion side:
 - `compiler/GHC/Core/TyCo/Rep.hs` — `Note [Roles]` (the GHC roles
   note; points to `docs/core-spec/core-spec.pdf` and to
   https://gitlab.haskell.org/ghc/ghc/wikis/roles-implementation, and to
-  Weirich et al., "Generative Type Abstraction and Type-level
-  Computation," POPL 2010); coercion role machinery including `SubCo`
+  Weirich et al., *Generative Type Abstraction and Type-level
+  Computation*, POPL 2010); coercion role machinery including `SubCo`
   (nominal-to-representational demotion) and `TyConAppCo` role
   parameter
 - `compiler/GHC/Core/Coercion.hs` — `Note [Roles]` on the coercion
@@ -172,7 +177,7 @@ constraint" or a "row-equality constraint" specifically. GHC has
 equality predicates at a role; our draft's `r1 ~ r2 : A / R` is that
 machinery applied to row types. Whether GHC's existing role machinery
 reaches row types the way our draft assumes is a question for the GHC
- reviewer and for the plugin's actual emission behavior, not a claim this
+reviewer and for the plugin's actual emission behavior, not a claim this
 note makes on GHC's behalf.
 
 **Draft sections that map:** `ROW_ROLE_DEFNS_DRAFT.ott` §0 (the GHC-
@@ -207,18 +212,74 @@ or role apparatus.
 
 The plugin-boundary argument (literal emission, no type-level search,
 stated hand-off, tested obligations) is justified by internal repo
-sources, not by external citations:
+sources, not by external citations.
 
-- `packages/polytropos-plugin/src/Polytropos/Plugin.hs` (or wherever the
-  plugin entry lives)
-- `packages/polytropos-core/test/Main.hs` (the hand-written RowEq/RowShow
-  instances that specify what the plugin must emit)
-- `docs/notes/POLYTROPOS_DESIGN.md` §6 (the plugin is the load-bearing
-  part)
-- `packages/polytropos-plugin/` cabal and test suites
+**Sources consulted for this update:**
 
-The argument here is: *the tests specify the plugin; the plugin is literal;
-the boundary contract in the draft makes the hand-off explicit.*
+- `packages/polytropos-core/test/Main.hs` — hand-written `RowEq` /
+  `RowShow` instances as the emission spec
+- `packages/polytropos-plugin/src/Polytropos/Plugin.hs` — plugin
+  implementation
+- `packages/polytropos-plugin/tests/smoke/Main.hs` — plugin smoke tests
+- `packages/polytropos-core/src/Polytropos/Core.hs` — evidence class
+  declarations and `Rep` / `RowRep` surface
+- `.agents/rules/plugin-invariants.md` — literal-evidence and Core-AST
+  synthesis invariants
+
+**What the sources say, concretely:**
+
+- The `RowEq ProductRowT R2` and `RowShow ProductRowT R2` instances in
+  `Main.hs` are the literal spec: tag equality, arity equality, then slot
+  comparisons at fixed indices (`intAt0`, `boolAt1`) with no type-level
+  search. The plugin's `solveRowEq` emits exactly that shape: tag compare
+  (`psRepTag` / `psEqClass` / `$fEqWord`), arity compare (`psRepArity` /
+  `$fEqInt`), then `compareField` per walked field at literal indices.
+- The plugin walks the row once via `walkRowWithTypes` (a static type-tree
+  walk over the row carried in the `RowRep` type), emits literal `Int`
+  indices from that walk, and builds Core dictionaries by `mkCoreLams` /
+  `mkCoreApps` over `unRowRep`, `repTag`, `repArity`, `fieldAt`,
+  `noInlineUnsafeCo`. It does not induct over the row at the use site.
+- The plugin's `getEqDict` / `getShowDict` are closed over `Int`, `Bool`,
+  `Word`. Any field type outside that set is a hard `error` at plugin
+  solve time, not a type-level fallback. That is a concrete scope bound,
+  not an unbounded claim.
+- `RowEqSum` / `RowShowSum` are implemented by the plugin (tag dispatch,
+  per-constructor field walks), and the smoke test (`Main.hs` in
+  `tests/smoke`) exercises them. The core test suite only writes a
+  `RowEqSum` instance for a single-constructor sum by hand; the plugin's
+  sum story is exercised through the smoke tests, not the hand-written
+  core instances.
+- `HasField` is implemented by the plugin for native `OverloadedRecordDot`.
+  That is a separate solver path (`solveHasField`) and is exercised by the
+  smoke test's `OverloadedRecordDot` group.
+
+**What is still open (is not yet specified by the sources):**
+
+- The plugin currently solves the core literal-emission obligations for
+  product rows and sum rows over `Int`, `Bool`, `Word` only. The coverage
+  of other field types is not extended by any source here; it is a planned
+  expansion, not an existing fact.
+- `FieldIndex` / `ConstructorIndex` are solved literally by the plugin,
+  but the core test suite does not currently assert them through the plugin
+  in the same way it asserts `RowEq`/`RowShow` through the smoke tests; the
+  smoke tests exercise `HasField` (via `OverloadedRecordDot`) but not
+  `FieldIndex`/`ConstructorIndex` directly.
+- The plugin's sum-dispatch bodies are tree-shaped conditional dispatches
+  over constructor tags. That is literal emission, but the shape is not
+  covered by a hand-written sum instance in the core test suite in the same
+  way the product case is. The smoke tests cover it at runtime, which is the
+  plugin's acceptance gate.
+
+**The argument, restated with the gaps visible:**
+
+The tests specify the plugin; the plugin is literal; the boundary contract
+in the draft makes the hand-off explicit. The hand-written `RowEq`/`RowShow`
+instances in `Main.hs` are the spec for product rows; the plugin's
+`solveRowEq`/`solveRowShow` emit that spec shape as Core AST literals. The
+sum case and `HasField` are specified and accepted through the plugin smoke
+tests rather than hand-written core instances. The gaps above are concrete
+scope vs. implementation differentials, not a failure of the literal-emission
+invariant.
 
 ---
 
