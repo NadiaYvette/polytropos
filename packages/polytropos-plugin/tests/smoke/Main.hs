@@ -23,6 +23,7 @@ import Test.Tasty (defaultMain, testGroup)
 import Test.Tasty.HUnit (testCase, (@?=))
 
 import Polytropos.Core
+import Polytropos
 
 -- | R2: a two-field product: a :: Int, b :: Bool.
 type R2 = '[ "a" := Int, "b" := Bool ]
@@ -122,6 +123,50 @@ main = defaultMain $ testGroup "plugin RowEq/RowShow smoke"
           case fieldTypesEmpty of
             Refl -> pure ()
       ]
+  , testGroup "SubRow and SubSum evidence"
+      [ testCase "SubRow emits projection indices" $ do
+          subRowIndices @SmallProd @BigProd @?= [2, 0]
+          subRowIndices @SmallProd @SmallProd @?= [0, 1]
+      , testCase "projectRecord extracts sub-record fields" $ do
+          let bigRec :: Record BigProd
+              bigRec = insertField (Field @"a") (10 :: Int)
+                     $ insertField (Field @"b") True
+                     $ insertField (Field @"c") "hello"
+                     $ emptyRecord
+              smallRec :: Record SmallProd
+              smallRec = projectRecord bigRec
+          smallRec.c @?= Identity "hello"
+          smallRec.a @?= Identity (10 :: Int)
+      , testCase "SubSum emits inject and narrow indices" $ do
+          subSumInjectIndices @SmallSum @BigSum @?= [0, 2]
+          subSumNarrowIndices @SmallSum @BigSum @?= [Just 0, Nothing, Just 1]
+      , testCase "widenVariant remaps constructor tag to super-row" $ do
+          let vC_small :: Variant SmallSum
+              vC_small = injectVariant (Field @"C") (insertField (Field @"y") True emptyRecord)
+              vC_wide :: Variant BigSum
+              vC_wide = widenVariant vC_small
+          repTag (unRowRep vC_wide) @?= 2
+          case projectVariant (Field @"C") vC_wide of
+            Just (r :: Record '[ "y" := Bool ]) -> r.y @?= Identity True
+            Nothing -> error "expected Just in widenVariant"
+      , testCase "narrowVariant succeeds on matching constructor" $ do
+          let vC_small :: Variant SmallSum
+              vC_small = injectVariant (Field @"C") (insertField (Field @"y") True emptyRecord)
+              vC_wide :: Variant BigSum
+              vC_wide = widenVariant vC_small
+          case narrowVariant @SmallSum vC_wide of
+            Just vC' -> case projectVariant (Field @"C") vC' of
+              Just (r :: Record '[ "y" := Bool ]) -> r.y @?= Identity True
+              Nothing -> error "expected Just in narrowVariant"
+            Nothing -> error "expected Just in narrowVariant"
+      , testCase "narrowVariant returns Nothing for super constructor absent in sub" $ do
+          let vB_big :: Variant BigSum
+              vB_big = injectVariant (Field @"B") (insertField (Field @"x") (42 :: Int) emptyRecord)
+              mNarrow = narrowVariant @SmallSum vB_big
+          case mNarrow of
+            Nothing -> pure ()
+            Just _  -> error "expected Nothing in narrowVariant"
+      ]
   ]
 
 -- | Use a supplied array of type-erased Show dictionaries to show every slot.
@@ -211,3 +256,11 @@ showAllFieldsHKD arr slots =
               let x :: Any
                   x = noInlineUnsafeCo (indexSmallArray slots i)
               in show x <> if i + 1 == n then "" else " " <> go (i + 1)
+
+-- | Big product and sub-product for testing SubRow evidence.
+type BigProd = '[ "a" := Int, "b" := Bool, "c" := String ]
+type SmallProd = '[ "c" := String, "a" := Int ]
+
+-- | Big sum and sub-sum for testing SubSum evidence.
+type BigSum = '[ "A" := '[], "B" := '[ "x" := Int ], "C" := '[ "y" := Bool ] ]
+type SmallSum = '[ "A" := '[], "C" := '[ "y" := Bool ] ]

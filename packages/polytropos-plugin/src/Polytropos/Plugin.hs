@@ -23,6 +23,7 @@ import Prelude
 
 import Control.Monad
   ( forM
+  , zipWithM
   )
 
 import GHC.Core.Make
@@ -100,6 +101,9 @@ import GHC.Builtin.Types
   ( boolTy
   , trueDataCon
   , falseDataCon
+  , maybeTyCon
+  , nothingDataCon
+  , justDataCon
   , typeSymbolKind
   , liftedTypeKind
   , mkPromotedPairTy
@@ -426,6 +430,10 @@ solveOne state ct
             -> noNew <$> solveHasField state ct cls tys
             | nameOccName name == mkTcOcc "AllFields"
             -> solveAllFields state ct cls tys
+            | nameOccName name == mkTcOcc "SubRow"
+            -> noNew <$> solveSubRow ct cls tys
+            | nameOccName name == mkTcOcc "SubSum"
+            -> noNew <$> solveSubSum ct cls tys
             | otherwise
             -> pure $ Right ()
       _ -> pure $ Right ()
@@ -890,6 +898,116 @@ solveAllFields state ct cls tys
 
       pure $ Left ((EvExpr dictExpr, ct), newWanteds)
   | otherwise = pure $ Right ()
+
+-------------------------------------------------------------------------------
+-- SubRow and SubSum solvers
+-------------------------------------------------------------------------------
+
+solveSubRow
+  :: Ct
+  -> Class
+  -> [Type]
+  -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
+solveSubRow ct cls tys
+  | length tys >= 2
+  , let subTy   = tys !! (length tys - 2)
+  , let superTy = last tys
+  , Just subFields   <- walkRowWithTypes_maybe subTy
+  , Just superFields <- walkRowWithTypes_maybe superTy
+  = case matchFields subFields superFields of
+      Just indices -> do
+        let intDataExpr i = mkCoreConApps intDataCon [Lit (mkLit (fromIntegral i :: Integer))]
+            indicesExpr   = mkListExpr intTy (map intDataExpr indices)
+            dictExpr      = evDataConApp (classDataCon cls) tys [indicesExpr]
+        pure $ Left (EvExpr dictExpr, ct)
+      Nothing -> pure $ Right ()
+  | otherwise = pure $ Right ()
+  where
+    matchFields :: [(Int, FastString, Type)] -> [(Int, FastString, Type)] -> Maybe [Int]
+    matchFields [] _ = Just []
+    matchFields ((_, name, fieldTy) : rest) sFields =
+      case [ j | (j, sName, sFieldTy) <- sFields, sName == name, fieldTy `eqType` sFieldTy ] of
+        (j : _) -> (j :) <$> matchFields rest sFields
+        []      -> Nothing
+
+solveSubSum
+  :: Ct
+  -> Class
+  -> [Type]
+  -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
+solveSubSum ct cls tys
+  | length tys >= 2
+  , let subTy   = tys !! (length tys - 2)
+  , let superTy = last tys
+  , Just subCons   <- walkSumRowWithTypes_maybe subTy
+  , Just superCons <- walkSumRowWithTypes_maybe superTy
+  = case matchCons subCons superCons of
+      Just injectIndices -> do
+        let wordTy = mkTyConTy wordTyCon
+            wordDataExpr (w :: Word) = mkCoreConApps wordDataCon [Lit (mkLit (fromIntegral w :: Integer))]
+            injectExpr = mkListExpr wordTy (map wordDataExpr injectIndices)
+
+            narrowIndices =
+              [ case [ fromIntegral i :: Word | (i, sName, _) <- subCons, sName == superName ] of
+                  (subIdx : _) -> Just subIdx
+                  []           -> Nothing
+              | (_j, superName, _superRow) <- superCons
+              ]
+
+            maybeWordTy = mkAppTy (mkTyConTy maybeTyCon) wordTy
+            narrowDataExpr Nothing = mkCoreConApps nothingDataCon [Type wordTy]
+            narrowDataExpr (Just w) = mkCoreConApps justDataCon [Type wordTy, wordDataExpr w]
+            narrowExpr = mkListExpr maybeWordTy (map narrowDataExpr narrowIndices)
+
+            dictExpr = evDataConApp (classDataCon cls) tys [injectExpr, narrowExpr]
+        pure $ Left (EvExpr dictExpr, ct)
+      Nothing -> pure $ Right ()
+  | otherwise = pure $ Right ()
+  where
+    matchCons :: [(Int, FastString, Type)] -> [(Int, FastString, Type)] -> Maybe [Word]
+    matchCons [] _ = Just []
+    matchCons ((_, conName, conRowTy) : rest) sCons =
+      case [ j | (j, sName, sRowTy) <- sCons, sName == conName, sameRow conRowTy sRowTy ] of
+        (j : _) -> (fromIntegral j :) <$> matchCons rest sCons
+        []      -> Nothing
+
+    sameRow r1 r2
+      | r1 `eqType` r2 = True
+      | Just fs1 <- walkRowWithTypes_maybe r1
+      , Just fs2 <- walkRowWithTypes_maybe r2
+      = length fs1 == length fs2 &&
+        and [ n1 == n2 && t1 `eqType` t2 | ((_, n1, t1), (_, n2, t2)) <- zip fs1 fs2 ]
+      | otherwise = False
+
+walkRowWithTypes_maybe :: Type -> Maybe [(Int, FastString, Type)]
+walkRowWithTypes_maybe rowTy = do
+  xs <- myExtractPromotedList (unwrapSynonyms rowTy)
+  zipWithM extractField [0..] xs
+  where
+    extractField i elemTy =
+      case splitTyConApp_maybe (unwrapSynonyms elemTy) of
+        Just (_, args)
+          | length args >= 2
+          , let nameTy = args !! (length args - 2)
+          , let fieldTy = args !! (length args - 1)
+          , Just n <- isStrLitTy (unwrapSynonyms nameTy)
+          -> Just (i, n, fieldTy)
+        _ -> Nothing
+
+walkSumRowWithTypes_maybe :: Type -> Maybe [(Int, FastString, Type)]
+walkSumRowWithTypes_maybe rowTy = do
+  xs <- myExtractPromotedList (unwrapSynonyms rowTy)
+  zipWithM extractCon [0..] xs
+  where
+    extractCon i elemTy =
+      case splitTyConApp_maybe (unwrapSynonyms elemTy) of
+        Just (_, args)
+          | length args >= 2
+          , let nameTy = args !! (length args - 2)
+          , let conRowTy = args !! (length args - 1)
+          , Just n <- isStrLitTy (unwrapSynonyms nameTy)
+          -> Just (i, n, conRowTy)
+        _ -> Nothing
 
 -------------------------------------------------------------------------------
 -- Row walking

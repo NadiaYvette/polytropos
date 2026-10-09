@@ -986,6 +986,23 @@ r1 ⊆ r2
 %%      - Malformed rows: Any element lacking a string literal label or failing
 %%        tuple structure returns TcPluginNoRewrite.
 %%
+%% Subrow & Subvariant evidence layer (§1.4 landed implementation):
+%%   The formal row inclusion judgement r₁ ⊆ r₂ is realized in the Haskell
+%%   substrate via two TcPlugin-solved evidence classes:
+%%     - SubRow (sub :: k1) (super :: k2):
+%%       Holds when sub is a product subrow of super (every field l :> τ in sub
+%%       appears in super with the identical field type τ).
+%%       Evidence: subRowIndices :: [Int] — the 0-based projection slot indices.
+%%     - SubSum (sub :: k1) (super :: k2):
+%%       Holds when sub is a variant subsum of super (every constructor c :> prod
+%%       in sub appears in super with matching field row).
+%%       Evidence:
+%%         * subSumInjectIndices :: [Word] — injection tag indices in super (widening)
+%%         * subSumNarrowIndices :: [Maybe Word] — narrowing tag indices (projection).
+%%   Widening is total and executes in O(1) by updating repTag without modifying
+%%   the payload SmallArray. Narrowing is partial and executes in O(1) by checking
+%%   the active tag against the narrowing map.
+%%
 %% Dependency direction:
 %%   - row-shape layer → shared row-algebra layer (calls in)
 %%   - constraint layer  → shared row-algebra layer (calls in)

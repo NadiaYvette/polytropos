@@ -93,6 +93,8 @@ module Polytropos.Core (
   , evidenceAllFields
   , AllFields(..)
   , DictAllFields
+  , SubRow(..)
+  , SubSum(..)
   , ProxyRowFlavour(..)
   , ProductRowProxy
   , SumRowProxy
@@ -537,8 +539,36 @@ type ProductRowHKDProxy = ProxyRowFlavour ProductRowHKDT
 -- | The row-flavour proxy for HKD sum rows.
 type SumRowHKDProxy = ProxyRowFlavour SumRowHKDT
 
--- | A type-level proxy for the TwoInts row, used in the smoke test as a
--- placeholder until the row vocabulary is finalised.
+{-------------------------------------------------------------------------------
+  §5b  Subrow and Subsum evidence classes
+-------------------------------------------------------------------------------}
+
+-- | Sub-row relationship between two product rows.
+--
+-- @'SubRow' sub super@ holds when every field in @sub@ occurs in @super@ with
+-- the same field type. The plugin emits the 0-based projection slot indices
+-- as evidence.
+type SubRow :: forall {k1} {k2}. k1 -> k2 -> Constraint
+class SubRow (sub :: k1) (super :: k2) where
+  -- | For each field in @sub@, its 0-based slot index in @super@.
+  subRowIndices :: [Int]
+  subRowIndices = undefined
+
+-- | Sub-sum relationship between two sum rows (variant widening & narrowing).
+--
+-- @'SubSum' sub super@ holds when every constructor in @sub@ occurs in @super@
+-- with identical field rows. The plugin emits the injection tag indices
+-- (for widening) and narrowing tag indices (for projection) as evidence.
+type SubSum :: forall {k1} {k2}. k1 -> k2 -> Constraint
+class SubSum (sub :: k1) (super :: k2) where
+  -- | For each constructor in @sub@, its tag in @super@ (widening).
+  subSumInjectIndices :: [Word]
+  subSumInjectIndices = undefined
+
+  -- | For each constructor in @super@, its tag in @sub@ if present, or 'Nothing'
+  -- if it does not belong to @sub@ (narrowing).
+  subSumNarrowIndices :: [Maybe Word]
+  subSumNarrowIndices = undefined
 {-------------------------------------------------------------------------------\n  §6  Utilities\n-------------------------------------------------------------------------------}
 
 -- | @unsafeCoerce@ that survives GHC's Core linter.

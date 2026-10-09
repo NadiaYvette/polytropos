@@ -133,17 +133,18 @@ happily. The alternative — a uniform arity across a sum — would let the tag
 double as a discriminant into a fixed-size array, at the cost of excluding
 GADT-style heterogeneous sums. Heterogeneity is more valuable.
 
-**D8 — widening is total, narrowing is not.** Injecting a constructor of a
+**D8 — widening is total, narrowing is not (resolved in §1.4).** Injecting a constructor of a
 sub-row into a super-row sum is always well-defined: the tag is still valid in
-the wider row *only if the sub-row is a prefix-compatible subset*, which is
-precisely the condition a `SubSum` evidence value would carry. Projecting out
-of a wider row is **not** total: an unexpected tag has no statically known
-recovery, so `projectRep` returns `Maybe` and the failure is observable rather
-than a type error.
-
-This asymmetry is real and is inherited from records in a modified form
-(records' `SubRow` is total in both directions because field access is total;
-sum access is not). It is the reason §4 is open.
+the wider row *only if the sub-row is a subset*, which is
+precisely the condition a `SubSum sub super` evidence class carries. Widening
+(`widenVariant`, `widenVariantF`) is total and re-maps constructor tags in O(1)
+using `subSumInjectIndices :: [Word]`.
+Narrowing a wider variant to a sub-row (`narrowVariant`, `narrowVariantF`) is
+partial: `subSumNarrowIndices :: [Maybe Word]` maps the active super-tag to `Just subTag`
+if the constructor belongs to `sub`, or `Nothing` otherwise, avoiding redundant
+runtime branching.
+Similarly for product rows, `SubRow sub super` emits `subRowIndices :: [Int]`
+enabling `projectRecord` and `projectRecordF` to extract sub-records in O(N).
 
 ---
 
@@ -224,6 +225,10 @@ from the value's type. Closing the gap is a §6 job (obligation 4).
 
 `DictAny` is present for the plugin's type-erased field dictionaries, mirroring
 `large-anon`. Its fate after literal emission is §7 Q4.
+
+`SubRow sub super` and `SubSum sub super` provide the evidence for structural
+sub-typing: the TcPlugin emits literal projection slot indices `[Int]` for products,
+and literal injection tags `[Word]` / narrowing maps `[Maybe Word]` for sums.
 
 ---
 

@@ -61,6 +61,15 @@ module Polytropos
   , injectVariantF
   , projectVariant
   , projectVariantF
+    -- * Sub-row & Sub-variant operations
+  , SubRow(..)
+  , SubSum(..)
+  , projectRecord
+  , projectRecordF
+  , widenVariant
+  , widenVariantF
+  , narrowVariant
+  , narrowVariantF
     -- * Re-exports
   , RowEq(..)
   , RowShow(..)
@@ -76,6 +85,7 @@ module Polytropos
 import Polytropos.Core
 import Data.Functor.Identity (Identity(..))
 import Data.Kind (Type)
+import Data.Primitive.SmallArray (indexSmallArray)
 import GHC.Exts (toList)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -181,3 +191,67 @@ projectVariant _ (RowRep r) =
 pattern Variant :: forall n s fs. ConstructorIndex n s => Field n -> Record fs -> Variant s
 pattern Variant f r <- ( (\v -> (Field :: Field n, projectVariant (Field :: Field n) v)) -> (f, Just r) )
   where Variant f r = injectVariant f r
+
+-- | Project a sub-record from a super-record (HKD).
+--
+-- Extracts only the fields present in @sub@ in the order specified by @sub@.
+projectRecordF :: forall sub super f. SubRow sub super => RecordF f super -> RecordF f sub
+projectRecordF (RowRep rep) =
+  let vals = repVals rep
+      idxs = subRowIndices @sub @super
+      newSlots = [ indexSmallArray vals i | i <- idxs ]
+  in RowRep (productRep newSlots)
+
+-- | Project a sub-record from a super-record (bare).
+--
+-- Extracts only the fields present in @sub@ in the order specified by @sub@.
+projectRecord :: forall sub super. SubRow sub super => Record super -> Record sub
+projectRecord (RowRep rep) =
+  let vals = repVals rep
+      idxs = subRowIndices @sub @super
+      newSlots = [ indexSmallArray vals i | i <- idxs ]
+  in RowRep (productRep newSlots)
+
+-- | Widen a variant from a sub-row to a super-row (HKD).
+--
+-- Widening is total and constant time: the active constructor tag in @sub@ is
+-- remapped to its corresponding tag in @super@, preserving payload slots.
+widenVariantF :: forall sub super f. SubSum sub super => VariantF f sub -> VariantF f super
+widenVariantF (RowRep rep) =
+  let tag = fromIntegral (repTag rep) :: Int
+      superTag = (subSumInjectIndices @sub @super) !! tag
+  in RowRep (Rep superTag (repVals rep))
+
+-- | Widen a variant from a sub-row to a super-row (bare).
+--
+-- Widening is total and constant time: the active constructor tag in @sub@ is
+-- remapped to its corresponding tag in @super@, preserving payload slots.
+widenVariant :: forall sub super. SubSum sub super => Variant sub -> Variant super
+widenVariant (RowRep rep) =
+  let tag = fromIntegral (repTag rep) :: Int
+      superTag = (subSumInjectIndices @sub @super) !! tag
+  in RowRep (Rep superTag (repVals rep))
+
+-- | Narrow a variant from a super-row to a sub-row (HKD).
+--
+-- Returns 'Just' with the active tag remapped to @sub@ if the constructor belongs
+-- to @sub@, or 'Nothing' if the constructor is not in @sub@.
+narrowVariantF :: forall sub super f. SubSum sub super => VariantF f super -> Maybe (VariantF f sub)
+narrowVariantF (RowRep rep) =
+  let tag = fromIntegral (repTag rep) :: Int
+      narrowMap = subSumNarrowIndices @sub @super
+  in case drop tag narrowMap of
+    (Just subTag : _) -> Just (RowRep (Rep subTag (repVals rep)))
+    _                 -> Nothing
+
+-- | Narrow a variant from a super-row to a sub-row (bare).
+--
+-- Returns 'Just' with the active tag remapped to @sub@ if the constructor belongs
+-- to @sub@, or 'Nothing' if the constructor is not in @sub@.
+narrowVariant :: forall sub super. SubSum sub super => Variant super -> Maybe (Variant sub)
+narrowVariant (RowRep rep) =
+  let tag = fromIntegral (repTag rep) :: Int
+      narrowMap = subSumNarrowIndices @sub @super
+  in case drop tag narrowMap of
+    (Just subTag : _) -> Just (RowRep (Rep subTag (repVals rep)))
+    _                 -> Nothing
