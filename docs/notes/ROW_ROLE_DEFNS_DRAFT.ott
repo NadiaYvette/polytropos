@@ -57,13 +57,34 @@
 %%
 %% GHC-native anchor (constraint form — GHC, not corespec):
 %%   The row-equality constraint form r1 ~ r2 : A / R is GHC's existing
-%%   equality constraint (~) parameterized by a role. The draft does NOT
-%%   invent a new constraint kind. The citation for this is GHC's own
-%%   source for equality constraints and roles — NOT corespec, which is the
-%%   anchor for the lattice/subsumption apparatus only. The GHC citation is
-%%   recorded in docs/notes/REVIEWER_WFU_ARGUMENT.md and is the canonical
-%%   source for "the plugin emits ~ constraints at roles, which GHC already
-%%   supports."
+%%   equality predicate parameterized by a role. The draft does NOT invent
+%%   a new constraint kind. The canonical citation is GHC's own source:
+%%     - compiler/Language/Haskell/Syntax/Basic.hs: data Role = Nominal |
+%%       Representational | Phantom (constructor order = superotyping rel)
+%%     - compiler/GHC/Core/Predicate.hs: data EqRel = NomEq | ReprEq;
+%%       eqRelRole :: EqRel -> Role; mkEqPredRole :: Role -> Type -> Type
+%%       -> PredType; mkNomEqPred; mkReprEqPred; the EqPred EqRel Type Type
+%%       constructor of data Pred
+%%     - compiler/GHC/Core/TyCo/Rep.hs: Note [Roles] (points to
+%%       docs/core-spec/core-spec.pdf and
+%%       https://gitlab.haskell.org/ghc/ghc/wikis/roles-implementation,
+%%       and to Weirich et al., Generative Type Abstraction and Type-level
+%%       Computation, POPL 2010)
+%%     - compiler/GHC/Core/Coercion.hs: Note [Roles] on the coercion side;
+%%       SubCo (Nom→Rep demotion); role-parameterized coercion constructors
+%%   The GHC-side analogue of the draft's / R role index is EqRel (NomEq /
+%%   ReprEq) + mkEqPredRole. The Nom ≤ Rep direction is realized in GHC by
+%%   SubCo (nominal-to-representational demotion) plus the role-parameterized
+%%   coercion constructors — the same class of apparatus the corespec Sub
+%%   rule abstracts.
+%%   The full GHC roles specification is in docs/core-spec/core-spec.pdf
+%%   within the GHC tree. The draft's lattice (§9) is a TWO-role lattice;
+%%   GHC's is a THREE-role lattice (Nominal/Representational/Phantom).
+%%   The draft does NOT claim the two are identical; it claims the Nom ≤ Rep
+%%   direction GHC already has is the direction our Sub rule uses.
+%%   The GHC citation is the canonical source for "the plugin emits ~ constraints
+%%   at roles, which GHC already supports." See docs/notes/REVIEWER_WFU_
+%%   ARGUMENT.md §2.3.
 %%     - separate roleing judgement
 %%     - erase_tm / erase_constraint
 

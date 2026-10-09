@@ -64,7 +64,7 @@ and isn't committed.
 
 ## 2. Source mapping by argument piece
 
-### 2.1 Roles — canonical citation
+### 2.1 Roles — canonical citation (lattice + subsumption apparatus)
 
 **Citation:** ICFP 2019, *A Role for Dependent Types in Haskell*
 (Weirich, Choudhury, Voizard, Eisenberg; arxiv `1905.13706v1`), with
@@ -85,11 +85,16 @@ the accompanying Coq/Ott mechanization at `~/src/corespec-roles`
 **What it justifies in the argument:** that the draft's role lattice
 (§9) and role-subsumption rule (§11) are restatements of a published,
 mechanized apparatus, and that the row-equality constraints the plugin
-emits (`r1 ~ r2 : A / R`) are GHC's existing role-parameterized equality,
-not a new constraint kind.
+emits (`r1 ~ r2 : A / R`) are in the same *class* of apparatus as GHC's
+role-parameterized equality — not a new role system.
+
+**What it does NOT claim:** that GHC's implementation is identical to the
+corespec mechanization. Whether GHC's actual implementation matches the
+corespec model exactly is a GHC-internal question, not a polytropos
+question.
 
 **Draft sections that map:** `ROW_ROLE_DEFNS_DRAFT.ott` §0 (reference
-notes), §9 (role lattice), §10 (constraint form), §11 (role-subsumption).
+notes), §9 (role lattice), §11 (role-subsumption).
 
 **What it does NOT cover:** rows, row inclusion, row widening, row tail
 variables, row equality as distinct from term equality. The role side is
@@ -118,6 +123,61 @@ known compiler discipline, not an ad hoc invention. The draft's §3
 **What it does NOT cover:** roles, the Nom/Rep lattice, role-indexed
 equality on rows. The row side and the role side are separate sources in
 the argument; they are not derived from one another.
+
+### 2.3 "Tilde at a role" constraint form — GHC-native citation
+
+**Citation (GHC, not corespec):** GHC compiler source for equality
+predicates and the role machinery on the constraint/coercion side:
+
+- `compiler/Language/Haskell/Syntax/Basic.hs` — `data Role = Nominal |
+  Representational | Phantom` (with the note that the constructor order
+  coincides with the *super*typing relation on roles)
+- `compiler/GHC/Core/Predicate.hs` — `data EqRel = NomEq | ReprEq`,
+  `eqRelRole :: EqRel -> Role`, `mkEqPredRole :: Role -> Type -> Type
+  -> PredType`, `mkNomEqPred`, `mkReprEqPred`; the `EqPred EqRel Type
+  Type` constructor of `data Pred`; the classify/predication machinery
+  that treats `(t1 ~# t2)` and `(t1 ~R# t2)` as equality predicates
+- `compiler/GHC/Core/TyCo/Rep.hs` — `Note [Roles]` (the GHC roles
+  note; points to `docs/core-spec/core-spec.pdf` and to
+  https://gitlab.haskell.org/ghc/ghc/wikis/roles-implementation, and to
+  Weirich et al., "Generative Type Abstraction and Type-level
+  Computation," POPL 2010); coercion role machinery including `SubCo`
+  (nominal-to-representational demotion) and `TyConAppCo` role
+  parameter
+- `compiler/GHC/Core/Coercion.hs` — `Note [Roles]` on the coercion
+  side, including `setNominalRole_maybe` and the role-parameterized
+  coercion constructors
+
+**What it justifies in the argument:** that the draft's row-equality
+constraint form `r1 ~ r2 : A / R` is GHC's existing equality predicate
+parameterized by a role — NOT a new constraint kind invented by
+polytropos. GHC already has:
+
+- a three-role lattice (Nominal, Representational, Phantom) on its own,
+  independent of our draft's two-role Nom/Rep lattice
+- equality predicates tagged by `EqRel` (NomEq / ReprEq), which is the
+  GHC-side analogue of our `/ R` role index
+- a constructor `mkEqPredRole :: Role -> Type -> Type -> PredType` for
+  building a primitive equality predicate at a chosen role
+- the role/subsumption apparatus (SubCo, the Nom→Rep demotion) that
+  realizes the same Nom ≤ Rep direction our draft's Sub rule uses
+
+So the claim "the plugin emits ~ constraints at roles, which GHC already
+supports" is anchored in GHC's actual source, with corespec as the
+separate mechanized justification for why the Nom/Rep apparatus is
+well-founded.
+
+**What it does NOT claim:** that GHC has anything called a "row
+constraint" or a "row-equality constraint" specifically. GHC has
+equality predicates at a role; our draft's `r1 ~ r2 : A / R` is that
+machinery applied to row types. Whether GHC's existing role machinery
+reaches row types the way our draft assumes is a question for the GHC
+ reviewer and for the plugin's actual emission behavior, not a claim this
+note makes on GHC's behalf.
+
+**Draft sections that map:** `ROW_ROLE_DEFNS_DRAFT.ott` §0 (the GHC-
+native anchor paragraph), §10 (constraint form `RowEq`), §11 (role-
+subsumption on that form).
 
 ### 2.3 Row side — secondary theoretical support
 
