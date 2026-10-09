@@ -12,6 +12,7 @@
 module Main (main) where
 
 import Data.Functor.Identity (Identity(..))
+import Data.Primitive.SmallArray (SmallArray, sizeofSmallArray, indexSmallArray)
 import GHC.Exts (Any)
 import Test.Tasty (defaultMain, testGroup)
 import Test.Tasty.HUnit (testCase, (@?=))
@@ -64,7 +65,43 @@ main = defaultMain $ testGroup "plugin RowEq/RowShow smoke"
       , testCase "r.y == True" $
           rDot.y @?= Identity True
       ]
+  , testGroup "AllFields generic dictionary supply"
+      [ testCase "supplies Show dictionaries for homogeneous product row" $
+          let arr = fieldDicts @ProductRowT @TwoInts @Show
+          in do
+            sizeofSmallArray arr @?= 2
+            showAllFields arr (repVals (unRowRep twoInts)) @?= "42 7"
+      , testCase "supplies Show dictionaries for heterogeneous product row (String, Int, Bool)" $
+          let arr = fieldDicts @ProductRowT @HeteroRow @Show
+          in do
+            sizeofSmallArray arr @?= 3
+            showAllFields arr (repVals (unRowRep heteroVal)) @?= "\"hello\" 99 True"
+      ]
   ]
+
+-- | Use a supplied array of type-erased Show dictionaries to show every slot.
+showAllFields :: DictAllFields Show
+              -> SmallArray (Identity Any)
+              -> String
+showAllFields arr slots =
+  go 0
+  where
+    n = sizeofSmallArray slots
+    go i
+      | i == n = ""
+      | otherwise =
+          case indexSmallArray arr i of
+            DictAny ->
+              let Identity x = indexSmallArray slots i
+              in show x <> if i + 1 == n then "" else " " <> go (i + 1)
+
+type TwoInts = '[ "x" := Int, "y" := Int ]
+twoInts :: RowRep Identity ProductRowT TwoInts ()
+twoInts = RowRep (productRep [slot (42 :: Int), slot (7 :: Int)])
+
+type HeteroRow = '[ "greeting" := String, "count" := Int, "active" := Bool ]
+heteroVal :: RowRep Identity ProductRowT HeteroRow ()
+heteroVal = RowRep (productRep [slot ("hello" :: String), slot (99 :: Int), slot True])
 
 -- | S2: a sum with two constructors
 type S2 = '[ "C1" := '[ "x" := Int ], "C2" := '[ "y" := Bool ] ]

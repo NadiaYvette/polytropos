@@ -21,6 +21,10 @@ module Polytropos.Plugin
 
 import Prelude
 
+import Control.Monad
+  ( forM
+  )
+
 import GHC.Core.Make
   ( mkCoreApps
   , mkCoreConApps
@@ -28,6 +32,7 @@ import GHC.Core.Make
   , mkCharExpr
   , mkStringExpr
   , mkIfThenElse
+  , mkListExpr
   )
 
 import GHC.Plugins
@@ -58,7 +63,6 @@ import GHC.Plugins
   , mkVarOcc
   , Module
   , mkModuleName
-  , fsLit
   , coreView
   , splitFunTy
   , splitFunTys
@@ -69,6 +73,8 @@ import GHC.Plugins
   , mkAppTy
   , getOccName
   , occNameString
+  , fsLit
+  , TyCon
   )
 
 import GHC.Unit.Types
@@ -128,7 +134,10 @@ import GHC.TcPlugin.API
   , evDataConApp
   , newName
   , mkLocalId
-  , mkTyConTy
+  , newWanted
+  , ctEvExpr
+  , mkNonCanonical
+  , ctLoc
   )
 
 import GHC.TcPlugin.API.Internal
@@ -151,11 +160,11 @@ polytroposPlugin = TcPlugin
   , tcPluginShutdown = const (return ())
   }
 
--------------------------------------------------------------------------------
--- Plugin state
+--------------------------------------------------------------------------------- Plugin state
 -------------------------------------------------------------------------------
 
 data PluginState = PluginState
+
   { psRepTag        :: !Var    -- ^ repTag :: Rep f a -> Word
   , psRepArity      :: !Var    -- ^ repArity :: Rep f a -> Int
   , psFieldAt       :: !Var    -- ^ fieldAt :: Int -> Rep f a -> f x
@@ -174,8 +183,9 @@ data PluginState = PluginState
   , psFShowBool     :: !Var    -- ^ $fShowBool
   , psRowFlavourCls   :: !Class  -- ^ RowFlavour class
   , psHasFieldCls     :: !Class  -- ^ GHC.Records.HasField class
-  , psSmallArrayTyCon :: !Var    -- ^ Data.Primitive.SmallArray.SmallArray
-  , psDictAnyTyCon    :: !Var    -- ^ Polytropos.Core.DictAny
+  , psDictAnyTyCon    :: !TyCon  -- ^ Polytropos.Core.DictAny
+  , psMkDictAny       :: !Var    -- ^ Polytropos.Core.mkDictAny
+  , psEvidenceAllFields :: !Var  -- ^ Polytropos.Core.evidenceAllFields
   }
 
 -------------------------------------------------------------------------------
@@ -212,13 +222,11 @@ polytroposInit = do
   hasFieldOcc <- lookupOrig ghcRecordsMod (mkTcOcc "HasField")
   psHasFieldCls <- tcLookupClass hasFieldOcc
 
-  primMod <- findModule "Data.Primitive.SmallArray" Nothing
-  smallArrayOcc <- lookupOrig primMod (mkTcOcc "SmallArray")
-  psSmallArrayTyCon <- tcLookupTyCon smallArrayOcc
-
-  coreMod <- findPolytroposCoreModule
   dictAnyOcc <- lookupOrig coreMod (mkTcOcc "DictAny")
   psDictAnyTyCon <- tcLookupTyCon dictAnyOcc
+
+  psMkDictAny <- lookupIdInModule coreMod "mkDictAny"
+  psEvidenceAllFields <- lookupIdInModule coreMod "evidenceAllFields"
 
   pure PluginState
     { psRepTag        = psRepTag
@@ -238,9 +246,10 @@ polytroposInit = do
     , psFShowInt      = psFShowInt
     , psFShowBool     = psFShowBool
     , psRowFlavourCls = psRowFlavourCls
-    , psHasFieldCls     = psHasFieldCls
-    , psSmallArrayTyCon = psSmallArrayTyCon
-    , psDictAnyTyCon    = psDictAnyTyCon
+    , psHasFieldCls   = psHasFieldCls
+    , psDictAnyTyCon  = psDictAnyTyCon
+    , psMkDictAny     = psMkDictAny
+    , psEvidenceAllFields = psEvidenceAllFields
     }
 
 findModule :: String -> Maybe String -> TcPluginM 'Init Module
@@ -272,15 +281,17 @@ polytroposSolve
   -> TcPluginM 'Solve TcPluginSolveResult
 polytroposSolve state givens wanteds = do
   let allCts = givens ++ wanteds
-  solved <- mapM (solveOne state) allCts
-  let (solved', _) = partitionEithers solved
+  results <- mapM (solveOne state) allCts
+  let (solvedPairs, _) = partitionEithers results
+      solvedCts = map fst solvedPairs
+      newCts = concatMap snd solvedPairs
   pure $ TcPluginSolveResult
     { tcPluginInsolubleCts = []
-    , tcPluginSolvedCts = solved'
-    , tcPluginNewCts = []
+    , tcPluginSolvedCts = solvedCts
+    , tcPluginNewCts = newCts
     }
 
-solveOne :: PluginState -> Ct -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
+solveOne :: PluginState -> Ct -> TcPluginM 'Solve (Either ((EvTerm, Ct), [Ct]) ())
 solveOne state ct
   | not (isWanted (ctEvidence ct))
   = pure $ Right ()
@@ -292,24 +303,27 @@ solveOne state ct
         case className cls of
           name
             | nameOccName name == mkTcOcc "FieldIndex"
-            -> solveFieldIndex ct cls tys
+            -> noNew <$> solveFieldIndex ct cls tys
             | nameOccName name == mkTcOcc "ConstructorIndex"
-            -> solveConstructorIndex ct cls tys
+            -> noNew <$> solveConstructorIndex ct cls tys
             | nameOccName name == mkTcOcc "RowEq"
-            -> solveRowEq state ct cls tys
+            -> noNew <$> solveRowEq state ct cls tys
             | nameOccName name == mkTcOcc "RowShow"
-            -> solveRowShow state ct cls tys
+            -> noNew <$> solveRowShow state ct cls tys
             | nameOccName name == mkTcOcc "RowEqSum"
-            -> solveRowEqSum state ct cls tys
+            -> noNew <$> solveRowEqSum state ct cls tys
             | nameOccName name == mkTcOcc "RowShowSum"
-            -> solveRowShowSum state ct cls tys
+            -> noNew <$> solveRowShowSum state ct cls tys
             | nameOccName name == mkTcOcc "HasField"
-            -> solveHasField state ct cls tys
+            -> noNew <$> solveHasField state ct cls tys
             | nameOccName name == mkTcOcc "AllFields"
             -> solveAllFields state ct cls tys
             | otherwise
             -> pure $ Right ()
       _ -> pure $ Right ()
+  where
+    noNew (Left res) = Left (res, [])
+    noNew (Right ()) = Right ()
 
 -------------------------------------------------------------------------------
 -- FieldIndex solver
@@ -732,39 +746,42 @@ solveAllFields
   -> Ct
   -> Class
   -> [Type]
-  -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
-solveAllFields state ct cls tys = do
-  case tys of
-    [rTy, rowTy, cTy] -> do
-      let fields = walkRowWithTypes rowTy
-      -- Build one DictAny c per field, then pack them into a SmallArray (DictAny c).
-      -- This is the first concrete sketch of generic field-class dictionary supply;
-      -- the per-field dict is intentionally parametric on the class argument for now.
-      dictAnyCons <- forM fields $ \(i, _nameFS, fieldTy) -> do
-        let dictExpr = mkReflEqDict cTy
-        pure dictExpr
-      let smallArrayTy = mkTyConTy (psSmallArrayTyCon state) `mkAppTy` (mkAppTy (mkTyConTy (psDictAnyTyCon state)) cTy)
-      let arrExpr = mkSmallArrayFromList dictAnyCons
-      let fieldDictsExpr = mkCoreApps (Var (psNoInlineCo state))
-                                       [Type (mkTyConTy (psSmallArrayTyCon state))
-                                       , Type (mkAppTy (mkTyConTy (psDictAnyTyCon state)) cTy)
-                                       , arrExpr]
-      let methodId = case classMethods cls of
-            (m : _) -> m
-            [] -> error "Polytropos.Plugin: AllFields class has no methods"
-          methodFullTy = piResultTys (varType methodId) tys
-          (_, _, methodInDictTy) = splitFunTy methodFullTy
-          (tyVars, tauTy) = splitForAllTyCoVars methodInDictTy
-          (argTys, _) = splitFunTys tauTy
-      vars <- forM (zip [0..] tyVars) $ \(idx, tv) -> do
-        let name = mkVarOcc ("tv" ++ show idx)
-        pure $ mkLocalId name (scaledMult (argTys !! idx)) (mkTyVarTy tv)
-      bodyExpr <- pure $ foldl (\acc var -> Lam var acc) (Var fieldDictsExpr) vars
-      let dictExpr = evDataConApp (classDataCon cls) tys [bodyExpr]
-      pure $ Left (EvExpr dictExpr, ct)
-    _ -> pure $ Right ()
-  where
-    mkReflEqDict cTy = error $ "polytropos: AllFields solver placeholder -- " ++ showSDocUnsafe (ppr cTy) ++ " not yet supplyable"
+  -> TcPluginM 'Solve (Either ((EvTerm, Ct), [Ct]) ())
+solveAllFields state ct cls tys
+  | length tys >= 3
+  , let rowTy = tys !! (length tys - 2)
+  , Just _ <- myExtractPromotedList (unwrapSynonyms rowTy)
+  = do
+      let cTy    = last tys
+          rTy    = tys !! (length tys - 3)
+          fields = walkRowWithTypes rowTy
+          loc    = ctLoc ct
+          dictAnyTy = mkAppTy (mkTyConTy (psDictAnyTyCon state)) cTy
+
+      -- For each field, create a new wanted constraint for (c fieldTy)
+      wanteds <- forM fields $ \(_i, _nameFS, fieldTy) -> do
+        ev <- newWanted loc (mkAppTy cTy fieldTy)
+        pure (fieldTy, ev)
+
+      -- For each field, construct: mkDictAny @c @fieldTy dict
+      let dictAnys = [ mkCoreApps (Var (psMkDictAny state))
+                                  [Type cTy, Type fieldTy, ctEvExpr ev]
+                     | (fieldTy, ev) <- wanteds
+                     ]
+
+      -- Construct: evidenceAllFields @c [dictAny_0, dictAny_1, ...]
+      let listExpr = mkListExpr dictAnyTy dictAnys
+          arrExpr  = mkCoreApps (Var (psEvidenceAllFields state)) [Type cTy, listExpr]
+
+      -- Superclass evidence for RowFlavour r
+      let scEvidence = evDataConApp (classDataCon (psRowFlavourCls state)) [rTy] []
+
+      -- Class dictionary: AllFields r row c
+      let dictExpr = evDataConApp (classDataCon cls) tys [scEvidence, arrExpr]
+          newWanteds = [mkNonCanonical ev | (_fieldTy, ev) <- wanteds]
+
+      pure $ Left ((EvExpr dictExpr, ct), newWanteds)
+  | otherwise = pure $ Right ()
 
 -------------------------------------------------------------------------------
 -- Row walking

@@ -23,7 +23,6 @@ import Data.Kind (Constraint, Type)
 import Data.Primitive.SmallArray
 import GHC.Exts (Any)
 import Polytropos.Core (DictAny(..), Rep(..))
-import Unsafe.Coerce (unsafeCoerce)
 
 -- | Identity functor for use with 'Rep'.
 newtype I a = I { unI :: a }
@@ -41,19 +40,19 @@ class GInstances (c :: Type -> Constraint) a where
 
 -- CPS helpers to avoid ambiguity
 withDictEq :: DictAny Eq -> Any -> Any -> Bool
-withDictEq d x y = case d of (DictAny @_ @t) -> (unsafeCoerce x :: t) == (unsafeCoerce y :: t)
+withDictEq d x y = case d of DictAny -> x == y
 
 withDictOrd :: DictAny Ord -> Any -> Any -> Ordering
-withDictOrd d x y = case d of (DictAny @_ @t) -> compare (unsafeCoerce x :: t) (unsafeCoerce y :: t)
+withDictOrd d x y = case d of DictAny -> compare x y
 
 withDictShow :: DictAny Show -> Any -> Int -> ShowS
-withDictShow d x p = case d of (DictAny @_ @t) -> showsPrec p (unsafeCoerce x :: t)
+withDictShow d x p = case d of DictAny -> showsPrec p x
 
 withDictMap :: DictAny c -> (forall x. c x => x -> x) -> Any -> Any
-withDictMap d f x = case d of (DictAny @_ @t) -> unsafeCoerce @t @Any (f @t (unsafeCoerce @Any @t x))
+withDictMap d f x = case d of DictAny -> f x
 
 withDictFoldMap :: DictAny c -> (forall x. c x => x -> m) -> Any -> m
-withDictFoldMap d f x = case d of (DictAny @_ @t) -> f @t (unsafeCoerce @Any @t x)
+withDictFoldMap d f x = case d of DictAny -> f x
 
 -- | Generic equality using the 'Eq' class.
 geq :: forall a. (Generic a, RepOf a ~ Rep I a, GInstances Eq a) => a -> a -> Bool

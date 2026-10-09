@@ -4,13 +4,14 @@ Operational frontier. Read with `PLAN.md`; update before ending a session.
 
 ## Where we are
 
-Phases 3, 4A and 4B/4D foundations are in. Tasks `task-01` through `task-12`, `task-14` and
-`task-18` have been executed and verified through their deterministic gates. All 10 packages build
-cleanly on GHC 9.14.1 with `-Wall -Werror` and all 99 tests pass:
+Phases 3, 4A and 4B/4D foundations are in. Tasks `task-01` through `task-19` have been executed
+and verified through their deterministic gates. Milestone §1.1 of `plans/2026-10-09-plugin-gap-roadmap.md`
+(`AllFields` generic field-class dictionary supply) is implemented and verified. All packages build
+cleanly on GHC 9.14.1 with `-Wall -Werror`:
 - `polytropos-core` passes 32 tests (primitive SmallArray CoW updates, `setFieldsAt` batch updates,
   `MRep` transient builders, `Polytropos` consumer surface, `Record`, `Variant`).
-- `polytropos-plugin-smoke` passes 10 tests with `-fplugin=Polytropos.Plugin` (`RowEq`, `RowShow`,
-  `RowEqSum`, `RowShowSum`, and `GHC.Records.HasField` for native `OverloadedRecordDot`).
+- `polytropos-plugin-smoke` passes 12 tests with `-fplugin=Polytropos.Plugin` (`RowEq`, `RowShow`,
+  `RowEqSum`, `RowShowSum`, native `OverloadedRecordDot`, and `AllFields` generic dictionary supply).
 - `polytropos-generics-test` passes 6 tests (`Generic` datatype generics bridge over flat `Rep`,
   `geq`, `gshowsPrec`, product and sum roundtrips).
 - `polytropos-optics-test` passes 6 tests (`optics-core` + `LabelOptic` `#field` lenses and variant prisms).
@@ -43,7 +44,9 @@ cleanly on GHC 9.14.1 with `-Wall -Werror` and all 99 tests pass:
   * `RowEq` and `RowShow` for product rows via Core AST synthesis
   * `RowEqSum` and `RowShowSum` for sum rows via tag testing and constructor dispatch
   * `GHC.Records.HasField` for native `OverloadedRecordDot` (`r.field`)
+  * `AllFields` generic field-class dictionary supply (solving wanteds and packing flat `SmallArray (DictAny c)`)
 - `packages/polytropos-plugin/tests/smoke/Main.hs` — Smoke tests exercising plugin-solved dictionary synthesis
+  and `AllFields` generic dictionary supply across homogeneous and heterogeneous rows
 - `packages/polytropos-generics/` — Datatype generics library unifying nominal Haskell ADTs with `polytropos`
   `Rep` with zero boxed intermediate tree representations
 - `packages/polytropos-optics/` — Satellite package integrating with `optics-core` and `LabelOptic`
@@ -61,6 +64,8 @@ cleanly on GHC 9.14.1 with `-Wall -Werror` and all 99 tests pass:
 - `packages/polytropos-cbor/` — Satellite package: `Serialise` for records (CBOR array: length
   header + flat payload) and variants (array: constructor Word tag + payload), positional encoding
   mirroring the runtime Rep layout; scoped allow-newer for cborg/serialise's pre-9.14 base bounds
+- `plans/2026-10-09-plugin-gap-roadmap.md` & `plans/2026-10-09-plugin-gap-spec.md` — Plugin gap-closing
+  roadmap and specification sketches (§1.1 done; §1.2-§1.5 queued).
 - `docs/NEWBIE_GUIDE.md` — quickstart and token-conservation workflow guide
 - `docs/MAINTAINER_GUIDE.md` — engineering governance and zero-contamination doctrine
 - `docs/notes/POLYTROPOS_DESIGN.md` — decisions D1–D10, costs, open questions
@@ -76,12 +81,11 @@ cleanly on GHC 9.14.1 with `-Wall -Werror` and all 99 tests pass:
 
 ## What is deliberately missing
 
-- Phase 4B remaining serialization satellite: `polytropos-cassava` (`task-13`).
-- Phase 4C remaining database satellites: `polytropos-hasql` (`task-15`), `polytropos-rel8`
-  (`task-16`), `polytropos-persistent` (`task-17`).
-- Phase 4D remaining testing satellite: `polytropos-quickcheck` (`task-19`).
+- Plugin gap roadmap (§1.2): HKD-aware row vocabulary (`Row f`, `SumRow f`).
+- Plugin gap roadmap (§1.3): Type-level row metadata families (`FieldTypes`) and plugin rewriting.
+- Plugin gap roadmap (§1.4): Subrow/projection evidence for sums/variants (`SubRow`, narrowing indices).
+- Plugin gap roadmap (§1.5): Compile-time label hashing (`KnownHash`).
 
 ## Next action
 
-- Execute `task-13-satellite-cassava.yaml` to establish `polytropos-cassava`.
-- Continue with the remaining database satellites (`task-15`..`task-17`), then `task-19`.
+- Advance to milestone §1.2 in `plans/2026-10-09-plugin-gap-roadmap.md`: HKD-aware row vocabulary.

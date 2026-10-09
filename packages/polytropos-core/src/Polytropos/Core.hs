@@ -1,10 +1,12 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneKindSignatures #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -37,6 +39,7 @@ module Polytropos.Core (
     Pair(..)
   , Row
   , SumRow
+  , ProductRowHKD
   , Field(..)
     -- * Row flavours (Option D vocabulary)
   , RowType(..)
@@ -75,9 +78,15 @@ module Polytropos.Core (
   , RowShowSum(..)
   , FieldIndex(..)
   , ConstructorIndex(..)
+  , Dict(..)
   , DictAny(..)
+  , mkDictAny
+  , evidenceAllFields
   , AllFields(..)
   , DictAllFields
+  , ProxyRowFlavour(..)
+  , ProductRowProxy
+  , SumRowProxy
     -- * Utilities
   , noInlineUnsafeCo
   ) where
@@ -401,22 +410,37 @@ class ConstructorIndex (n :: Symbol) (row :: k) where
   constructorIndex :: Word
   constructorIndex = undefined
 
+-- | Witness for a class constraint @c a@.
+data Dict (c :: Type -> Constraint) (a :: Type) where
+  Dict :: c a => Dict c a
+
 -- | Evidence that all fields of a row satisfy some class.
 --
--- @DictAny c@ is the type-erased form of @c x@, mirroring @large-anon@'s
+-- @DictAny c@ is the type-erased form of @c Any@, mirroring @large-anon@'s
 -- dictionary packing. It is what lets one dictionary carry many field
 -- dictionaries without a type-level list of them.
---
--- @DictAny@ is a forward-looking mechanism (see PHASE2_SKETCH.md, refinement
--- #4). It is not used by the current 'RowEq'/'RowShow' classes, but it may be
--- needed when the evidence classes carry field-class dictionaries (e.g. an
--- 'Eq' dictionary for each field).
 data DictAny (c :: Type -> Constraint) where
-  DictAny :: c x => DictAny c
+  DictAny :: c Any => DictAny c
+
+-- | Wrap a class dictionary into 'DictAny'.
+mkDictAny :: forall c a. c a => DictAny c
+mkDictAny = aux (noInlineUnsafeCo (Dict :: Dict c a) :: Dict c Any)
+  where
+    aux :: Dict c Any -> DictAny c
+    aux Dict = DictAny
+
+-- | Construct evidence for the 'AllFields' class.
+{-# NOINLINE evidenceAllFields #-}
+evidenceAllFields :: forall c. [DictAny c] -> DictAllFields c
+evidenceAllFields = smallArrayFromList
+
+-- | The evidence type for 'AllFields': a flat array of type-erased per-field
+-- dictionaries, in row order.
+type DictAllFields (c :: Type -> Constraint) = SmallArray (DictAny c)
 
 -- | Evidence that every field in a row satisfies a class.
 --
--- This is the generic dictionary-supply class the plugin is expected to solve
+-- This is the generic dictionary-supply class the plugin solves
 -- for fully-known rows. Its evidence is a flat array of type-erased field
 -- dictionaries, in row order, so callers can map/fold over all fields without
 -- writing per-row instances by hand.
@@ -424,15 +448,11 @@ data DictAny (c :: Type -> Constraint) where
 -- The class is kind-polymorphic in the row parameter so the same surface can
 -- be reused for the legacy @Row@ rows and for the HKD-aware product and sum rows
 -- once those are layered on top. The row flavour parameter remains so the
--- plugin can distinguish product vs sum rows. The dictionary type is
--- deliberately simple for now so the smoke test can compile against it.
+-- plugin can distinguish product vs sum rows.
+type AllFields :: forall {k}. RowType -> k -> (Type -> Constraint) -> Constraint
 class RowFlavour r => AllFields (r :: RowType) (row :: k) (c :: Type -> Constraint) where
   fieldDicts :: DictAllFields c
   fieldDicts = undefined
-
--- | The evidence type for 'AllFields': a flat array of type-erased per-field
--- dictionaries, in row order.
-type DictAllFields (c :: Type -> Constraint) = SmallArray (DictAny c)
 
 -- | A stand-in proxy for the row flavour. This is used in the smoke test as a
 -- placeholder for the row-flavour parameter of 'AllFields' until the row

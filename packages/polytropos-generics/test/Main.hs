@@ -29,12 +29,12 @@ instance Generic Person where
 
 instance GInstances Eq Person where
   gdicts = smallArrayFromList
-    [ smallArrayFromList [DictAny @Eq @String, DictAny @Eq @Int]
+    [ smallArrayFromList [mkDictAny @Eq @String, mkDictAny @Eq @Int]
     ]
 
 instance GInstances Show Person where
   gdicts = smallArrayFromList
-    [ smallArrayFromList [DictAny @Show @String, DictAny @Show @Int]
+    [ smallArrayFromList [mkDictAny @Show @String, mkDictAny @Show @Int]
     ]
 
 -- A sample sum ADT
@@ -52,14 +52,14 @@ instance Generic Shape where
 
 instance GInstances Eq Shape where
   gdicts = smallArrayFromList
-    [ smallArrayFromList [DictAny @Eq @Double]
-    , smallArrayFromList [DictAny @Eq @Double, DictAny @Eq @Double]
+    [ smallArrayFromList [mkDictAny @Eq @Double]
+    , smallArrayFromList [mkDictAny @Eq @Double, mkDictAny @Eq @Double]
     ]
 
 instance GInstances Show Shape where
   gdicts = smallArrayFromList
-    [ smallArrayFromList [DictAny @Show @Double]
-    , smallArrayFromList [DictAny @Show @Double, DictAny @Show @Double]
+    [ smallArrayFromList [mkDictAny @Show @Double]
+    , smallArrayFromList [mkDictAny @Show @Double, mkDictAny @Show @Double]
     ]
 
 -- Tests
