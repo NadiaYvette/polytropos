@@ -23,9 +23,9 @@
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% 0. Reference notes (not part of Ott grammar)
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%% Row algebra source:
+%% Row algebra source (row side — OCaml, not GHC):
 %%   OCaml typechecker, typing/ctype.ml:
 %%     merge_row_fields / merge_rf
 %%     subtype_row
@@ -34,14 +34,36 @@
 %%     static_row
 %%   Plus the polytropos note:
 %%     docs/notes/OCAML_ROW_TAIL_SUBTYPE_MECHANISM.md
+%%   What this is: the row-side anchor. Not GHC. The draft's row judgements
+%%   (inclusion, widening, the tail contract) are aligned with this, not
+%%   derived from GHC's constraint solver. Secondary theoretical support for
+%%   the width-subtype-vs-equality distinction: Dolan, Algebraic Subtyping
+%%   (PhD thesis); Parreaux, The Simple Essence of Algebraic Subtyping.
 %%
-%% Role/erasure source:
+%% Role/erasure source (role side — ICFP 2019 corespec-roles, not GHC):
 %%   Weirich et al., "A Role for Dependent Types in Haskell" (ICFP 2019)
 %%   and its Coq/Ott development at ~/src/corespec-roles.
 %%   Imported pieces:
-%%     - two-role lattice Nom/Rep with <= R1 R2
+%%     - two-role lattice Nom/Rep with <= R1 R2  (corespec JSubRole)
 %%     - definitional equality a == b : A / R
 %%     - Sub rule for role-subsumption
+%%     - separate roleing judgement
+%%     - erase_tm / erase_constraint
+%%   What this is: the role-side anchor for the LATTICE and the SUBSUMPTION
+%%   RULE only. It does NOT claim GHC's implementation is identical to this;
+%%   it claims the apparatus (Nom/Rep, role-indexed equality, Sub) is the
+%%   same class of apparatus GHC already has. The GHC-native claim for the
+%%   constraint FORM (~ at a role) is in §10's citation note, not here.
+%%
+%% GHC-native anchor (constraint form — GHC, not corespec):
+%%   The row-equality constraint form r1 ~ r2 : A / R is GHC's existing
+%%   equality constraint (~) parameterized by a role. The draft does NOT
+%%   invent a new constraint kind. The citation for this is GHC's own
+%%   source for equality constraints and roles — NOT corespec, which is the
+%%   anchor for the lattice/subsumption apparatus only. The GHC citation is
+%%   recorded in docs/notes/REVIEWER_WFU_ARGUMENT.md and is the canonical
+%%   source for "the plugin emits ~ constraints at roles, which GHC already
+%%   supports."
 %%     - separate roleing judgement
 %%     - erase_tm / erase_constraint
 
@@ -136,6 +158,8 @@ row, r, s ::= {{ com rows }}
 %%     of the other side's tail.
 %%   - The tail is not magic; inclusion does not "unify away" a closed row
 %%     into an open one.
+%%   Alignment: OCaml merge_row_fields / subtype_row (row side, not GHC).
+%%   See docs/notes/OCAML_ROW_TAIL_SUBTYPE_MECHANISM.md and §0.
 
 defn
 r1 ⊆ r2 ::   :: RowIncl :: 'RowIncl_'
@@ -153,10 +177,14 @@ by
 %% In this draft, "compatible type" is represented by equality A == B
 %% at the relevant role. This is the label-by-label decomposition
 %% that OCaml's merge_row_fields + subtype_row performs.
+%%   Alignment: OCaml merge_row_fields / subtype_row (row side, not GHC).
+%%   See docs/notes/OCAML_ROW_TAIL_SUBTYPE_MECHANISM.md and §0.
 %%
 %% NOTE: This rule applies once per matching label, regardless of whether
 %% the remaining tails are closed or open. The judgement does not require
 %% the tails to be solved before recursing.
+%%   Alignment: OCaml merge_row_fields / subtype_row (row side, not GHC).
+%%   See docs/notes/OCAML_ROW_TAIL_SUBTYPE_MECHANISM.md and §0.
 ( l :> A  ,  r1 )  ⊆  ( l :> B  ,  r2 )
   -----------------------------------------
   r1 ⊆ r2
@@ -186,6 +214,9 @@ r  ⊆  ( r )  ρ
 %%   must be able to fire without ρ and ρ' already being unified. Reading B
 %%   allows this because the tail relationship becomes a constraint, not a
 %%   precondition on the judgement.
+%%   Alignment: OCaml subtype_row deferred-constraint behavior for non-
+%%   comparable tails (row side, not GHC). See OCAML_ROW_TAIL_SUBTYPE_
+%%   MECHANISM.md and §0.
 ( r1 )  ρ1  ⊆  ( r2 )  ρ2
   -----------------------------
   r1 ⊆ r2      ρ1 ⊆₊ ρ2
@@ -288,6 +319,8 @@ defn
 %% constraint layer has to carry" means in practice: the tail does not escape
 %% the system, but it does escape the row-shape layer. The constraint layer
 %% owns the tail until it is solved or rejected.
+%%   Alignment (row side, not GHC): OCaml subtype_row deferred-constraint
+%%   behavior. See OCAML_ROW_TAIL_SUBTYPE_MECHANISM.md and §0.
 
 %% Operational note on constraint emission
 %%
@@ -300,7 +333,10 @@ defn
 %%
 %% This is the plugin-boundary analogue of OCaml's subtype_row aborting to a
 %% deferred constraint when the tails are not directly comparable.
-%% See OCAML_ROW_TAIL_SUBTYPE_MECHANISM.md.
+%%   Alignment (row side, not GHC): OCaml subtype_row deferred-constraint
+%%   behavior. See OCAML_ROW_TAIL_SUBTYPE_MECHANISM.md and §0.
+%%   The constraint FORM itself (a ~ b at a role) is GHC-native, not OCaml.
+%%   See §10's citation note and docs/notes/REVIEWER_WFU_ARGUMENT.md.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% 5. Layer-appropriate specialization and the shared row-algebra layer
@@ -384,6 +420,10 @@ defn
 %%   index assignment is only sound if the row shape is exactly what the
 %%   plugin thinks it is — which is an exactness property, not a
 %%   compatibility property.
+%%   Alignment: the width-subtype-vs-equality distinction is the row-side
+%%   theoretical support (Dolan, Algebraic Subtyping; Parreaux, Simple
+%%   Essence of Algebraic Subtyping). See §0. The exactness-vs-compatibility
+%%   split is embodied here in ≃₊ vs ⊆₊ (§7 vs §4).
 
 defn
 r1 ≃ r2  ::  :: RowEqJ :: 'RowEqJ_'
@@ -399,12 +439,23 @@ r1 ≃ r2  ::  :: RowEqJ :: 'RowEqJ_'
 %%
 %% This is the label-by-label decomposition shared with inclusion (§3), but
 %% with equality on the tail instead of inclusion.
+%%   Alignment (row side, not GHC): OCaml merge_row_fields / subtype_row.
+%%   See docs/notes/OCAML_ROW_TAIL_SUBTYPE_MECHANISM.md and §0.
 %%   - The type-equality A == B is at the role relevant to the context in
 %%     which the equality judgement is invoked. See §9 (role lattice) and
 %%     §11 (role-subsumption on the row-equality constraint form).
+%%     Alignment (role side, not GHC): ICFP 2019 corespec-roles JSubRole /
+%%     role-indexed equality a == b : A / R. See §0 and
+%%     docs/notes/REVIEWER_WFU_ARGUMENT.md.
 %%   - The tail equality ρ1 ≃₊ ρ2 is STRICT: two distinct tail variables are
 %%     NOT equal, even if both are open. Tail equality requires either the
 %%     same variable or unification by the constraint layer.
+%%     Alignment: this is the exactness half of the two-tail-judgement design.
+%%     See §6 above and §0.
+%%     Alignment: this is the exactness judgement that complements the
+%%     compatibility judgement ⊆₊ (§4). The two-tail-judgement design is the
+%%     row-specific embodiment of the width-subtype-vs-equality distinction.
+%%     See §0 and §6 above.
 ( l :> A  ,  r1 )  ≃  ( l :> B  ,  r2 )
   -----------------------------------------
   A == B        r1 ≃ r2        ρ1 ≃₊ ρ2
@@ -503,6 +554,8 @@ defn
 %% tail variables, it must ask the solver to unify them. If unification
 %% succeeds and yields ρ1 = ρ2, then ≃₊ holds. If unification fails or
 %% yields distinct variables, ≃₊ does not hold.
+%%     Alignment: this is the exactness half of the two-tail-judgement design.
+%%     See §6 above and §0.
 ρ  ≃₊  ρ'       (when ρ ≠ ρ')  ← NOT derivable; requires solver unification
 
 %% A tail variable is NOT equal to the closed nil tail.
@@ -582,6 +635,8 @@ r  ⇝  ( r )  ρ
 %% This is the lattice already present in corespec-roles/spec/ett.ott
 %% as JSubRole / SubRole. We restate it here only so this draft is
 %% self-contained.
+%%   Alignment (role side, not GHC): ICFP 2019 corespec-roles JSubRole.
+%%   See §0 and docs/notes/REVIEWER_WFU_ARGUMENT.md.
 
 defn
 R1 ≤ R2  ::  :: SubRole :: 'SubRole_'
@@ -621,6 +676,12 @@ constraint, φ ::= {{ com row constraints }}
 
   r1 ~ r2 : A / R     ::   :: RowEq
   {{ com row equality at role R }}
+%%   Alignment (constraint form — GHC, not corespec): this is GHC's existing
+%%   equality constraint (~) parameterized by a role. The draft does NOT
+%%   invent a new constraint kind. The canonical citation for "GHC already
+%%   supports ~ at a role" is GHC's own source for equality constraints and
+%%   roles, NOT corespec (which is the anchor for the lattice/subsumption
+%%   apparatus only). See §0 and docs/notes/REVIEWER_WFU_ARGUMENT.md.
 
   r1 ⊆ r2             ::   :: RowInclC
   {{ com row inclusion constraint }}
@@ -634,6 +695,8 @@ constraint, φ ::= {{ com row constraints }}
 %% The key rule that imports the role lattice into the row-constraint
 %% layer. It mirrors ICFP 2019's Sub rule, but restricted to the row
 %% constraint forms this draft has.
+%%   Alignment (role side, not GHC): ICFP 2019 corespec-roles Sub rule.
+%%   See §0 and docs/notes/REVIEWER_WFU_ARGUMENT.md.
 %%
 %% This is where closed-row equality vs closed-open compatibility may
 %% acquire different roles:
@@ -645,6 +708,8 @@ defn
 {{ com row constraint subsumption }}
 
 %% Role-subsumption on row equality, exactly the ICFP 2019 Sub shape.
+%%   Alignment (role side, not GHC): ICFP 2019 corespec-roles Sub rule.
+%%   See §0 and docs/notes/REVIEWER_WFU_ARGUMENT.md.
 r ~ s : A / R1      R1 ≤ R2
 ---------------------------------
 r ~ s : A / R2
@@ -669,6 +734,7 @@ r1 ⊆ r2
 %%   - at least one closed-to-open widening rule (§8)
 %%   - the Nom ≤ Rep lattice (§9)
 %%   - a role-subsumption rule for row equality (§11)
+ (§11)
 %%
 %% Does not commit to:
 %%   - whether polytropos will actually adopt row tails in code

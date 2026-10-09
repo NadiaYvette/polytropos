@@ -58,3 +58,8 @@ guidance is subdivided into modular rules loaded on demand:
 6. **This file has a ~4 KB budget.** Add links, not content.
 7. **Two-file loop.** Update `STATE.md` before ending or resetting a session;
    fresh sessions initialise from `PLAN.md` and `STATE.md`.
+8. **Keep source-mapping notes current.** When a design doc rests on external
+   sources, the anchor goes inline at the claim, and the source-mapping note
+   for that doc must be kept current as the sources change. For the row/role
+   judgement draft, that is `docs/notes/ROW_ROLE_DEFNS_DRAFT.ott` and
+   `docs/notes/REVIEWER_WFU_ARGUMENT.md`.

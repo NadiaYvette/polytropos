@@ -173,6 +173,19 @@ This is already `AGENTS.md` advisory 1 and it has already fired: moving
 `polytropos-core` under `packages/` changed paths that three documents named, and
 the correction landed in the same change as the move.
 
+**Anchoring is part of the doc, not decoration.** When a design note or
+strategy makes a claim that rests on an external source, the anchor goes
+inline at the claim, not just in a related-doc list. The rule is: a claim
+that rests on a source is non-canonical unless the source is named at the
+claim, and a doc that cites sources must keep those citations current as
+the sources change. `ROW_ROLE_DEFNS_DRAFT.ott` §0 and each judgement's
+alignment note are the in-progress example; `docs/notes/REVIEWER_WFU_
+ARGUMENT.md` is the canonical source-mapping record for that draft's
+argument. The maintenance commitment is: when a source changes (new
+version, superseded reference, corrected reading), update the claims that
+rested on it, or explicitly weaken them. This is §4's precedence rule
+applied to citations, not just to code.
+
 **Stamp mechanics** — the implementing change self-stamps `proposed-implemented`;
 CI gates must pass; the maintainer accepts; the stamp records package and date.
 The check is bidirectional — stamps without realizing code, and realizing code

@@ -11,6 +11,7 @@ Hierarchical and domain-specific rules discovered and loaded by AI assistants (`
 - [`rules/compiler-verification.md`](rules/compiler-verification.md) — Low-token compiler diagnostics via `tricorder status --json` (<50 tokens) and the zero-contamination doctrine.
 - [`rules/documentation-precedence.md`](rules/documentation-precedence.md) — `DOC_STRATEGY.md` §4 precedence rule ("code wins at runtime, notes corrected regardless") and the two-file session loop (`PLAN.md` + `STATE.md`).
 - [`rules/plugin-invariants.md`](rules/plugin-invariants.md) — TcPlugin literal index evidence, Core AST dictionary synthesis, and avoiding selector mangling (`$sel:...`).
+- [`../docs/notes/REVIEWER_WFU_ARGUMENT.md`](../docs/notes/REVIEWER_WFU_ARGUMENT.md) — source-mapping and well-foundedness-argument structure for the row/role judgement draft, including which external sources are in, which are out, and why.
 
 ## 2. Infrastructure & Tooling Configurations
 
