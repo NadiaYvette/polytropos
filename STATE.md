@@ -5,14 +5,16 @@ Operational frontier. Read with `PLAN.md`; update before ending a session.
 ## Where we are
 
 Phases 3, 4A and 4B/4D foundations are in. Tasks `task-01` through `task-19` have been executed
-and verified through their deterministic gates. Milestones §1.1 (`AllFields` generic field-class dictionary supply)
-and §1.2 (HKD-aware row vocabulary) of `plans/2026-10-09-plugin-gap-roadmap.md` are implemented and verified.
+and verified through their deterministic gates. Milestones §1.1 (`AllFields` generic field-class dictionary supply),
+§1.2 (HKD-aware row vocabulary), and §1.3 (type-level row metadata + plugin rewriting) of `plans/2026-10-09-plugin-gap-roadmap.md`
+are implemented and verified.
 All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
 - `polytropos-core` passes 32 tests (primitive SmallArray CoW updates, `setFieldsAt` batch updates,
   `MRep` transient builders, `Polytropos` consumer surface, `Record`, `Variant`).
-- `polytropos-plugin-smoke` passes 17 tests with `-fplugin=Polytropos.Plugin` (`RowEq`, `RowShow`,
+- `polytropos-plugin-smoke` passes 24 tests with `-fplugin=Polytropos.Plugin` (`RowEq`, `RowShow`,
   `RowEqSum`, `RowShowSum`, native `OverloadedRecordDot` on bare and `RecordF Maybe` records,
-  `AllFields` generic dictionary supply across standard and HKD product rows, and `FieldIndex`/`ConstructorIndex` on HKD rows).
+  `AllFields` generic dictionary supply across standard and HKD product rows, `FieldIndex`/`ConstructorIndex` on HKD rows,
+  and compile-time `Refl` type equality rewriting for `FieldNames`, `SimpleFieldTypes`, and `FieldTypes`).
 - `polytropos-generics-test` passes 6 tests (`Generic` datatype generics bridge over flat `Rep`,
   `geq`, `gshowsPrec`, product and sum roundtrips).
 - `polytropos-optics-test` passes 6 tests (`optics-core` + `LabelOptic` `#field` lenses and variant prisms).
@@ -33,7 +35,8 @@ All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
 - `packages/polytropos-core/src/Polytropos/Core.hs` — `RowOf`, `Row`, `ProductRow`,
   `ProductRowHKD`, `SumRowOf`, `SumRow`, `SumRowHKD`, `SumRowF`, `Rep`,
   `RowType` (`ProductRowT`, `SumRowT`, `ProductRowHKDT`, `SumRowHKDT`), `RowFlavour`, `RowRep`,
-  `HandlerType`, `ResultType`, `productRep`, `injectRep`, `fieldAt`, `setFieldAt` (primitive CoW),
+  `HandlerType`, `ResultType`, `FieldNames`, `SimpleFieldTypes`, `FieldTypes`,
+  `productRep`, `injectRep`, `fieldAt`, `setFieldAt` (primitive CoW),
   `setFieldsAt` (batch update), `MRep`, `thawRep`, `freezeRep`, `writeFieldAt`, `modifyRep` (ST transients),
   `setFieldSumAt`, `projectRep`, `matchRep`, `RowEq`, `RowShow`, `RowEqSum`, `RowShowSum`, `FieldIndex`,
   `ConstructorIndex`, `Field(..)`, `IsLabel`, `DictAny`, `AllFields`, `noInlineUnsafeCo`
@@ -48,8 +51,11 @@ All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
   * `RowEqSum` and `RowShowSum` for sum rows via tag testing and constructor dispatch
   * `GHC.Records.HasField` for native `OverloadedRecordDot` (`r.field`)
   * `AllFields` generic field-class dictionary supply (solving wanteds and packing flat `SmallArray (DictAny c)`)
-- `packages/polytropos-plugin/tests/smoke/Main.hs` — Smoke tests exercising plugin-solved dictionary synthesis
-  and `AllFields` generic dictionary supply across homogeneous and heterogeneous rows
+  * Type-level row metadata rewriter: reduces `FieldNames`, `SimpleFieldTypes`, and `FieldTypes`
+    when the product row is fully known
+- `packages/polytropos-plugin/tests/smoke/Main.hs` — Smoke tests exercising plugin-solved dictionary synthesis,
+  `AllFields` generic dictionary supply across homogeneous and heterogeneous rows, and compile-time `Refl`
+  equality reduction of metadata families
 - `packages/polytropos-generics/` — Datatype generics library unifying nominal Haskell ADTs with `polytropos`
   `Rep` with zero boxed intermediate tree representations
 - `packages/polytropos-optics/` — Satellite package integrating with `optics-core` and `LabelOptic`
@@ -68,7 +74,7 @@ All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
   header + flat payload) and variants (array: constructor Word tag + payload), positional encoding
   mirroring the runtime Rep layout; scoped allow-newer for cborg/serialise's pre-9.14 base bounds
 - `plans/2026-10-09-plugin-gap-roadmap.md` & `plans/2026-10-09-plugin-gap-spec.md` — Plugin gap-closing
-  roadmap and specification sketches (§1.1 done; §1.2-§1.5 queued).
+  roadmap and specification sketches (§1.1, §1.2, §1.3 done; §1.4-§1.5 queued).
 - `docs/NEWBIE_GUIDE.md` — quickstart and token-conservation workflow guide
 - `docs/MAINTAINER_GUIDE.md` — engineering governance and zero-contamination doctrine
 - `docs/notes/POLYTROPOS_DESIGN.md` — decisions D1–D10, costs, open questions
@@ -84,10 +90,9 @@ All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
 
 ## What is deliberately missing
 
-- Plugin gap roadmap (§1.3): Type-level row metadata families (`FieldTypes`) and plugin rewriting.
 - Plugin gap roadmap (§1.4): Subrow/projection evidence for sums/variants (`SubRow`, narrowing indices).
 - Plugin gap roadmap (§1.5): Compile-time label hashing (`KnownHash`).
 
 ## Next action
 
-- Advance to milestone §1.3 in `plans/2026-10-09-plugin-gap-roadmap.md`: Type-level row metadata + plugin rewriting.
+- Advance to milestone §1.4 in `plans/2026-10-09-plugin-gap-roadmap.md`: Subrow/projection evidence for sums/variants.

@@ -77,6 +77,19 @@ operate directly over HKD rows, allowing generic field-class dictionary supply
 (e.g. `Show` over `Maybe Int` fields) and `OverloadedRecordDot` projection on
 HKD records.
 
+**D3b — type-level row metadata and plugin rewriting (resolved in §1.3).**
+To enable type-level reflection and generic programming without runtime overhead
+or type-level search, `Polytropos.Core` provides metadata type families rewritten
+directly by the TcPlugin:
+- `FieldNames (r :: k) :: [Symbol]`
+- `SimpleFieldTypes (r :: k) :: [(Symbol, Type)]`
+- `FieldTypes (f :: Type -> Type) (r :: k) :: [(Symbol, Type)]`
+
+When the row `r` is fully known (a closed promoted list of field bindings), the
+plugin rewrites these families directly to concrete type-level lists using
+`mkTyFamAppReduction`. Open rows (with uninstantiated tail variables) or sum rows
+are not rewritten and remain deferred until instantiation.
+
 ---
 
 ## 2. The generic representation

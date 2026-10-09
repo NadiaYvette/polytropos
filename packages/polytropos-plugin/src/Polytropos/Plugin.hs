@@ -48,6 +48,7 @@ import GHC.Plugins
   , mkTyConTy
   , splitTyConApp_maybe
   , isStrLitTy
+  , mkStrLitTy
   , intDataCon
   , wordDataCon
   , FastString
@@ -99,6 +100,15 @@ import GHC.Builtin.Types
   ( boolTy
   , trueDataCon
   , falseDataCon
+  , typeSymbolKind
+  , liftedTypeKind
+  , mkPromotedPairTy
+  , mkPromotedListTy
+  , mkTupleTy
+  )
+
+import Language.Haskell.Syntax.Basic
+  ( Boxity(..)
   )
 
 import GHC.Builtin.Names
@@ -121,7 +131,8 @@ import GHC.TcPlugin.API
   , Ct
   , TcPluginStage(..)
   , mkTcPlugin
-  , emptyUFM
+  , listToUFM
+  , UniqFM
   , lookupOrig
   , tcLookupId
   , tcLookupTyCon
@@ -138,10 +149,14 @@ import GHC.TcPlugin.API
   , ctEvExpr
   , mkNonCanonical
   , ctLoc
+  , Role(..)
+  , TcPluginRewriteResult(..)
+  , mkTyFamAppReduction
   )
 
 import GHC.TcPlugin.API.Internal
   ( unsafeLiftTcM
+  , TcPluginRewriter
   )
 
 -------------------------------------------------------------------------------
@@ -155,7 +170,7 @@ polytroposPlugin :: TcPlugin
 polytroposPlugin = TcPlugin
   { tcPluginInit     = polytroposInit
   , tcPluginSolve    = polytroposSolve
-  , tcPluginRewrite  = const emptyUFM
+  , tcPluginRewrite  = polytroposRewrite
   , tcPluginPostTc   = const (return ())
   , tcPluginShutdown = const (return ())
   }
@@ -186,6 +201,9 @@ data PluginState = PluginState
   , psDictAnyTyCon    :: !TyCon  -- ^ Polytropos.Core.DictAny
   , psMkDictAny       :: !Var    -- ^ Polytropos.Core.mkDictAny
   , psEvidenceAllFields :: !Var  -- ^ Polytropos.Core.evidenceAllFields
+  , psFieldTypesTyCon       :: !TyCon -- ^ Polytropos.Core.FieldTypes
+  , psSimpleFieldTypesTyCon :: !TyCon -- ^ Polytropos.Core.SimpleFieldTypes
+  , psFieldNamesTyCon       :: !TyCon -- ^ Polytropos.Core.FieldNames
   }
 
 -------------------------------------------------------------------------------
@@ -228,6 +246,15 @@ polytroposInit = do
   psMkDictAny <- lookupIdInModule coreMod "mkDictAny"
   psEvidenceAllFields <- lookupIdInModule coreMod "evidenceAllFields"
 
+  fieldTypesOcc <- lookupOrig coreMod (mkTcOcc "FieldTypes")
+  psFieldTypesTyCon <- tcLookupTyCon fieldTypesOcc
+
+  simpleFieldTypesOcc <- lookupOrig coreMod (mkTcOcc "SimpleFieldTypes")
+  psSimpleFieldTypesTyCon <- tcLookupTyCon simpleFieldTypesOcc
+
+  fieldNamesOcc <- lookupOrig coreMod (mkTcOcc "FieldNames")
+  psFieldNamesTyCon <- tcLookupTyCon fieldNamesOcc
+
   pure PluginState
     { psRepTag        = psRepTag
     , psRepArity      = psRepArity
@@ -250,6 +277,9 @@ polytroposInit = do
     , psDictAnyTyCon  = psDictAnyTyCon
     , psMkDictAny     = psMkDictAny
     , psEvidenceAllFields = psEvidenceAllFields
+    , psFieldTypesTyCon       = psFieldTypesTyCon
+    , psSimpleFieldTypesTyCon = psSimpleFieldTypesTyCon
+    , psFieldNamesTyCon       = psFieldNamesTyCon
     }
 
 findModule :: String -> Maybe String -> TcPluginM 'Init Module
@@ -269,6 +299,84 @@ lookupIdInModule modName occStr = do
   let occ = mkVarOcc occStr
   name <- lookupOrig modName occ
   tcLookupId name
+
+-------------------------------------------------------------------------------
+-- Type family rewriting (FieldNames, SimpleFieldTypes, FieldTypes)
+-------------------------------------------------------------------------------
+
+polytroposRewrite :: PluginState -> UniqFM TyCon TcPluginRewriter
+polytroposRewrite state = listToUFM
+  [ (psFieldTypesTyCon state, rewriteFieldTypes (psFieldTypesTyCon state))
+  , (psSimpleFieldTypesTyCon state, rewriteSimpleFieldTypes (psSimpleFieldTypesTyCon state))
+  , (psFieldNamesTyCon state, rewriteFieldNames (psFieldNamesTyCon state))
+  ]
+
+walkRowFields_maybe :: Type -> Maybe [(FastString, Type)]
+walkRowFields_maybe rowTy = do
+  elems <- myExtractPromotedList (unwrapSynonyms rowTy)
+  mapM extractField elems
+  where
+    extractField elemTy =
+      case splitTyConApp_maybe (unwrapSynonyms elemTy) of
+        Just (_, args)
+          | length args >= 2
+          , let nameTy = args !! (length args - 2)
+          , let fieldTy = args !! (length args - 1)
+          , Just n <- isStrLitTy (unwrapSynonyms nameTy)
+          -> Just (n, fieldTy)
+        _ -> Nothing
+
+rewriteFieldNames :: TyCon -> [Ct] -> [Type] -> TcPluginM 'Rewrite TcPluginRewriteResult
+rewriteFieldNames tyCon _givens args
+  | not (null args)
+  , let rowTy = last args
+  , Just fields <- walkRowFields_maybe rowTy
+  = do
+      let names = map (mkStrLitTy . fst) fields
+          reducedTy = mkPromotedListTy typeSymbolKind names
+      pure $ TcPluginRewriteTo
+        { tcRewriterNewWanteds = []
+        , tcPluginReduction    =
+            mkTyFamAppReduction "polytropos" Nominal [] tyCon args reducedTy
+        }
+  | otherwise = pure TcPluginNoRewrite
+
+rewriteSimpleFieldTypes :: TyCon -> [Ct] -> [Type] -> TcPluginM 'Rewrite TcPluginRewriteResult
+rewriteSimpleFieldTypes tyCon _givens args
+  | not (null args)
+  , let rowTy = last args
+  , Just fields <- walkRowFields_maybe rowTy
+  = do
+      let pairKind = mkTupleTy Boxed [typeSymbolKind, liftedTypeKind]
+          pairs = [ mkPromotedPairTy typeSymbolKind liftedTypeKind (mkStrLitTy name) ty
+                  | (name, ty) <- fields
+                  ]
+          reducedTy = mkPromotedListTy pairKind pairs
+      pure $ TcPluginRewriteTo
+        { tcRewriterNewWanteds = []
+        , tcPluginReduction    =
+            mkTyFamAppReduction "polytropos" Nominal [] tyCon args reducedTy
+        }
+  | otherwise = pure TcPluginNoRewrite
+
+rewriteFieldTypes :: TyCon -> [Ct] -> [Type] -> TcPluginM 'Rewrite TcPluginRewriteResult
+rewriteFieldTypes tyCon _givens args
+  | length args >= 2
+  , let rowTy = last args
+  , let fTy   = args !! (length args - 2)
+  , Just fields <- walkRowFields_maybe rowTy
+  = do
+      let pairKind = mkTupleTy Boxed [typeSymbolKind, liftedTypeKind]
+          pairs = [ mkPromotedPairTy typeSymbolKind liftedTypeKind (mkStrLitTy name) (mkAppTy fTy ty)
+                  | (name, ty) <- fields
+                  ]
+          reducedTy = mkPromotedListTy pairKind pairs
+      pure $ TcPluginRewriteTo
+        { tcRewriterNewWanteds = []
+        , tcPluginReduction    =
+            mkTyFamAppReduction "polytropos" Nominal [] tyCon args reducedTy
+        }
+  | otherwise = pure TcPluginNoRewrite
 
 -------------------------------------------------------------------------------
 -- Constraint solving

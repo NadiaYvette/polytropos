@@ -956,6 +956,36 @@ r1 ⊆ r2
 %%        by projecting the raw payload f Any at the compile-time slot index
 %%        and coercing to the expected field type f τ.
 %%
+%% Type-level row metadata & TcPlugin rewriting layer (§1.3 landed implementation):
+%%   To enable type-level reflection and generic programming without type-level
+%%   search, Polytropos.Core defines closed metadata type families rewritten
+%%   directly by the TcPlugin:
+%%     - FieldNames (r :: k) :: [Symbol]
+%%     - SimpleFieldTypes (r :: k) :: [(Symbol, Type)]
+%%     - FieldTypes (f :: Type -> Type) (r :: k) :: [(Symbol, Type)]
+%%
+%%   1. What the TcPlugin Rewriter WILL Rewrite:
+%%      - Closed product rows of shape [Pair Symbol Type] or promoted 2-tuples
+%%        '(Symbol, Type), including type synonyms (e.g. :=, Row, ProductRow f).
+%%      - The empty row '[] reduces to '[] of the appropriate kind ([Symbol] or
+%%        [(Symbol, Type)]).
+%%      - FieldNames extracts the symbol literal names: [l₁, l₂, ...].
+%%      - SimpleFieldTypes pairs each field name with its bare payload type:
+%%        ['(l₁, τ₁), '(l₂, τ₂), ...].
+%%      - FieldTypes pairs each field name with the functor applied payload type:
+%%        ['(l₁, f τ₁), '(l₂, f τ₂), ...].
+%%      - Reductions are emitted using mkTyFamAppReduction at Nominal role.
+%%
+%%   2. What the TcPlugin Rewriter WILL NOT Rewrite:
+%%      - Open rows: Any row whose tail is an uninstantiated type variable or
+%%        an unreduced row concatenation (++). The rewriter returns TcPluginNoRewrite
+%%        so GHC defers reduction until the tail is fully instantiated.
+%%      - Non-product rows: Sum rows (SumRow, SumRowHKD), handler rows, or result
+%%        rows. These are constructor mappings or control constructs, not field
+%%        metadata.
+%%      - Malformed rows: Any element lacking a string literal label or failing
+%%        tuple structure returns TcPluginNoRewrite.
+%%
 %% Dependency direction:
 %%   - row-shape layer → shared row-algebra layer (calls in)
 %%   - constraint layer  → shared row-algebra layer (calls in)

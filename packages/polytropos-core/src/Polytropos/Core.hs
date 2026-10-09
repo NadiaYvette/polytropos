@@ -46,6 +46,10 @@ module Polytropos.Core (
   , SumRow
   , SumRowHKD
   , SumRowF
+    -- * Type-level row metadata
+  , FieldNames
+  , SimpleFieldTypes
+  , FieldTypes
     -- * Row flavours (Option D vocabulary)
   , RowType(..)
   , RowFlavour(..)
@@ -165,6 +169,35 @@ type SumRowHKD (f :: Type -> Type) = SumRowOf (ProductRow f)
 
 -- | Synonym for 'SumRowHKD'.
 type SumRowF (f :: Type -> Type) = SumRowHKD f
+
+{-------------------------------------------------------------------------------
+  §1b  Type-level row metadata (rewritten by TcPlugin)
+
+  Closed-form type families without Haskell-level equations. When a row is
+  fully known, the TcPlugin rewrites these type families to concrete type-level
+  lists, enabling generic programming over field names and field types.
+-------------------------------------------------------------------------------}
+
+-- | Extract field names as a type-level list of 'Symbol's.
+--
+-- For each field @"name" ':= ty@ in the row, this evaluates to @"name"@.
+-- When the row is fully known, the TcPlugin rewrites this type family to a
+-- concrete type-level list of symbols.
+type family FieldNames (r :: k) :: [Symbol]
+
+-- | Extract field names and bare field types as a type-level list of pairs.
+--
+-- For each field @"name" ':= ty@ in the row, this evaluates to @'("name", ty)@.
+-- When the row is fully known, the TcPlugin rewrites this type family to a
+-- concrete type-level list of pairs.
+type family SimpleFieldTypes (r :: k) :: [(Symbol, Type)]
+
+-- | Extract field names and instantiated field types as a type-level list of pairs.
+--
+-- For each field @"name" ':= ty@ in the row, this evaluates to @'("name", f ty)@.
+-- When the row is fully known, the TcPlugin rewrites this type family to a
+-- concrete type-level list of pairs.
+type family FieldTypes (f :: Type -> Type) (r :: k) :: [(Symbol, Type)]
 
 {-------------------------------------------------------------------------------\n  §1b  Row flavours (Option D vocabulary)\n\n  Concrete row flavours, not kind-polymorphic. Each flavour carries a\n  type-level list of entries; the flavour tells the plugin what kind of\n  entries to expect.\n\n  See PHASE2_SKETCH.md, Piece 1, §1a.\n-------------------------------------------------------------------------------}
 

@@ -1,4 +1,6 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
@@ -14,7 +16,9 @@ module Main (main) where
 import Data.Functor.Identity (Identity(..))
 import Data.Kind (Type)
 import Data.Primitive.SmallArray (SmallArray, sizeofSmallArray, indexSmallArray)
+import Data.Type.Equality ((:~:)(Refl))
 import GHC.Exts (Any)
+import GHC.TypeLits (Symbol)
 import Test.Tasty (defaultMain, testGroup)
 import Test.Tasty.HUnit (testCase, (@?=))
 
@@ -95,6 +99,29 @@ main = defaultMain $ testGroup "plugin RowEq/RowShow smoke"
           constructorIndex @_ @"Success" @(HKDSumRow Maybe) @?= 0
           constructorIndex @_ @"Failure" @(HKDSumRow Maybe) @?= 1
       ]
+  , testGroup "Type-level row metadata rewriting"
+      [ testCase "FieldNames reduces on TwoInts" $
+          case namesTwoInts of
+            Refl -> pure ()
+      , testCase "FieldNames reduces on empty row" $
+          case namesEmpty of
+            Refl -> pure ()
+      , testCase "SimpleFieldTypes reduces on TwoInts" $
+          case simpleTypesTwoInts of
+            Refl -> pure ()
+      , testCase "SimpleFieldTypes reduces on empty row" $
+          case simpleTypesEmpty of
+            Refl -> pure ()
+      , testCase "FieldTypes reduces on TwoInts with Maybe" $
+          case fieldTypesTwoInts of
+            Refl -> pure ()
+      , testCase "FieldTypes reduces on HeteroRow with Identity" $
+          case fieldTypesHetero of
+            Refl -> pure ()
+      , testCase "FieldTypes reduces on empty row" $
+          case fieldTypesEmpty of
+            Refl -> pure ()
+      ]
   ]
 
 -- | Use a supplied array of type-erased Show dictionaries to show every slot.
@@ -120,6 +147,27 @@ twoInts = RowRep (productRep [slot (42 :: Int), slot (7 :: Int)])
 type HeteroRow = '[ "greeting" := String, "count" := Int, "active" := Bool ]
 heteroVal :: RowRep Identity ProductRowT HeteroRow ()
 heteroVal = RowRep (productRep [slot ("hello" :: String), slot (99 :: Int), slot True])
+
+namesTwoInts :: FieldNames TwoInts :~: '[ "x", "y" ]
+namesTwoInts = Refl
+
+namesEmpty :: FieldNames ('[] :: [(Symbol, Type)]) :~: '[]
+namesEmpty = Refl
+
+simpleTypesTwoInts :: SimpleFieldTypes TwoInts :~: '[ '("x", Int), '("y", Int) ]
+simpleTypesTwoInts = Refl
+
+simpleTypesEmpty :: SimpleFieldTypes ('[] :: [(Symbol, Type)]) :~: '[]
+simpleTypesEmpty = Refl
+
+fieldTypesTwoInts :: FieldTypes Maybe TwoInts :~: '[ '("x", Maybe Int), '("y", Maybe Int) ]
+fieldTypesTwoInts = Refl
+
+fieldTypesHetero :: FieldTypes Identity HeteroRow :~: '[ '("greeting", Identity String), '("count", Identity Int), '("active", Identity Bool) ]
+fieldTypesHetero = Refl
+
+fieldTypesEmpty :: FieldTypes Maybe ('[] :: [(Symbol, Type)]) :~: '[]
+fieldTypesEmpty = Refl
 
 -- | S2: a sum with two constructors
 type S2 = '[ "C1" := '[ "x" := Int ], "C2" := '[ "y" := Bool ] ]

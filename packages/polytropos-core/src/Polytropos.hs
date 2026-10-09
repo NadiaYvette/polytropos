@@ -68,6 +68,9 @@ module Polytropos
   , Field(..)
   , AllFields(..)
   , DictAllFields
+  , FieldNames
+  , SimpleFieldTypes
+  , FieldTypes
   ) where
 
 import Polytropos.Core
