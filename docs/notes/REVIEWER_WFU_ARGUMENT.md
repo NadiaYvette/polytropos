@@ -225,6 +225,6 @@ change set. When the draft's anchoring paragraph changes, §2.3 is read
 against the draft's §0 and corrected if they drift.
 
 This note is a source map. It does not replace the draft, the OCaml source,
-the GHC source, the plugin code, or the test spec. It points at them.
+the GHC source, the plugin code, or the test spec.It points at them.
 
 Assisted-by: Freebuff (Upstage AI / Solar Pro 4)
