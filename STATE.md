@@ -36,7 +36,12 @@ All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
 - `polytropos-cbor-test` passes 6 tests (3- and 20-field record roundtrips, variant roundtrips,
   byte-level format assertions: length header + flat payload, tag + payload).
 - `polytropos-cassava-test` passes 4 tests (heterogeneous CSV named record codecs, 12-field roundtrips).
-- `polytropos-hasql-test` passes 3 tests (heterogeneous column decode simulation and row assembly).
+- `polytropos-persistent-test` passes 10 tests (PersistRow marshalling, 20-field roundtrips,
+  row-order serialization, PersistField bridge, and Entity wrapper).
+- `polytropos-rel8-test` passes 13 tests (Rel8 `Rel8able (PolyRow r)` instance, `RowHTable` right-nested
+  column tree, `namesFromLabels` symbol column synthesis, `showQuery` SELECT/VALUES projections,
+  `toRecord`/`fromRecord` and `columnsToRow`/`rowToColumns` roundtrips, and columnar combinators
+  `hfield`, `hfieldAt`, `htabulate`, `hmap`, `htraverse`, `hzipWith`).
 - `polytropos-quickcheck-test` passes 9 tests (record and variant arbitrary generation and convergence shrinking).
 
 ## What exists
@@ -89,6 +94,10 @@ All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
 - `packages/polytropos-cbor/` — Satellite package: `Serialise` for records (CBOR array: length
   header + flat payload) and variants (array: constructor Word tag + payload), positional encoding
   mirroring the runtime Rep layout; scoped allow-newer for cborg/serialise's pre-9.14 base bounds
+- `packages/polytropos-rel8/` — Satellite package: `Rel8able (PolyRow r)` for PostgreSQL schemas,
+  mapping open product rows directly to a nested `RowHTable r` column tree (`HProduct`/`HLabel`/`HIdentity`),
+  type-level label symbol synthesis via `namesFromLabels`, `litPolyRow`/`litRecord`, and columnar combinators
+  (`hfield`, `hfieldAt`, `htabulate`, `hmap`, `htraverse`, `hzipWith`).
 - `plans/2026-10-09-plugin-gap-roadmap.md` & `plans/2026-10-09-plugin-gap-spec.md` — Plugin gap-closing
   roadmap and specification sketches (all milestones §1.1 through §1.7 complete).
 - `docs/NEWBIE_GUIDE.md` — quickstart and token-conservation workflow guide
