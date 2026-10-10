@@ -44,6 +44,26 @@ All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
   `hfield`, `hfieldAt`, `htabulate`, `hmap`, `htraverse`, `hzipWith`).
 - `polytropos-quickcheck-test` passes 9 tests (record and variant arbitrary generation and convergence shrinking).
 
+### Algebraic Effect Systems Ports (Completed & Verified)
+
+All three algebraic effect system ports planned in `docs/notes/EFFECT_SYSTEMS_PORTING_MASTER_PLAN.md` have been implemented, tested, and committed on their respective `polytropos-port` branches:
+- **`effectful`** (`/home/nyc/src/effectful`, branch `polytropos-port`, commit `470e6d7`):
+  * Local linkage to `polytropos-core` and `polytropos-plugin` with `-fplugin=Polytropos.Plugin`.
+  * Open row representation with polykinded `(:::)` and `HasEffect` aliases.
+  * Overlappable `FieldIndex` fallback instance for `(:>)` providing compile-time literal integer index resolution.
+  * 89/89 tests passing in `effectful:test:test` under GHC 9.14.1.
+- **`polysemy`** (`/home/nyc/src/polysemy`, branch `polytropos-port`, commit `6247540`):
+  * Local linkage to `polytropos-core` and `polytropos-plugin` with `-fplugin=Polytropos.Plugin`.
+  * Wired `Member t r` directly to `ConstructorIndex t r`, eliminating linked-list Peano search stalls and the need for `polysemy-plugin`.
+  * Implemented $O(1)$ integer operations for `decomp`, `extract`, `weaken`, and `decompCoerce`.
+  * 43/43 tests passing in `polysemy:test:polysemy-test` under GHC 9.14.1.
+- **`kernmantle`** (`/home/nyc/src/kernmantle`, branch `polytropos-port`, commit `60b2ddc`):
+  * Clean fork off upstream `master` (`11431c0`), leaving behind incomplete `large-anon` changes and completely removing `vinyl`.
+  * Flat `Rec` backed by `SmallArray Any` with $O(1)$ `rgetf` via `FieldIndex` and $O(1)$ bulk-copy `rcast` via `SubRow`.
+  * Collapsed `TightRope` and `LooseRope` into the identical flat array representation (`tighten = loosen = id`).
+  * Provided GADT-backed `RecView` pattern synonyms `RNil` and `(:&)`, and `Label`/`IsLabel` support.
+  * All 4 executables (`exCli`, `ex1`, `exBypass`, `exLenses`) compile, link, and run cleanly, and `kernmantle-batteries` compiles cleanly under GHC 9.14.1.
+
 ## What exists
 
 - `packages/polytropos-core/src/Polytropos/Core.hs` — `RowOf`, `Row`, `ProductRow`,
@@ -123,4 +143,5 @@ All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
 
 ## Next action
 
-- All gaps from `plans/2026-10-09-plugin-gap-roadmap.md` are closed. Ready for review and subsequent roadmap planning.
+- Algebraic effect systems ports (`effectful`, `polysemy`, `kernmantle`) completed, verified under GHC 9.14.1, and committed.
+- Ready for user review or further operational roadmap directives.
