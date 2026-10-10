@@ -15,37 +15,11 @@ import Test.Tasty.HUnit
 import Control.Lens ((&), (.~), (^.), (^..), (^?), (%~), at, each, ix, preview,
                      review, (?~), _1, _2, _3)
 import Polytropos
-import Polytropos.Core (Pair (..), RowEqSum (..), RowShowSum (..))
 import Polytropos.Lens
 
 type MyRec = Record '["x" ':= Int, "y" ':= Bool, "z" ':= Bool]
 type HomRec = Record '["x" ':= Int, "y" ':= Int, "z" ':= Int]
 type MyVar = Variant '["A" ':= '["foo" ':= Int], "B" ':= '["bar" ':= Bool]]
-
-instance Eq MyRec where
-  (==) = repEq
-instance Show MyRec where
-  showsPrec = repShowsPrec
-
-instance Eq HomRec where
-  (==) = repEq
-instance Show HomRec where
-  showsPrec = repShowsPrec
-
-instance Eq MyVar where
-  (==) = repEqSum
-instance Show MyVar where
-  showsPrec = repShowsPrecSum
-
-instance Eq (Record '["foo" ':= Int]) where
-  (==) = repEq
-instance Show (Record '["foo" ':= Int]) where
-  showsPrec = repShowsPrec
-
-instance Eq (Record '["bar" ':= Bool]) where
-  (==) = repEq
-instance Show (Record '["bar" ':= Bool]) where
-  showsPrec = repShowsPrec
 
 myRec :: MyRec
 myRec = insertField (Field @"x") (42 :: Int)

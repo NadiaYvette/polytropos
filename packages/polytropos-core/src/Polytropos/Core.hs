@@ -547,6 +547,84 @@ type ProductRowHKDProxy = ProxyRowFlavour ProductRowHKDT
 type SumRowHKDProxy = ProxyRowFlavour SumRowHKDT
 
 {-------------------------------------------------------------------------------
+  Standard type class instances for RowRep (§1.7 Generic instance layer)
+-------------------------------------------------------------------------------}
+
+-- | Standard 'Eq' instance for product rows, backed by 'RowEq'.
+instance RowEq ProductRowT row => Eq (RowRep f ProductRowT row a) where
+  (==) = repEq
+
+-- | Standard 'Show' instance for product rows, backed by 'RowShow'.
+instance RowShow ProductRowT row => Show (RowRep f ProductRowT row a) where
+  showsPrec = repShowsPrec
+
+-- | Standard 'Ord' instance for product rows, backed by 'AllFields'.
+instance (RowEq ProductRowT row, AllFields ProductRowT row Ord) => Ord (RowRep f ProductRowT row a) where
+  compare (RowRep r1) (RowRep r2) =
+    let dicts = fieldDicts @ProductRowT @row @Ord
+        v1 = repVals r1
+        v2 = repVals r2
+        n = sizeofSmallArray v1
+        loop i
+          | i == n = EQ
+          | otherwise =
+              case indexSmallArray dicts i of
+                DictAny ->
+                  let x1 :: Any
+                      x1 = noInlineUnsafeCo (indexSmallArray v1 i)
+                      x2 :: Any
+                      x2 = noInlineUnsafeCo (indexSmallArray v2 i)
+                  in case compare x1 x2 of
+                       EQ -> loop (i + 1)
+                       other -> other
+    in loop 0
+
+-- | Standard 'Eq' instance for HKD product rows, backed by 'RowEq'.
+instance RowEq ProductRowHKDT row => Eq (RowRep f ProductRowHKDT row a) where
+  (==) = repEq
+
+-- | Standard 'Show' instance for HKD product rows, backed by 'RowShow'.
+instance RowShow ProductRowHKDT row => Show (RowRep f ProductRowHKDT row a) where
+  showsPrec = repShowsPrec
+
+-- | Standard 'Ord' instance for HKD product rows, backed by 'AllFields'.
+instance (RowEq ProductRowHKDT row, AllFields ProductRowHKDT row Ord) => Ord (RowRep f ProductRowHKDT row a) where
+  compare (RowRep r1) (RowRep r2) =
+    let dicts = fieldDicts @ProductRowHKDT @row @Ord
+        v1 = repVals r1
+        v2 = repVals r2
+        n = sizeofSmallArray v1
+        loop i
+          | i == n = EQ
+          | otherwise =
+              case indexSmallArray dicts i of
+                DictAny ->
+                  let x1 :: Any
+                      x1 = noInlineUnsafeCo (indexSmallArray v1 i)
+                      x2 :: Any
+                      x2 = noInlineUnsafeCo (indexSmallArray v2 i)
+                  in case compare x1 x2 of
+                       EQ -> loop (i + 1)
+                       other -> other
+    in loop 0
+
+-- | Standard 'Eq' instance for sum rows, backed by 'RowEqSum'.
+instance RowEqSum SumRowT row => Eq (RowRep f SumRowT row a) where
+  (==) = repEqSum
+
+-- | Standard 'Show' instance for sum rows, backed by 'RowShowSum'.
+instance RowShowSum SumRowT row => Show (RowRep f SumRowT row a) where
+  showsPrec = repShowsPrecSum
+
+-- | Standard 'Eq' instance for HKD sum rows, backed by 'RowEqSum'.
+instance RowEqSum SumRowHKDT row => Eq (RowRep f SumRowHKDT row a) where
+  (==) = repEqSum
+
+-- | Standard 'Show' instance for HKD sum rows, backed by 'RowShowSum'.
+instance RowShowSum SumRowHKDT row => Show (RowRep f SumRowHKDT row a) where
+  showsPrec = repShowsPrecSum
+
+{-------------------------------------------------------------------------------
   §5b  Subrow and Subsum evidence classes
 -------------------------------------------------------------------------------}
 

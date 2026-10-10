@@ -258,7 +258,7 @@ main = defaultMain $ testGroup "plugin RowEq/RowShow smoke"
           resName @?= "Alice"
           resAge @?= (30 :: Int)
       , testCase "OpenVariant declaration form construction and matching" $ do
-          let s1 = Success { val = 200 } :: Variant '[ "Success" := '[ "val" := Int ], "Failure" := '[ "msg" := String ] ]
+          let s1 = Success { val = (200 :: Int) } :: Variant '[ "Success" := '[ "val" := Int ], "Failure" := '[ "msg" := String ] ]
               s2 = Failure { msg = "bad request" } :: Variant '[ "Success" := '[ "val" := Int ], "Failure" := '[ "msg" := String ] ]
               eval :: Variant '[ "Success" := '[ "val" := Int ], "Failure" := '[ "msg" := String ] ] -> Int
               eval s = case s of

@@ -8,27 +8,12 @@ import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Vector as V
 import Data.Csv (decodeByName, encodeByName, header)
 import Polytropos
-import Polytropos.Core (Pair (..))
 import Polytropos.Cassava ()
 
 type MyRec = Record '[ "x" ':= Int, "y" ':= Int, "z" ':= Int ]
 
-instance Eq MyRec where
-  (==) = repEq
-instance Show MyRec where
-  showsPrec = repShowsPrec
-
 -- A heterogeneous row: each field uses its own ToField/FromField instance.
--- (Word rather than Double/Bool: the plugin-synthesized Eq covers Int/Bool/Word
--- only, and cassava has no ToField Bool.)
 type Hetero = Record '[ "n" ':= Int, "w" ':= Word, "m" ':= Int ]
-
-instance Eq Hetero where
-  (==) = repEq
--- The plugin's synthesized Show covers Int/Bool only (no Word), so this
--- heterogeneous row gets a hand-rolled Show based on its CSV encoding.
-instance Show Hetero where
-  show r = "Hetero " ++ show (encodeByName (header heteroNames) [r])
 
 myRec :: MyRec
 myRec = insertField (Field @"x") (1 :: Int)
@@ -47,11 +32,6 @@ type RowOf12 =
    , "c04" ':= Int, "c05" ':= Int, "c06" ':= Int, "c07" ':= Int
    , "c08" ':= Int, "c09" ':= Int, "c10" ':= Int, "c11" ':= Int
    ]
-
-instance Eq (Record RowOf12) where
-  (==) = repEq
-instance Show (Record RowOf12) where
-  showsPrec = repShowsPrec
 
 buildWide :: Int -> Record RowOf12
 buildWide n =

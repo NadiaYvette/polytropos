@@ -7,36 +7,10 @@ import Data.Aeson (encode, decode)
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Char8 as BS8 (pack)
 import Polytropos
-import Polytropos.Core (Pair (..), RowEqSum (..), RowShowSum (..))
 import Polytropos.Aeson ()
 
 type MyRec = Record '["x" ':= Int, "y" ':= Int, "z" ':= Int]
 type MyVar = Variant '["A" ':= '["foo" ':= Int], "B" ':= '["bar" ':= Int]]
-
-instance Eq MyRec where
-  (==) = repEq
-instance Show MyRec where
-  showsPrec = repShowsPrec
-
-instance Eq (Record '[]) where
-  (==) = repEq
-instance Show (Record '[]) where
-  showsPrec = repShowsPrec
-
-instance Eq MyVar where
-  (==) = repEqSum
-instance Show MyVar where
-  showsPrec = repShowsPrecSum
-
-instance Eq (Record '["foo" ':= Int]) where
-  (==) = repEq
-instance Show (Record '["foo" ':= Int]) where
-  showsPrec = repShowsPrec
-
-instance Eq (Record '["bar" ':= Int]) where
-  (==) = repEq
-instance Show (Record '["bar" ':= Int]) where
-  showsPrec = repShowsPrec
 
 myRec :: MyRec
 myRec = insertField (Field @"x") (1 :: Int)
@@ -56,11 +30,6 @@ type RowOf20 =
    , "f10" ':= Int, "f11" ':= Int, "f12" ':= Int, "f13" ':= Int, "f14" ':= Int
    , "f15" ':= Int, "f16" ':= Int, "f17" ':= Int, "f18" ':= Int, "f19" ':= Int
    ]
-
-instance Eq (Record RowOf20) where
-  (==) = repEq
-instance Show (Record RowOf20) where
-  showsPrec = repShowsPrec
 
 buildBig :: Int -> Record RowOf20
 buildBig n =

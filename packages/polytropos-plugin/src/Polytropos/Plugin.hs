@@ -53,7 +53,6 @@ import GHC.Plugins
   , defaultPlugin
   , tcPlugin
   , ppr
-  , CoreExpr
   , Expr(..)
   , Type
   , mkTcOcc
@@ -98,6 +97,7 @@ import GHC.Unit.Types
 
 import GHC.Core.Class
   ( classMethods
+  , classTyCon
   )
 
 import GHC.Core.Multiplicity
@@ -110,8 +110,7 @@ import GHC.Core.TyCo.Compare
   )
 
 import GHC.Builtin.Types
-  ( boolTy
-  , trueDataCon
+  ( trueDataCon
   , falseDataCon
   , maybeTyCon
   , nothingDataCon
@@ -131,6 +130,8 @@ import GHC.Builtin.Names
   ( gHC_CLASSES
   , gHC_INTERNAL_BASE
   , gHC_INTERNAL_SHOW
+  , eqClassName
+  , showClassName
   )
 
 import GHC.TcPlugin.API
@@ -219,6 +220,8 @@ data PluginState = PluginState
   , psFEqWord       :: !Var    -- ^ $fEqWord
   , psFShowInt      :: !Var    -- ^ $fShowInt
   , psFShowBool     :: !Var    -- ^ $fShowBool
+  , psEqCls         :: !Class  -- ^ GHC.Classes.Eq class
+  , psShowCls       :: !Class  -- ^ GHC.Show.Show class
   , psRowFlavourCls   :: !Class  -- ^ RowFlavour class
   , psHasFieldCls     :: !Class  -- ^ GHC.Records.HasField class
   , psDictAnyTyCon    :: !TyCon  -- ^ Polytropos.Core.DictAny
@@ -253,6 +256,9 @@ polytroposInit = do
   psShowChar      <- lookupIdInModule gHC_INTERNAL_SHOW "showChar"
   psFShowInt      <- lookupIdInModule gHC_INTERNAL_SHOW "$fShowInt"
   psFShowBool     <- lookupIdInModule gHC_INTERNAL_SHOW "$fShowBool"
+
+  psEqCls   <- tcLookupClass eqClassName
+  psShowCls <- tcLookupClass showClassName
 
   psComp <- lookupIdInModule gHC_INTERNAL_BASE "."
 
@@ -295,6 +301,8 @@ polytroposInit = do
     , psFEqWord       = psFEqWord
     , psFShowInt      = psFShowInt
     , psFShowBool     = psFShowBool
+    , psEqCls         = psEqCls
+    , psShowCls       = psShowCls
     , psRowFlavourCls = psRowFlavourCls
     , psHasFieldCls   = psHasFieldCls
     , psDictAnyTyCon  = psDictAnyTyCon
@@ -438,13 +446,13 @@ solveOne state ct
             | nameOccName name == mkTcOcc "ConstructorIndex"
             -> noNew <$> solveConstructorIndex ct cls tys
             | nameOccName name == mkTcOcc "RowEq"
-            -> noNew <$> solveRowEq state ct cls tys
+            -> solveRowEq state ct cls tys
             | nameOccName name == mkTcOcc "RowShow"
-            -> noNew <$> solveRowShow state ct cls tys
+            -> solveRowShow state ct cls tys
             | nameOccName name == mkTcOcc "RowEqSum"
-            -> noNew <$> solveRowEqSum state ct cls tys
+            -> solveRowEqSum state ct cls tys
             | nameOccName name == mkTcOcc "RowShowSum"
-            -> noNew <$> solveRowShowSum state ct cls tys
+            -> solveRowShowSum state ct cls tys
             | nameOccName name == mkTcOcc "HasField"
             -> noNew <$> solveHasField state ct cls tys
             | nameOccName name == mkTcOcc "AllFields"
@@ -517,11 +525,12 @@ solveRowEq
   -> Ct
   -> Class
   -> [Type]
-  -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
+  -> TcPluginM 'Solve (Either ((EvTerm, Ct), [Ct]) ())
 solveRowEq state ct cls tys = do
   let rowTy  = last tys
       rTy    = tys !! (length tys - 2)
       fields = walkRowWithTypes rowTy
+      loc    = ctLoc ct
 
       scEvidence = evDataConApp (classDataCon (psRowFlavourCls state)) [rTy] []
 
@@ -558,25 +567,30 @@ solveRowEq state ct cls tys = do
       arity2 = mkCoreApps (Var (psRepArity state)) (repTypeArgs ++ [rep2])
       eqArity = mkCoreApps (Var (psEqClass state)) [Type intTy, Var (psFEqInt state), arity1, arity2]
 
-      fieldComps = map (compareField rep1 rep2 fTy aTy kATy) fields
+  wanteds <- forM fields $ \(i, _nameFS, fieldTy) -> do
+    ev <- newWanted loc (mkAppTy (mkTyConTy (classTyCon (psEqCls state))) fieldTy)
+    pure (i, fieldTy, ev)
+
+  let compareField (i, fieldTy, ev) =
+        let fieldAtTypeArgs = [Type kATy, Type fTy, Type aTy, Type fieldTy]
+            idxExpr = mkCoreConApps intDataCon [Lit (mkLit (fromIntegral i))]
+            raw1 = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep1])
+            raw2 = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep2])
+            fFieldTy = mkAppTy fTy fieldTy
+            val1 = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw1]
+            val2 = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw2]
+            eqDict = ctEvExpr ev
+        in mkCoreApps (Var (psEqClass state)) [Type fieldTy, eqDict, val1, val2]
+
+      fieldComps = map compareField wanteds
 
       andFn e1 e2 = mkCoreApps (Var (psAnd state)) [e1, e2]
       bodyExpr = foldl andFn (andFn eqTag eqArity) fieldComps
       repEqExpr = mkCoreLams (tyVars ++ [r1Var, r2Var]) bodyExpr
 
       dictExpr = evDataConApp (classDataCon cls) tys [scEvidence, repEqExpr]
-  pure $ Left (EvExpr dictExpr, ct)
-  where
-    compareField rep1 rep2 fTy aTy kATy (i, _, fieldTy) =
-      let fieldAtTypeArgs = [Type kATy, Type fTy, Type aTy, Type fieldTy]
-          idxExpr = mkCoreConApps intDataCon [Lit (mkLit (fromIntegral i))]
-          raw1 = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep1])
-          raw2 = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep2])
-          fFieldTy = mkAppTy fTy fieldTy
-          val1 = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw1]
-          val2 = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw2]
-          eqDict = getEqDict state fieldTy
-      in mkCoreApps (Var (psEqClass state)) [Type fieldTy, eqDict, val1, val2]
+      newWanteds = [mkNonCanonical ev | (_, _, ev) <- wanteds]
+  pure $ Left ((EvExpr dictExpr, ct), newWanteds)
 
 -------------------------------------------------------------------------------
 -- RowShow solver
@@ -587,11 +601,12 @@ solveRowShow
   -> Ct
   -> Class
   -> [Type]
-  -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
+  -> TcPluginM 'Solve (Either ((EvTerm, Ct), [Ct]) ())
 solveRowShow state ct cls tys = do
   let rowTy  = last tys
       rTy    = tys !! (length tys - 2)
       fields = walkRowWithTypes rowTy
+      loc    = ctLoc ct
 
       scEvidence = evDataConApp (classDataCon (psRowFlavourCls state)) [rTy] []
 
@@ -629,7 +644,21 @@ solveRowShow state ct cls tys = do
   let prefixShowS = mkCoreApps (Var (psShowString state)) [prefixExpr]
       spaceShowS  = mkCoreApps (Var (psShowChar state)) [mkCharExpr ' ']
 
-      fieldShows = map (showField rep fTy aTy kATy) fields
+  wanteds <- forM fields $ \(i, _nameFS, fieldTy) -> do
+    ev <- newWanted loc (mkAppTy (mkTyConTy (classTyCon (psShowCls state))) fieldTy)
+    pure (i, fieldTy, ev)
+
+  let showField (i, fieldTy, ev) =
+        let fieldAtTypeArgs = [Type kATy, Type fTy, Type aTy, Type fieldTy]
+            idxExpr = mkCoreConApps intDataCon [Lit (mkLit (fromIntegral i))]
+            raw = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep])
+            fFieldTy = mkAppTy fTy fieldTy
+            val = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw]
+            showDict = ctEvExpr ev
+            zeroPrec = mkCoreConApps intDataCon [Lit (mkLit 0)]
+        in mkCoreApps (Var (psShowsPrecMeth state)) [Type fieldTy, showDict, zeroPrec, val]
+
+      fieldShows = map showField wanteds
       showParts = case fieldShows of
         [] -> [prefixShowS]
         (f0 : fs) -> prefixShowS : f0 : concatMap (\f -> [spaceShowS, f]) fs
@@ -639,20 +668,11 @@ solveRowShow state ct cls tys = do
       repShowsPrecExpr = mkCoreLams (tyVars ++ [precVar, rVar]) bodyExpr
 
       dictExpr = evDataConApp (classDataCon cls) tys [scEvidence, repShowsPrecExpr]
-  pure $ Left (EvExpr dictExpr, ct)
-  where
-    showField rep fTy aTy kATy (i, _, fieldTy) =
-      let fieldAtTypeArgs = [Type kATy, Type fTy, Type aTy, Type fieldTy]
-          idxExpr = mkCoreConApps intDataCon [Lit (mkLit (fromIntegral i))]
-          raw = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep])
-          fFieldTy = mkAppTy fTy fieldTy
-          val = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw]
-          showDict = getShowDict state fieldTy
-          zeroPrec = mkCoreConApps intDataCon [Lit (mkLit 0)]
-      in mkCoreApps (Var (psShowsPrecMeth state)) [Type fieldTy, showDict, zeroPrec, val]
+      newWanteds = [mkNonCanonical ev | (_, _, ev) <- wanteds]
+  pure $ Left ((EvExpr dictExpr, ct), newWanteds)
 
 -------------------------------------------------------------------------------
--- RowEqSum / RowShowSum stubs
+-- RowEqSum / RowShowSum solvers
 -------------------------------------------------------------------------------
 
 solveRowEqSum
@@ -660,11 +680,12 @@ solveRowEqSum
   -> Ct
   -> Class
   -> [Type]
-  -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
+  -> TcPluginM 'Solve (Either ((EvTerm, Ct), [Ct]) ())
 solveRowEqSum state ct cls tys = do
   let rowTy  = last tys
       rTy    = tys !! (length tys - 2)
       constructors = walkSumRowWithTypes rowTy
+      loc    = ctLoc ct
 
       scEvidence = evDataConApp (classDataCon (psRowFlavourCls state)) [rTy] []
 
@@ -701,45 +722,53 @@ solveRowEqSum state ct cls tys = do
       trueExpr  = mkCoreConApps trueDataCon []
       andFn e1 e2 = mkCoreApps (Var (psAnd state)) [e1, e2]
 
-      compareConFields conRowTy =
-        let fields = walkRowWithTypes conRowTy
-            fieldComps = map (compareField rep1 rep2 fTy aTy kATy) fields
+  ctorWanteds <- forM constructors $ \(i, conName, conRowTy) -> do
+    let fields = walkRowWithTypes conRowTy
+    fWanteds <- forM fields $ \(fi, _nameFS, fieldTy) -> do
+      ev <- newWanted loc (mkAppTy (mkTyConTy (classTyCon (psEqCls state))) fieldTy)
+      pure (fi, fieldTy, ev)
+    pure (i, conName, fWanteds)
+
+  let compareConFields fWanteds =
+        let fieldComps = [ compareField fi fieldTy ev | (fi, fieldTy, ev) <- fWanteds ]
         in foldl andFn trueExpr fieldComps
 
+      compareField fi fieldTy ev =
+        let fieldAtTypeArgs = [Type kATy, Type fTy, Type aTy, Type fieldTy]
+            idxExpr = mkCoreConApps intDataCon [Lit (mkLit (fromIntegral fi))]
+            raw1 = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep1])
+            raw2 = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep2])
+            fFieldTy = mkAppTy fTy fieldTy
+            val1 = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw1]
+            val2 = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw2]
+            eqDict = ctEvExpr ev
+        in mkCoreApps (Var (psEqClass state)) [Type fieldTy, eqDict, val1, val2]
+
       buildTree _ [] = falseExpr
-      buildTree tagExpr ((i, _conName, conRowTy) : rest) =
+      buildTree tagExpr ((i, _conName, fWanteds) : rest) =
         let iLit = mkCoreConApps wordDataCon [Lit (mkLit (fromIntegral i :: Integer))]
             cond = mkCoreApps (Var (psEqClass state)) [Type (mkTyConTy wordTyCon), Var (psFEqWord state), tagExpr, iLit]
-        in mkIfThenElse cond (compareConFields conRowTy) (buildTree tagExpr rest)
+        in mkIfThenElse cond (compareConFields fWanteds) (buildTree tagExpr rest)
 
-      bodyExpr = mkIfThenElse eqTag (buildTree tag1 constructors) falseExpr
-
+      bodyExpr = mkIfThenElse eqTag (buildTree tag1 ctorWanteds) falseExpr
       repEqSumExpr = mkCoreLams (tyVars ++ [r1Var, r2Var]) bodyExpr
 
       dictExpr = evDataConApp (classDataCon cls) tys [scEvidence, repEqSumExpr]
-  pure $ Left (EvExpr dictExpr, ct)
-  where
-    compareField rep1 rep2 fTy aTy kATy (i, _, fieldTy) =
-      let fieldAtTypeArgs = [Type kATy, Type fTy, Type aTy, Type fieldTy]
-          idxExpr = mkCoreConApps intDataCon [Lit (mkLit (fromIntegral i :: Integer))]
-          raw1 = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep1])
-          raw2 = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep2])
-          fFieldTy = mkAppTy fTy fieldTy
-          val1 = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw1]
-          val2 = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw2]
-          eqDict = getEqDict state fieldTy
-      in mkCoreApps (Var (psEqClass state)) [Type fieldTy, eqDict, val1, val2]
+      allNewWanteds = [ mkNonCanonical ev | (_, _, fWanteds) <- ctorWanteds, (_, _, ev) <- fWanteds ]
+
+  pure $ Left ((EvExpr dictExpr, ct), allNewWanteds)
 
 solveRowShowSum
   :: PluginState
   -> Ct
   -> Class
   -> [Type]
-  -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
+  -> TcPluginM 'Solve (Either ((EvTerm, Ct), [Ct]) ())
 solveRowShowSum state ct cls tys = do
   let rowTy  = last tys
       rTy    = tys !! (length tys - 2)
       constructors = walkSumRowWithTypes rowTy
+      loc    = ctLoc ct
 
       scEvidence = evDataConApp (classDataCon (psRowFlavourCls state)) [rTy] []
 
@@ -772,43 +801,50 @@ solveRowShowSum state ct cls tys = do
       spaceShowS  = mkCoreApps (Var (psShowChar state)) [mkCharExpr ' ']
       compFn f g = mkCoreApps (Var (psComp state)) [Type stringTy, Type stringTy, Type stringTy, f, g]
 
-      showConFields conNameFS conRowTy = do
+  ctorWanteds <- forM constructors $ \(i, conNameFS, conRowTy) -> do
+    let fields = walkRowWithTypes conRowTy
+    fWanteds <- forM fields $ \(fi, _nameFS, fieldTy) -> do
+      ev <- newWanted loc (mkAppTy (mkTyConTy (classTyCon (psShowCls state))) fieldTy)
+      pure (fi, fieldTy, ev)
+    pure (i, conNameFS, fWanteds)
+
+  let showField fi fieldTy ev =
+        let fieldAtTypeArgs = [Type kATy, Type fTy, Type aTy, Type fieldTy]
+            idxExpr = mkCoreConApps intDataCon [Lit (mkLit (fromIntegral fi :: Integer))]
+            raw = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep])
+            fFieldTy = mkAppTy fTy fieldTy
+            val = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw]
+            showDict = ctEvExpr ev
+            zeroPrec = mkCoreConApps intDataCon [Lit (mkLit 0)]
+        in mkCoreApps (Var (psShowsPrecMeth state)) [Type fieldTy, showDict, zeroPrec, val]
+
+      showConFields conNameFS fWanteds = do
         let conName = unpackFS conNameFS
         prefixExpr <- unsafeLiftTcM $ mkStringExpr (conName ++ " ")
         let prefixShowS = mkCoreApps (Var (psShowString state)) [prefixExpr]
-            fields = walkRowWithTypes conRowTy
-            fieldShows = map (showField rep fTy aTy kATy) fields
+            fieldShows = [ showField fi fieldTy ev | (fi, fieldTy, ev) <- fWanteds ]
             showParts = case fieldShows of
               [] -> [prefixShowS]
               (f0 : fs) -> prefixShowS : f0 : concatMap (\f -> [spaceShowS, f]) fs
         pure $ foldr1 compFn showParts
 
-  -- We need to build the tree in TcPluginM 'Solve because of unsafeLiftTcM/mkStringExpr
   let buildTree _tagExpr [] = do
         errorPrefix <- unsafeLiftTcM $ mkStringExpr "??? "
         pure $ mkCoreApps (Var (psShowString state)) [errorPrefix]
-      buildTree tagExpr ((i, conNameFS, conRowTy) : rest) = do
+      buildTree tagExpr ((i, conNameFS, fWanteds) : rest) = do
         let iLit = mkCoreConApps wordDataCon [Lit (mkLit (fromIntegral i :: Integer))]
             cond = mkCoreApps (Var (psEqClass state)) [Type (mkTyConTy wordTyCon), Var (psFEqWord state), tagExpr, iLit]
-        trueBranch <- showConFields conNameFS conRowTy
+        trueBranch <- showConFields conNameFS fWanteds
         falseBranch <- buildTree tagExpr rest
         pure $ mkIfThenElse cond trueBranch falseBranch
 
-  bodyExpr <- buildTree tag constructors
+  bodyExpr <- buildTree tag ctorWanteds
   let repShowsPrecSumExpr = mkCoreLams (tyVars ++ [precVar, rVar]) bodyExpr
 
       dictExpr = evDataConApp (classDataCon cls) tys [scEvidence, repShowsPrecSumExpr]
-  pure $ Left (EvExpr dictExpr, ct)
-  where
-    showField rep fTy aTy kATy (i, _, fieldTy) =
-      let fieldAtTypeArgs = [Type kATy, Type fTy, Type aTy, Type fieldTy]
-          idxExpr = mkCoreConApps intDataCon [Lit (mkLit (fromIntegral i :: Integer))]
-          raw = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep])
-          fFieldTy = mkAppTy fTy fieldTy
-          val = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw]
-          showDict = getShowDict state fieldTy
-          zeroPrec = mkCoreConApps intDataCon [Lit (mkLit 0)]
-      in mkCoreApps (Var (psShowsPrecMeth state)) [Type fieldTy, showDict, zeroPrec, val]
+      allNewWanteds = [ mkNonCanonical ev | (_, _, fWanteds) <- ctorWanteds, (_, _, ev) <- fWanteds ]
+
+  pure $ Left ((EvExpr dictExpr, ct), allNewWanteds)
 
 -------------------------------------------------------------------------------
 -- HasField solver
@@ -1127,23 +1163,6 @@ findFieldType fieldName rowTy =
   case [(i, ty) | (i, n, ty) <- walkRowWithTypes rowTy, n == fieldName] of
     (res : _) -> Just res
     []      -> Nothing
-
--------------------------------------------------------------------------------
--- Dictionary resolution for basic types
--------------------------------------------------------------------------------
-
-getEqDict :: PluginState -> Type -> CoreExpr
-getEqDict state ty
-  | ty `eqType` intTy = Var (psFEqInt state)
-  | ty `eqType` boolTy = Var (psFEqBool state)
-  | ty `eqType` mkTyConTy wordTyCon = Var (psFEqWord state)
-  | otherwise = error $ "polytropos: unsupported field type for Eq: " ++ showSDocUnsafe (ppr ty) ++ " (generic field-class dict supply not yet implemented)"
-
-getShowDict :: PluginState -> Type -> CoreExpr
-getShowDict state ty
-  | ty `eqType` intTy = Var (psFShowInt state)
-  | ty `eqType` boolTy = Var (psFShowBool state)
-  | otherwise = error $ "polytropos: unsupported field type for Show: " ++ showSDocUnsafe (ppr ty) ++ " (generic field-class dict supply not yet implemented)"
 
 -------------------------------------------------------------------------------
 -- Utilities

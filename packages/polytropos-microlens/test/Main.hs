@@ -14,16 +14,9 @@ import Test.Tasty
 import Test.Tasty.HUnit
 import Lens.Micro ((&), (.~), (^.), (^..), (%~), each)
 import Polytropos
-import Polytropos.Core (Pair (..))
 import Polytropos.Microlens
 
 type MyRec = Record '["x" ':= Int, "y" ':= Int, "z" ':= Int]
-
-instance Eq MyRec where
-  (==) = repEq
-
-instance Show MyRec where
-  showsPrec = repShowsPrec
 
 myRec :: MyRec
 myRec = insertField (Field @"x") (1 :: Int)

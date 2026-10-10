@@ -7,23 +7,12 @@ import Data.Int (Int64)
 import Data.Text (Text)
 import Database.Persist (PersistField (..), PersistValue (..))
 import Polytropos
-import Polytropos.Core (Pair (..))
 import Polytropos.Persistent
 
 type MyRec = Record '[ "x" ':= Int, "y" ':= Int, "z" ':= Int ]
 
-instance Eq MyRec where
-  (==) = repEq
-instance Show MyRec where
-  showsPrec = repShowsPrec
-
 -- Heterogeneous row: each field marshals through its own PersistField.
 type Hetero = Record '[ "n" ':= Int, "b" ':= Bool, "w" ':= Int ]
-
-instance Eq Hetero where
-  (==) = repEq
-instance Show Hetero where
-  showsPrec = repShowsPrec
 
 myRec :: MyRec
 myRec = insertField (Field @"x") (1 :: Int)
@@ -43,11 +32,6 @@ type RowOf20 =
    , "f10" ':= Int, "f11" ':= Int, "f12" ':= Int, "f13" ':= Int, "f14" ':= Int
    , "f15" ':= Int, "f16" ':= Int, "f17" ':= Int, "f18" ':= Int, "f19" ':= Int
    ]
-
-instance Eq (Record RowOf20) where
-  (==) = repEq
-instance Show (Record RowOf20) where
-  showsPrec = repShowsPrec
 
 buildBig :: Int -> Record RowOf20
 buildBig n =

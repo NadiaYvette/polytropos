@@ -23,9 +23,10 @@ test-suite polytropos-generics-test
     base,
     polytropos-core,
     polytropos-generics,
+    polytropos-plugin,
     primitive,
     tasty,
     tasty-hunit
   hs-source-dirs: test
   default-language: GHC2024
-  ghc-options: -Wall -Werror
+  ghc-options: -Wall -Werror -fplugin=Polytropos.Plugin

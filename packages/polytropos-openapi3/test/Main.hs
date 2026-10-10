@@ -10,7 +10,6 @@ import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import qualified Data.Text as T
 import Polytropos
-import Polytropos.Core (Pair (..))
 import Polytropos.OpenApi ()
 
 type MyRec = Record '["x" ':= Int, "flag" ':= Bool, "msg" ':= String]

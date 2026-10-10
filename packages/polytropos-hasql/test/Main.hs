@@ -11,7 +11,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Builder as BB
 import qualified Data.ByteString.Lazy as LBS
 import Polytropos
-import Polytropos.Core (Pair (..), fieldAt, noInlineUnsafeCo, unRowRep)
+import Polytropos.Core (fieldAt, noInlineUnsafeCo, unRowRep)
 import Polytropos.Hasql
 import qualified PostgreSQL.Binary.Decoding as B
 

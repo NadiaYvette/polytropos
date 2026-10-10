@@ -284,9 +284,13 @@ Plugin obligations, in order (design note §6):
    - Open declaration forms: `data Person = Person { ... } deriving OpenRecord` and
      `data Status = Success { ... } | Failure { ... } deriving OpenVariant`, providing ergonomic
      nominal-looking syntax that compiles into open, structural, row-polymorphic types under the hood.
+8. generic instance layer & dynamic dictionary emission:
+   - `Polytropos.Plugin` emits wanted constraints for each field type (`Eq fieldTy`, `Show fieldTy`) dynamically in `solveRowEq`, `solveRowShow`, `solveRowEqSum`, and `solveRowShowSum`, lifting any restriction to hardcoded types.
+   - Canonical `Eq`, `Show`, `Ord` instances for `RowRep` (products, sums, and HKD records) provided in `Polytropos.Core`.
+   - `polytropos-generics` bridges `Generic` and `GInstances` to `RowRep`, deriving `geq`, `gcompare`, `gshowsPrec`, `gmap`, and `gfoldMap` over product and sum rows.
+   - Row combinators `cmapRecord`, `cfoldMapRecord`, `czipWithRecord`, `cmapRecordF`, `cfoldMapRecordF` exported from `Polytropos`.
 
-Status: obligations 1 through 7 fully implemented, verified with 43 tests in `polytropos-plugin-smoke`,
-and tested across all 10 workspace packages with zero compiler warnings and zero errors.
+Status: obligations 1 through 8 fully implemented, verified across all 13 test suites in all 10 workspace packages with zero compiler warnings and zero errors.
 
 ---
 

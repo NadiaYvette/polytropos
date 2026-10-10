@@ -74,6 +74,7 @@ module Polytropos
   , narrowVariant
   , narrowVariantF
     -- * Re-exports
+  , Pair(..)
   , RowEq(..)
   , RowShow(..)
   , RowFlavour(..)
@@ -101,13 +102,19 @@ module Polytropos
   , recordField
   , setField
   , setFieldF
+    -- * Generic Row Operations (§1.7)
+  , cmapRecord
+  , cfoldMapRecord
+  , czipWithRecord
+  , cmapRecordF
+  , cfoldMapRecordF
   ) where
 
 import Polytropos.Core
 import Data.Functor.Identity (Identity(..))
 import Data.Kind (Type)
-import Data.Primitive.SmallArray (indexSmallArray)
-import GHC.Exts (toList)
+import Data.Primitive.SmallArray (indexSmallArray, sizeofSmallArray, thawSmallArray, writeSmallArray, runSmallArray)
+import GHC.Exts (toList, Any)
 import GHC.Records (HasField(..))
 import GHC.TypeLits (Symbol)
 import Unsafe.Coerce (unsafeCoerce)
@@ -116,7 +123,7 @@ import Unsafe.Coerce (unsafeCoerce)
 --
 -- A 'RecordF' is a flat, contiguous array of fields where each field slot
 -- contains a value wrapped in @f@.
-type RecordF (f :: Type -> Type) (r :: Row) = RowRep f ProductRowHKDT r ()
+type RecordF (f :: Type -> Type) (r :: ProductRow f) = RowRep f ProductRowHKDT r ()
 
 -- | An open record type, parametrised by a row @r@ with bare field values (@f ~ Identity@).
 --
@@ -129,7 +136,7 @@ type Record (r :: Row) = RowRep Identity ProductRowT r ()
 --
 -- A 'VariantF' is a single value that can be any one of the constructors
 -- defined in the sum row @s@, with each field slot wrapped in @f@.
-type VariantF (f :: Type -> Type) (s :: SumRow) = RowRep f SumRowHKDT s ()
+type VariantF (f :: Type -> Type) (s :: SumRowHKD f) = RowRep f SumRowHKDT s ()
 
 -- | An open variant type, parametrised by a sum row @s@ with bare field values (@f ~ Identity@).
 --
@@ -143,7 +150,7 @@ emptyRecordF :: RecordF f '[]
 emptyRecordF = RowRep (productRep [])
 
 -- | Insert a new field wrapped in @f@ into an HKD record.
-insertFieldF :: Field n -> f a -> RecordF f r -> RecordF f ((n ':= a) ': r)
+insertFieldF :: Field n -> f a -> RecordF f r -> RecordF f ((n ':= f a) ': r)
 insertFieldF _ fa (RowRep r) =
   RowRep (productRep (unsafeCoerce fa : toList (repVals r)))
 
@@ -177,7 +184,8 @@ type family ConstructorPayloadHKD (f :: Type -> Type) (n :: Symbol) (s :: SumRow
   ConstructorPayloadHKD f n ((m ':= fs) ': rest) = ConstructorPayloadHKD f n rest
 
 -- | Inject an HKD record into an HKD variant for a specific constructor.
-injectVariantF :: forall n s fs f. ConstructorIndex n s => Field n -> RecordF f fs -> VariantF f s
+injectVariantF :: forall (n :: Symbol) (f :: Type -> Type) (s :: SumRowHKD f) (fs :: ProductRow f).
+                  ConstructorIndex n s => Field n -> RecordF f fs -> VariantF f s
 injectVariantF _ (RowRep r) =
   RowRep (injectRep (constructorIndex @_ @n @s) (toList (repVals r)))
 
@@ -221,7 +229,8 @@ pattern Variant f r <- ( (\v -> (Field :: Field n, projectVariant (Field :: Fiel
 -- | Project a sub-record from a super-record (HKD).
 --
 -- Extracts only the fields present in @sub@ in the order specified by @sub@.
-projectRecordF :: forall sub super f. SubRow sub super => RecordF f super -> RecordF f sub
+projectRecordF :: forall (f :: Type -> Type) (sub :: ProductRow f) (super :: ProductRow f).
+                  SubRow sub super => RecordF f super -> RecordF f sub
 projectRecordF (RowRep rep) =
   let vals = repVals rep
       idxs = subRowIndices @sub @super
@@ -242,7 +251,8 @@ projectRecord (RowRep rep) =
 --
 -- Widening is total and constant time: the active constructor tag in @sub@ is
 -- remapped to its corresponding tag in @super@, preserving payload slots.
-widenVariantF :: forall sub super f. SubSum sub super => VariantF f sub -> VariantF f super
+widenVariantF :: forall (f :: Type -> Type) (sub :: SumRowHKD f) (super :: SumRowHKD f).
+                 SubSum sub super => VariantF f sub -> VariantF f super
 widenVariantF (RowRep rep) =
   let tag = fromIntegral (repTag rep) :: Int
       superTag = (subSumInjectIndices @sub @super) !! tag
@@ -262,7 +272,8 @@ widenVariant (RowRep rep) =
 --
 -- Returns 'Just' with the active tag remapped to @sub@ if the constructor belongs
 -- to @sub@, or 'Nothing' if the constructor is not in @sub@.
-narrowVariantF :: forall sub super f. SubSum sub super => VariantF f super -> Maybe (VariantF f sub)
+narrowVariantF :: forall (f :: Type -> Type) (sub :: SumRowHKD f) (super :: SumRowHKD f).
+                  SubSum sub super => VariantF f super -> Maybe (VariantF f sub)
 narrowVariantF (RowRep rep) =
   let tag = fromIntegral (repTag rep) :: Int
       narrowMap = subSumNarrowIndices @sub @super
@@ -333,7 +344,129 @@ setField _ val (RowRep rep) =
   RowRep (setFieldAt (fieldIndex @_ @n @r @a) (Identity (noInlineUnsafeCo val)) rep)
 
 -- | Update an existing field in a 'RecordF'.
-setFieldF :: forall n a f r. FieldIndex n r a => Field n -> f a -> RecordF f r -> RecordF f r
+setFieldF :: forall n a f r. FieldIndex n r (f a) => Field n -> f a -> RecordF f r -> RecordF f r
 setFieldF _ val (RowRep rep) =
-  RowRep (setFieldAt (fieldIndex @_ @n @r @a) (noInlineUnsafeCo val) rep)
+  RowRep (setFieldAt (fieldIndex @_ @n @r @(f a)) (noInlineUnsafeCo val) rep)
+
+{-------------------------------------------------------------------------------
+  Generic Row Operations (§1.7 Generic instance layer)
+-------------------------------------------------------------------------------}
+
+-- | Map a class-constrained function over all fields of a record.
+cmapRecord
+  :: forall c r. AllFields ProductRowT r c
+  => (forall x. c x => x -> x)
+  -> Record r
+  -> Record r
+cmapRecord f (RowRep (Rep t v)) =
+  let dicts = fieldDicts @ProductRowT @r @c
+      n = sizeofSmallArray v
+      v' = runSmallArray $ do
+        m <- thawSmallArray v 0 n
+        let loop i
+              | i == n = pure ()
+              | otherwise = do
+                  let d = indexSmallArray dicts i
+                      Identity vi = indexSmallArray v i
+                  case d of
+                    DictAny -> do
+                      let vi' = f (noInlineUnsafeCo vi :: Any)
+                      writeSmallArray m i (Identity (noInlineUnsafeCo vi'))
+                      loop (i + 1)
+        loop 0
+        pure m
+  in RowRep (Rep t v')
+
+-- | Fold over all fields of a record using a class constraint.
+cfoldMapRecord
+  :: forall c r m. (AllFields ProductRowT r c, Monoid m)
+  => (forall x. c x => x -> m)
+  -> Record r
+  -> m
+cfoldMapRecord f (RowRep (Rep _ v)) =
+  let dicts = fieldDicts @ProductRowT @r @c
+      n = sizeofSmallArray v
+      loop i
+        | i == n = mempty
+        | otherwise =
+            let d = indexSmallArray dicts i
+                Identity vi = indexSmallArray v i
+            in case d of
+                 DictAny ->
+                   let val = f (noInlineUnsafeCo vi :: Any)
+                   in val <> loop (i + 1)
+  in loop 0
+
+-- | Zip two records of identical row shape applying a class-constrained function.
+czipWithRecord
+  :: forall c r. AllFields ProductRowT r c
+  => (forall x. c x => x -> x -> x)
+  -> Record r
+  -> Record r
+  -> Record r
+czipWithRecord f (RowRep (Rep t v1)) (RowRep (Rep _ v2)) =
+  let dicts = fieldDicts @ProductRowT @r @c
+      n = sizeofSmallArray v1
+      v' = runSmallArray $ do
+        m <- thawSmallArray v1 0 n
+        let loop i
+              | i == n = pure ()
+              | otherwise = do
+                  let d = indexSmallArray dicts i
+                      Identity x1 = indexSmallArray v1 i
+                      Identity x2 = indexSmallArray v2 i
+                  case d of
+                    DictAny -> do
+                      let res = f (noInlineUnsafeCo x1 :: Any) (noInlineUnsafeCo x2 :: Any)
+                      writeSmallArray m i (Identity (noInlineUnsafeCo res))
+                      loop (i + 1)
+        loop 0
+        pure m
+  in RowRep (Rep t v')
+
+-- | Map a class-constrained function over all fields of an HKD record.
+cmapRecordF
+  :: forall c f r. AllFields ProductRowHKDT r c
+  => (forall x. c x => x -> x)
+  -> RecordF f r
+  -> RecordF f r
+cmapRecordF f (RowRep (Rep t v)) =
+  let dicts = fieldDicts @ProductRowHKDT @r @c
+      n = sizeofSmallArray v
+      v' = runSmallArray $ do
+        m <- thawSmallArray v 0 n
+        let loop i
+              | i == n = pure ()
+              | otherwise = do
+                  let d = indexSmallArray dicts i
+                      vi = indexSmallArray v i
+                  case d of
+                    DictAny -> do
+                      let vi' = f (noInlineUnsafeCo vi :: Any)
+                      writeSmallArray m i (noInlineUnsafeCo vi')
+                      loop (i + 1)
+        loop 0
+        pure m
+  in RowRep (Rep t v')
+
+-- | Fold over all fields of an HKD record using a class constraint.
+cfoldMapRecordF
+  :: forall c f r m. (AllFields ProductRowHKDT r c, Monoid m)
+  => (forall x. c x => x -> m)
+  -> RecordF f r
+  -> m
+cfoldMapRecordF f (RowRep (Rep _ v)) =
+  let dicts = fieldDicts @ProductRowHKDT @r @c
+      n = sizeofSmallArray v
+      loop i
+        | i == n = mempty
+        | otherwise =
+            let d = indexSmallArray dicts i
+                vi = indexSmallArray v i
+            in case d of
+                 DictAny ->
+                   let val = f (noInlineUnsafeCo vi :: Any)
+                   in val <> loop (i + 1)
+  in loop 0
+
 

@@ -4,14 +4,17 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE OverloadedLabels #-}
 
 module Main (main) where
 
 import Test.Tasty
 import Test.Tasty.HUnit
+import Data.Functor.Identity (Identity(..))
 import Data.Primitive.SmallArray
 import Unsafe.Coerce (unsafeCoerce)
 
+import Polytropos
 import Polytropos.Core
 import Polytropos.Generics
 
@@ -102,5 +105,68 @@ tests = testGroup "Generics Tests"
               r = Rectangle 4.0 2.0
           gshowsPrec 0 c "" @?= "Constructor 0 5.5"
           gshowsPrec 0 r "" @?= "Constructor 1 4.0 2.0"
+      ]
+  , testGroup "RowRep Product Record (via Plugin AllFields)"
+      [ testCase "geq on Record" $ do
+          let r1 = insertField (Field @"name") ("Alice" :: String)
+                 $ insertField (Field @"age") (30 :: Int)
+                 $ emptyRecord
+              r2 = insertField (Field @"name") ("Alice" :: String)
+                 $ insertField (Field @"age") (30 :: Int)
+                 $ emptyRecord
+              r3 = insertField (Field @"name") ("Bob" :: String)
+                 $ insertField (Field @"age") (25 :: Int)
+                 $ emptyRecord
+          geq r1 r2 @?= True
+          geq r1 r3 @?= False
+      , testCase "gcompare on Record" $ do
+          let r1 = insertField (Field @"x") (10 :: Int)
+                 $ insertField (Field @"y") (20 :: Int)
+                 $ emptyRecord
+              r2 = insertField (Field @"x") (10 :: Int)
+                 $ insertField (Field @"y") (30 :: Int)
+                 $ emptyRecord
+          gcompare r1 r1 @?= EQ
+          gcompare r1 r2 @?= LT
+          gcompare r2 r1 @?= GT
+      , testCase "gshowsPrec on Record" $ do
+          let r = insertField (Field @"x") (10 :: Int)
+                $ insertField (Field @"y") True
+                $ emptyRecord
+          gshowsPrec 0 r "" @?= "Constructor 0 10 True"
+      , testCase "gmap on Record" $ do
+          let r = insertField (Field @"a") (10 :: Int)
+                $ insertField (Field @"b") (20 :: Int)
+                $ emptyRecord
+              r' = gmap @Num (\x -> x * 2) r
+          let (Identity a) = indexSmallArray (repVals (unRowRep r')) 0
+              (Identity b) = indexSmallArray (repVals (unRowRep r')) 1
+          (unsafeCoerce a :: Int) @?= 20
+          (unsafeCoerce b :: Int) @?= 40
+      , testCase "gfoldMap on Record" $ do
+          let r = insertField (Field @"a") ("hello" :: String)
+                $ insertField (Field @"b") ("world" :: String)
+                $ emptyRecord
+              total = gfoldMap @Show (\x -> show x ++ ";") r
+          total @?= "\"hello\";\"world\";"
+      ]
+  , testGroup "RowRep HKD Record (RecordF Maybe)"
+      [ testCase "geq on RecordF" $ do
+          let r1 = insertFieldF (Field @"code") (Just (200 :: Int))
+                 $ insertFieldF (Field @"msg") (Just ("ok" :: String))
+                 $ emptyRecordF
+              r2 = insertFieldF (Field @"code") (Just (200 :: Int))
+                 $ insertFieldF (Field @"msg") (Just ("ok" :: String))
+                 $ emptyRecordF
+              r3 = insertFieldF (Field @"code") (Nothing :: Maybe Int)
+                 $ insertFieldF (Field @"msg") (Just ("ok" :: String))
+                 $ emptyRecordF
+          geq r1 r2 @?= True
+          geq r1 r3 @?= False
+      , testCase "gshowsPrec on RecordF" $ do
+          let r = insertFieldF (Field @"code") (Just (200 :: Int))
+                $ insertFieldF (Field @"msg") (Just ("ok" :: String))
+                $ emptyRecordF
+          gshowsPrec 0 r "" @?= "Constructor 0 (Just 200) (Just \"ok\")"
       ]
   ]

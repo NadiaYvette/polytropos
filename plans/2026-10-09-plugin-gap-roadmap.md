@@ -181,15 +181,24 @@ instances derived from the row. polytropos has `Rep`, hand-written and plugin-so
 `FieldIndex`/`ConstructorIndex`, but not yet a shipped generic instance layer that
 callers would use directly.
 
-**Current state:** present in intent; not yet a complete library surface.
+**Current state:** Done.
+- Canonical `Eq`, `Show`, `Ord` instances for `RowRep` (covering `ProductRowT`, `ProductRowHKDT`, `SumRowT`, `SumRowHKDT`) implemented in `Polytropos.Core`.
+- `Polytropos.Plugin` dynamically emits wanted constraints for each field type (`Eq fieldTy`, `Show fieldTy`), lifting all hardcoded type restrictions in `solveRowEq`, `solveRowShow`, `solveRowEqSum`, and `solveRowShowSum`.
+- Generic row combinators `cmapRecord`, `cfoldMapRecord`, `czipWithRecord`, `cmapRecordF`, and `cfoldMapRecordF` exported from `Polytropos`.
+- `polytropos-generics` bridges `Generic` and `GInstances` to `RowRep`, providing `geq`, `gcompare`, `gshowsPrec`, `gmap`, and `gfoldMap` over product and sum rows including HKD records.
+- Obsolete manual orphan instances removed across all satellite packages (`optics`, `aeson`, `cassava`, `cbor`, `hasql`, `microlens`, `lens`, `openapi3`, `persistent`, `quickcheck`).
+- All 13 test suites across all 10 packages pass cleanly under `-Wall -Werror`.
 
 **What "done" looks like:**
 
-- Generic classes/methods that derive instances from the row.
-- Test coverage showing they work through the plugin, including for HKD-aware rows.
+- Generic classes/methods that derive instances from the row (done).
+- Test coverage showing they work through the plugin, including for HKD-aware rows (done, verified across entire workspace).
 
 **Primary files:** `packages/polytropos-core/src/Polytropos/Core.hs`,
-satellite packages, test suites.
+`packages/polytropos-core/src/Polytropos.hs`,
+`packages/polytropos-plugin/src/Polytropos/Plugin.hs`,
+`packages/polytropos-generics/src/Polytropos/Generics.hs`,
+`packages/polytropos-generics/test/Main.hs`.
 
 ---
 

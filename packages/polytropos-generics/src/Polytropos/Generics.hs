@@ -8,6 +8,9 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeAbstractions #-}
 
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 module Polytropos.Generics (
     Generic(..)
   , I(..)
@@ -19,10 +22,18 @@ module Polytropos.Generics (
   , gfoldMap
   ) where
 
+import Data.Functor.Identity (Identity(..))
 import Data.Kind (Constraint, Type)
 import Data.Primitive.SmallArray
 import GHC.Exts (Any)
-import Polytropos.Core (DictAny(..), Rep(..))
+import Polytropos.Core
+  ( DictAny(..)
+  , Rep(..)
+  , RowRep(..)
+  , RowType(..)
+  , AllFields(..)
+  , noInlineUnsafeCo
+  )
 
 -- | Identity functor for use with 'Rep'.
 newtype I a = I { unI :: a }
@@ -138,3 +149,87 @@ gfoldMap f x =
           let d = indexSmallArray dicts i
               I vx_i = indexSmallArray vx i
           in withDictFoldMap d f vx_i <> loop dicts vx (i + 1) n
+
+{-------------------------------------------------------------------------------
+  Generic and GInstances for RowRep (§1.7 Generic instance layer)
+-------------------------------------------------------------------------------}
+
+-- | RowRep is an instance of Generic for product rows.
+instance Generic (RowRep Identity ProductRowT r a) where
+  type RepOf (RowRep Identity ProductRowT r a) = Rep I (RowRep Identity ProductRowT r a)
+  from (RowRep (Rep t v)) =
+    let n = sizeofSmallArray v
+        v' = runSmallArray $ do
+          m <- newSmallArray n (error "Polytropos.Generics.from: uninitialized")
+          let loop i
+                | i == n = pure ()
+                | otherwise = do
+                    let Identity val = indexSmallArray v i
+                    writeSmallArray m i (I val)
+                    loop (i + 1)
+          loop 0
+          pure m
+    in Rep t v'
+  to (Rep t v) =
+    let n = sizeofSmallArray v
+        v' = runSmallArray $ do
+          m <- newSmallArray n (error "Polytropos.Generics.to: uninitialized")
+          let loop i
+                | i == n = pure ()
+                | otherwise = do
+                    let I val = indexSmallArray v i
+                    writeSmallArray m i (Identity val)
+                    loop (i + 1)
+          loop 0
+          pure m
+    in RowRep (Rep t v')
+
+-- | RowRep is an instance of Generic for HKD product rows.
+instance Generic (RowRep f ProductRowHKDT r a) where
+  type RepOf (RowRep f ProductRowHKDT r a) = Rep I (RowRep f ProductRowHKDT r a)
+  from (RowRep (Rep t v)) =
+    let n = sizeofSmallArray v
+        v' = runSmallArray $ do
+          m <- newSmallArray n (error "Polytropos.Generics.fromHKD: uninitialized")
+          let loop i
+                | i == n = pure ()
+                | otherwise = do
+                    let val = indexSmallArray v i
+                    writeSmallArray m i (I (noInlineUnsafeCo val :: Any))
+                    loop (i + 1)
+          loop 0
+          pure m
+    in Rep t v'
+  to (Rep t v) =
+    let n = sizeofSmallArray v
+        v' = runSmallArray $ do
+          m <- newSmallArray n (error "Polytropos.Generics.toHKD: uninitialized")
+          let loop i
+                | i == n = pure ()
+                | otherwise = do
+                    let I val = indexSmallArray v i
+                    writeSmallArray m i (noInlineUnsafeCo val :: f Any)
+                    loop (i + 1)
+          loop 0
+          pure m
+    in RowRep (Rep t v')
+
+-- | RowRep is an instance of Generic for sum rows.
+instance Generic (RowRep f SumRowT s a) where
+  type RepOf (RowRep f SumRowT s a) = Rep I (RowRep f SumRowT s a)
+  from (RowRep r) = noInlineUnsafeCo r
+  to rep          = RowRep (noInlineUnsafeCo rep)
+
+-- | RowRep is an instance of Generic for HKD sum rows.
+instance Generic (RowRep f SumRowHKDT s a) where
+  type RepOf (RowRep f SumRowHKDT s a) = Rep I (RowRep f SumRowHKDT s a)
+  from (RowRep r) = noInlineUnsafeCo r
+  to rep          = RowRep (noInlineUnsafeCo rep)
+
+-- | GInstances for ProductRowT derived from AllFields.
+instance AllFields ProductRowT r c => GInstances c (RowRep Identity ProductRowT r a) where
+  gdicts = smallArrayFromList [fieldDicts @ProductRowT @r @c]
+
+-- | GInstances for ProductRowHKDT derived from AllFields.
+instance AllFields ProductRowHKDT r c => GInstances c (RowRep f ProductRowHKDT r a) where
+  gdicts = smallArrayFromList [fieldDicts @ProductRowHKDT @r @c]

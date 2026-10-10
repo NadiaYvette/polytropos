@@ -7,33 +7,12 @@ import Test.QuickCheck      (Arbitrary (..))
 import Test.QuickCheck.Gen  (unGen)
 import Test.QuickCheck.Random (mkQCGen)
 import Polytropos
-import Polytropos.Core (Pair (..), RowEqSum (..), RowRep (..),
-                        RowShowSum (..), repTag)
+import Polytropos.Core (RowRep (..), repTag)
 import Polytropos.QuickCheck ()
 
 type MyRec = Record '[ "x" ':= Int, "y" ':= Int, "z" ':= Int ]
 
-instance Eq MyRec where
-  (==) = repEq
-instance Show MyRec where
-  showsPrec = repShowsPrec
-
 type MyVar = Variant '[ "A" ':= '[ "foo" ':= Int ], "B" ':= '[ "bar" ':= Int ] ]
-
-instance Eq MyVar where
-  (==) = repEqSum
-instance Show MyVar where
-  showsPrec = repShowsPrecSum
-
-instance Eq (Record '[ "foo" ':= Int ]) where
-  (==) = repEq
-instance Show (Record '[ "foo" ':= Int ]) where
-  showsPrec = repShowsPrec
-
-instance Eq (Record '[ "bar" ':= Int ]) where
-  (==) = repEq
-instance Show (Record '[ "bar" ':= Int ]) where
-  showsPrec = repShowsPrec
 
 type RowOf20 =
   '[ "f00" ':= Int, "f01" ':= Int, "f02" ':= Int, "f03" ':= Int, "f04" ':= Int
@@ -41,11 +20,6 @@ type RowOf20 =
    , "f10" ':= Int, "f11" ':= Int, "f12" ':= Int, "f13" ':= Int, "f14" ':= Int
    , "f15" ':= Int, "f16" ':= Int, "f17" ':= Int, "f18" ':= Int, "f19" ':= Int
    ]
-
-instance Eq (Record RowOf20) where
-  (==) = repEq
-instance Show (Record RowOf20) where
-  showsPrec = repShowsPrec
 
 type RecOf20 = Record RowOf20
 

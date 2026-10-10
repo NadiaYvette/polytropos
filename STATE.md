@@ -5,10 +5,10 @@ Operational frontier. Read with `PLAN.md`; update before ending a session.
 ## Where we are
 
 Phases 3, 4A and 4B/4D foundations are in. Tasks `task-01` through `task-19` have been executed
-and verified through their deterministic gates. Milestones §1.1 (`AllFields` generic field-class dictionary supply),
-§1.2 (HKD-aware row vocabulary), §1.3 (type-level row metadata + plugin rewriting), §1.4 (subrow/projection evidence
-for sums/variants), §1.5 (compile-time label hashing `KnownHash`), and §1.6 (source-plugin construction syntax & open declaration forms)
-of `plans/2026-10-09-plugin-gap-roadmap.md` are implemented and verified.
+and verified through their deterministic gates. All milestones of `plans/2026-10-09-plugin-gap-roadmap.md`
+(§1.1 generic field-class dictionary supply, §1.2 HKD-aware row vocabulary, §1.3 type-level row metadata + rewriting,
+§1.4 subrow/subsum projection evidence, §1.5 compile-time label hashing `KnownHash`, §1.6 source-plugin construction syntax & open declaration forms,
+and §1.7 generic instance layer over rows & dynamic dictionary emission) are implemented and verified.
 All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
 - `polytropos-core` passes 32 tests (primitive SmallArray CoW updates, `setFieldsAt` batch updates,
   `MRep` transient builders, `Polytropos` consumer surface, `Record`, `Variant`).
@@ -20,8 +20,9 @@ All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
   `KnownHash` compile-time label hashing with literal FNV-1a 64-bit `Word` dictionaries,
   and source-plugin syntactic devices: `REC`, `REC_F`, field punning, `VAR`, `VARIANT`, `REC_UPD`, `REC_UPD_F`,
   record & variant view pattern matching, and `deriving OpenRecord` / `deriving OpenVariant` declaration forms).
-- `polytropos-generics-test` passes 6 tests (`Generic` datatype generics bridge over flat `Rep`,
-  `geq`, `gshowsPrec`, product and sum roundtrips).
+- `polytropos-generics-test` passes 13 tests (`Generic` and `GInstances` datatype generics bridge over flat `Rep`
+  and `RowRep`, `geq`, `gcompare`, `gshowsPrec`, `gmap`, `gfoldMap` over product and sum ADTs and plugin-solved rows,
+  including HKD `RecordF Maybe`).
 - `polytropos-optics-test` passes 6 tests (`optics-core` + `LabelOptic` `#field` lenses and variant prisms).
 - `polytropos-microlens-test` passes 5 tests (homogeneous `each` traversal, plugin-indexed `fieldLens`).
 - `polytropos-lens-test` passes 14 tests (positional `_1`..`_9`, name-keyed `At`/`Ixed`, `each`,
@@ -34,6 +35,9 @@ All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
   order, variant `oneOf` tagged unions, JSON roundtrip of the generated schemas).
 - `polytropos-cbor-test` passes 6 tests (3- and 20-field record roundtrips, variant roundtrips,
   byte-level format assertions: length header + flat payload, tag + payload).
+- `polytropos-cassava-test` passes 4 tests (heterogeneous CSV named record codecs, 12-field roundtrips).
+- `polytropos-hasql-test` passes 3 tests (heterogeneous column decode simulation and row assembly).
+- `polytropos-quickcheck-test` passes 9 tests (record and variant arbitrary generation and convergence shrinking).
 
 ## What exists
 
@@ -86,7 +90,7 @@ All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
   header + flat payload) and variants (array: constructor Word tag + payload), positional encoding
   mirroring the runtime Rep layout; scoped allow-newer for cborg/serialise's pre-9.14 base bounds
 - `plans/2026-10-09-plugin-gap-roadmap.md` & `plans/2026-10-09-plugin-gap-spec.md` — Plugin gap-closing
-  roadmap and specification sketches (§1.1, §1.2, §1.3, §1.4, §1.5 done; §1.6 queued).
+  roadmap and specification sketches (all milestones §1.1 through §1.7 complete).
 - `docs/NEWBIE_GUIDE.md` — quickstart and token-conservation workflow guide
 - `docs/MAINTAINER_GUIDE.md` — engineering governance and zero-contamination doctrine
 - `docs/notes/POLYTROPOS_DESIGN.md` — decisions D1–D10, costs, open questions
@@ -102,9 +106,8 @@ All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
 
 ## What is deliberately missing
 
-- Plugin gap roadmap (§1.6): Source-plugin construction syntax (`ANON { ... }`).
-- Plugin gap roadmap (§1.7): Generic instance layer, not just raw `Rep`.
+- None in the plugin-gap roadmap (§1.1 through §1.7 are complete). Future phases (hardware-vectorized CoW update SIMD, streaming backends).
 
 ## Next action
 
-- Advance to milestone §1.6 or §1.7 in `plans/2026-10-09-plugin-gap-roadmap.md`.
+- All gaps from `plans/2026-10-09-plugin-gap-roadmap.md` are closed. Ready for review and subsequent roadmap planning.
