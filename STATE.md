@@ -120,6 +120,13 @@ All three algebraic effect system ports planned in `docs/notes/EFFECT_SYSTEMS_PO
   (`hfield`, `hfieldAt`, `htabulate`, `hmap`, `htraverse`, `hzipWith`).
 - `plans/2026-10-09-plugin-gap-roadmap.md` & `plans/2026-10-09-plugin-gap-spec.md` — Plugin gap-closing
   roadmap and specification sketches (all milestones §1.1 through §1.7 complete).
+- `plans/FULL_COMPLETION_ROADMAP.md` — Full-completion roadmap and documentation agenda:
+  technical capabilities (Milestone T1 `TypeError` diagnostics, T2 hybrid eliminator `eliminate`,
+  T3 SIMD CoW updates, T4 HLS autocompletion, T5 re-benchmarking) and 4-tier documentation overhaul
+  with execution modalities (`[AUTONOMOUS-MACHINE]`, `[COLLABORATIVE-ASYNC]`, `[HUMAN-GATED]`).
+- `docs/notes/ADOPTION_BARRIERS_AND_MITIGATIONS.md` — Architectural mitigations directly addressing
+  the 8 community adoption barriers from the Discord feedback.
+- `docs/transcripts/discord-adoption-barriers-row-types.md` — Verbatim Discord transcript from #fp-general.
 - `docs/NEWBIE_GUIDE.md` — quickstart and token-conservation workflow guide
 - `docs/MAINTAINER_GUIDE.md` — engineering governance and zero-contamination doctrine
 - `docs/notes/POLYTROPOS_DESIGN.md` — decisions D1–D10, costs, open questions
@@ -139,9 +146,11 @@ All three algebraic effect system ports planned in `docs/notes/EFFECT_SYSTEMS_PO
 
 ## What is deliberately missing
 
-- None in the plugin-gap roadmap (§1.1 through §1.7 are complete). Future phases (hardware-vectorized CoW update SIMD, streaming backends).
+- Full hybrid coproduct eliminator `eliminate :: Variant r -> HandlerRow ... -> m (Results ...)` (slated for Milestone T2).
+- Custom `TypeError` diagnostics in `Polytropos.Plugin` (slated for Milestone T1).
+- SIMD vectorized array copies for $>32$ fields (slated for Milestone T3).
 
 ## Next action
 
-- Algebraic effect systems ports (`effectful`, `polysemy`, `kernmantle`) completed, verified under GHC 9.14.1, and committed.
-- Ready for user review or further operational roadmap directives.
+- Execute Milestone T1 (`[AUTONOMOUS-MACHINE]`): Implement human-centric `TypeError` diagnostics in `Polytropos.Plugin` for missing fields, tags, and subrow mismatches.
+- Simultaneously draft Milestone B1/B3 documentation foundations for human review and collaborative refinement.

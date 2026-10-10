@@ -22,6 +22,7 @@ Status: LIVING DOCUMENT · v0.1 · 2026-10-05
 | `notes/EFFECTFUL_POLYTROPOS_PORT_PLAN.md` | plan | draft | cross-cutting | — |
 | `notes/POLYSEMY_POLYTROPOS_PORT_PLAN.md` | plan | draft | cross-cutting | — |
 | `notes/KERNMANTLE_POLYTROPOS_PORT_PLAN.md` | plan | draft | cross-cutting | — |
+| `notes/ADOPTION_BARRIERS_AND_MITIGATIONS.md` | design | draft | cross-cutting | — |
 | `registers/PACKAGES.md` | register | live | cross-cutting | — |
 | `transcripts/gemini-large-data-hybrid-variant-records-spec.md` | transcript | archive | cross-cutting | inconsistent |
 | `transcripts/gemini-powerful-abstraction-techniques-in-haskell.md` | transcript | archive | cross-cutting | — |
@@ -74,6 +75,10 @@ algebraic effects, datatype generics, profunctors), while
 `transcripts/gemini-large-data-hybrid-variant-records-spec.md` initiated the hybrid
 variant record exploration (read alongside `benchmark/variants/README.md` for
 measured corrections).
+
+**Roadmap & Adoption Feedback.**
+`notes/ADOPTION_BARRIERS_AND_MITIGATIONS.md` (direct synthesis of community adoption feedback)
+→ `../plans/FULL_COMPLETION_ROADMAP.md` (unresolved engine capabilities, TypeError diagnostics, SIMD, and 4-tier documentation overhaul).
 
 ## Conventions
 
