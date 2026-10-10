@@ -467,19 +467,21 @@ class RowFlavour r => RowShowSum (r :: RowType) (row :: k) where
   repShowsPrecSum :: Int -> RowRep f r row a -> ShowS
   repShowsPrecSum _ _ = undefined
 
--- | Evidence that a field name @n@ has a slot at a known index in a row.
+-- | Evidence that a field name or type @n@ has a slot at a known index in a row.
 --
 -- The plugin solves this by inspecting the row and emitting the index as a
 -- literal (obligation 1, design note §5).
-class FieldIndex (n :: Symbol) (row :: k) (a :: Type) where
+type FieldIndex :: forall {kn} k {ka}. kn -> k -> ka -> Constraint
+class FieldIndex (n :: kn) (row :: k) (a :: ka) where
   fieldIndex :: Int
   fieldIndex = undefined
 
--- | Evidence that a constructor name @n@ has a known tag in a row.
+-- | Evidence that a constructor name or type @n@ has a known tag in a row.
 --
 -- The plugin solves this by inspecting the row and emitting the tag as a
 -- literal (obligation 2, design note §5).
-class ConstructorIndex (n :: Symbol) (row :: k) where
+type ConstructorIndex :: forall {kn} k. kn -> k -> Constraint
+class ConstructorIndex (n :: kn) (row :: k) where
   constructorIndex :: Word
   constructorIndex = undefined
 

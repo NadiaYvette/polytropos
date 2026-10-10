@@ -479,10 +479,11 @@ solveFieldIndex
   -> Class
   -> [Type]
   -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
-solveFieldIndex ct cls tys = do
-  case tys of
-    [_k, nTy, rowTy, _aTy] -> do
-      let unwrapN = unwrapSynonyms nTy
+solveFieldIndex ct cls tys
+  | length tys >= 3 = do
+      let nTy   = tys !! (length tys - 3)
+          rowTy = tys !! (length tys - 2)
+          unwrapN = unwrapSynonyms nTy
       case isStrLitTy unwrapN of
         Just fieldName -> do
           case findFieldIndex fieldName rowTy of
@@ -498,7 +499,7 @@ solveFieldIndex ct cls tys = do
                   dictExpr = evDataConApp (classDataCon cls) tys [iExpr]
               pure $ Left (EvExpr dictExpr, ct)
             Nothing -> pure $ Right ()
-    _ -> pure $ Right ()
+  | otherwise = pure $ Right ()
 
 -------------------------------------------------------------------------------
 -- ConstructorIndex solver
@@ -509,10 +510,11 @@ solveConstructorIndex
   -> Class
   -> [Type]
   -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
-solveConstructorIndex ct cls tys = do
-  case tys of
-    [_k, nTy, rowTy] -> do
-      let unwrapN = unwrapSynonyms nTy
+solveConstructorIndex ct cls tys
+  | length tys >= 2 = do
+      let nTy   = tys !! (length tys - 2)
+          rowTy = tys !! (length tys - 1)
+          unwrapN = unwrapSynonyms nTy
       case isStrLitTy unwrapN of
         Just conName -> do
           case findConstructorIndex conName rowTy of
@@ -528,7 +530,7 @@ solveConstructorIndex ct cls tys = do
                   dictExpr = evDataConApp (classDataCon cls) tys [wExpr]
               pure $ Left (EvExpr dictExpr, ct)
             Nothing -> pure $ Right ()
-    _ -> pure $ Right ()
+  | otherwise = pure $ Right ()
 
 -------------------------------------------------------------------------------
 -- RowEq solver
