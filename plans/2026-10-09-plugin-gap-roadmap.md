@@ -154,14 +154,24 @@ documented in `POLYTROPOS_DESIGN.md`.
 That is "just" syntax, but it often determines whether a library feels
 constructable or constructable-with-pain.
 
-**Current state:** no source plugin of that shape yet.
+**Current state:** Done. Implemented in `Polytropos.Plugin.Source` and exposed via
+`Polytropos.Plugin` (`parsedResultAction`). Desugars:
+1. Record construction: `REC { x = 1, y = True }` (bare) and `REC_F { x = Just 1 }` (HKD) with field punning.
+2. Variant injection: `VAR { ok = ... }` / `VARIANT { err = ... }`.
+3. Record updates: `(REC_UPD r) { x = 42 }` and `REC_UPD (r { x = 42 })` into `setField` chains, and `REC_UPD_F` into `setFieldF` chains.
+4. Record pattern matching: `REC { a, b }` into view patterns using `recordField`.
+5. Variant pattern matching: `VAR { ok = p }` into view patterns using `projectVariant`.
+6. Open declaration forms: `data Person = Person { ... } deriving OpenRecord` and `data Status = Success { ... } | Failure { ... } deriving OpenVariant`, providing nominal syntax that operates over structural row-polymorphic records and variants.
 
 **What "done" looks like:**
 
-- A declared construction syntax, and a source plugin that desugars it.
-- Not required for correctness, but important for adoption.
+- A declared construction syntax, and a source plugin that desugars it (done).
+- Verified with comprehensive test coverage in `polytropos-plugin-smoke` (done, 43 tests passing).
 
-**Primary files:** a new plugin source module, plus cabal/plugin wiring.
+**Primary files:** `packages/polytropos-plugin/src/Polytropos/Plugin/Source.hs`,
+`packages/polytropos-plugin/src/Polytropos/Plugin.hs`,
+`packages/polytropos-core/src/Polytropos.hs`,
+`packages/polytropos-plugin/tests/smoke/Main.hs`.
 
 ### 1.7 Generic instance layer, not just raw `Rep` (medium)
 

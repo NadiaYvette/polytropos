@@ -5,6 +5,10 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE OverloadedRecordDot #-}
+{-# LANGUAGE OverloadedLabels #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE ViewPatterns #-}
+{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
 -- | Smoke test: exercise RowEq / RowShow through the TcPlugin on R2.
 --
@@ -43,6 +47,12 @@ other = RowRep (productRep [slot (7 :: Int), slot False])
 type RD = '[ "x" := Int, "y" := Bool ]
 rDot :: RowRep Identity ProductRowT RD (Int, Bool)
 rDot = RowRep (productRep [slot (42 :: Int), slot True])
+
+data Person = Person { name :: String, age :: Int }
+  deriving (Show, Eq, OpenRecord)
+
+data Status = Success { val :: Int } | Failure { msg :: String }
+  deriving (Show, Eq, OpenVariant)
 
 main :: IO ()
 main = defaultMain $ testGroup "plugin RowEq/RowShow smoke"
@@ -183,6 +193,80 @@ main = defaultMain $ testGroup "plugin RowEq/RowShow smoke"
           knownHash @"x" /= 0 @?= True
           knownHash @"y" /= 0 @?= True
           knownHash @"x" /= knownHash @"y" @?= True
+      ]
+  , testGroup "Source Plugin Syntax (§1.6)"
+      [ testCase "REC bare record construction" $ do
+          let r = REC { a = (10 :: Int), b = True }
+          r.a @?= Identity (10 :: Int)
+          r.b @?= Identity True
+      , testCase "REC with field punning" $ do
+          let a = (99 :: Int)
+              b = False
+              r = REC { a, b }
+          r.a @?= Identity (99 :: Int)
+          r.b @?= Identity False
+      , testCase "REC_F HKD record construction" $ do
+          let r = REC_F { msg = Just ("hello" :: String), code = (Nothing :: Maybe Int) }
+          r.msg @?= Just "hello"
+          r.code @?= (Nothing :: Maybe Int)
+      , testCase "VAR and VARIANT injection" $ do
+          let v1 :: Variant '[ "ok" := '[ "val" := Int ] ]
+              v1 = VAR { ok = REC { val = (200 :: Int) } }
+          case projectVariant (Field @"ok") v1 of
+            Just r -> r.val @?= Identity (200 :: Int)
+            Nothing -> error "expected Just in projectVariant"
+          let v2 :: Variant '[ "err" := '[ "msg" := String ] ]
+              v2 = VARIANT { err = REC { msg = ("not found" :: String) } }
+          case projectVariant (Field @"err") v2 of
+            Just r -> r.msg @?= Identity "not found"
+            Nothing -> error "expected Just in projectVariant"
+      , testCase "REC_UPD bare record update" $ do
+          let r1 = REC { a = (10 :: Int), b = True }
+              r2 = (REC_UPD r1) { a = (42 :: Int) }
+          r2.a @?= Identity (42 :: Int)
+          r2.b @?= Identity True
+      , testCase "REC_UPD_F HKD record update" $ do
+          let r1 = REC_F { msg = Just ("hi" :: String), code = (Nothing :: Maybe Int) }
+              r2 = (REC_UPD_F r1) { code = (Just 200 :: Maybe Int) }
+          r2.msg @?= Just "hi"
+          r2.code @?= Just (200 :: Int)
+      , testCase "REC pattern matching (single and multiple fields)" $ do
+          let r = REC { a = (10 :: Int), b = True }
+              valA = case r of
+                REC { a = vA } -> vA
+              (x, y) = case r of
+                REC { a, b } -> (a, b)
+          valA @?= (10 :: Int)
+          x @?= (10 :: Int)
+          y @?= True
+      , testCase "VAR pattern matching" $ do
+          let v1 = VAR { ok = REC { val = (200 :: Int) } } :: Variant '[ "ok" := '[ "val" := Int ], "err" := '[ "msg" := String ] ]
+              v2 = VAR { err = REC { msg = ("oops" :: String) } } :: Variant '[ "ok" := '[ "val" := Int ], "err" := '[ "msg" := String ] ]
+              check :: Variant '[ "ok" := '[ "val" := Int ], "err" := '[ "msg" := String ] ] -> String
+              check v = case v of
+                VAR { ok = REC { val = n } } -> show n
+                VAR { err = REC { msg = s } } -> s
+                _                             -> error "unreachable"
+          check v1 @?= "200"
+          check v2 @?= "oops"
+      , testCase "OpenRecord declaration form construction and matching" $ do
+          let p = Person { name = "Alice", age = (30 :: Int) }
+          p.name @?= Identity "Alice"
+          p.age @?= Identity (30 :: Int)
+          let (resName, resAge) = case p of
+                Person { name, age } -> (name, age)
+          resName @?= "Alice"
+          resAge @?= (30 :: Int)
+      , testCase "OpenVariant declaration form construction and matching" $ do
+          let s1 = Success { val = 200 } :: Variant '[ "Success" := '[ "val" := Int ], "Failure" := '[ "msg" := String ] ]
+              s2 = Failure { msg = "bad request" } :: Variant '[ "Success" := '[ "val" := Int ], "Failure" := '[ "msg" := String ] ]
+              eval :: Variant '[ "Success" := '[ "val" := Int ], "Failure" := '[ "msg" := String ] ] -> Int
+              eval s = case s of
+                Success { val } -> val
+                Failure { msg } -> length msg
+                _               -> error "unreachable"
+          eval s1 @?= 200
+          eval s2 @?= 11
       ]
   ]
 

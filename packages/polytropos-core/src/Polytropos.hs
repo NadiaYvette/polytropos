@@ -6,6 +6,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE Trustworthy #-}
@@ -61,6 +62,8 @@ module Polytropos
   , injectVariantF
   , projectVariant
   , projectVariantF
+  , type ConstructorPayload
+  , type ConstructorPayloadHKD
     -- * Sub-row & Sub-variant operations
   , SubRow(..)
   , SubSum(..)
@@ -85,6 +88,19 @@ module Polytropos
   , labelHash
   , hashVal
   , fnv1a64
+    -- * Syntactic Devices (Source Plugin)
+  , REC(..)
+  , REC_F(..)
+  , VAR(..)
+  , type VARIANT
+  , data VARIANT
+  , REC_UPD(..)
+  , REC_UPD_F(..)
+  , OpenRecord
+  , OpenVariant
+  , recordField
+  , setField
+  , setFieldF
   ) where
 
 import Polytropos.Core
@@ -92,6 +108,8 @@ import Data.Functor.Identity (Identity(..))
 import Data.Kind (Type)
 import Data.Primitive.SmallArray (indexSmallArray)
 import GHC.Exts (toList)
+import GHC.Records (HasField(..))
+import GHC.TypeLits (Symbol)
 import Unsafe.Coerce (unsafeCoerce)
 
 -- | An open record type, parametrised by a functor @f@ and a row @r@.
@@ -148,52 +166,55 @@ insertField _ a (RowRep r) =
   RowRep (productRep (Identity (unsafeCoerce a) : toList (repVals r)))
 
 -- | Inject an HKD record into an HKD variant for a specific constructor.
+-- | Compute the payload product row of a constructor @n@ in a sum row @s@.
+type family ConstructorPayload (n :: Symbol) (s :: SumRow) :: Row where
+  ConstructorPayload n ((n ':= fs) ': rest) = fs
+  ConstructorPayload n ((m ':= fs) ': rest) = ConstructorPayload n rest
+
+-- | Compute the HKD payload product row of a constructor @n@ in an HKD sum row @s@.
+type family ConstructorPayloadHKD (f :: Type -> Type) (n :: Symbol) (s :: SumRowHKD f) :: ProductRow f where
+  ConstructorPayloadHKD f n ((n ':= fs) ': rest) = fs
+  ConstructorPayloadHKD f n ((m ':= fs) ': rest) = ConstructorPayloadHKD f n rest
+
+-- | Inject an HKD record into an HKD variant for a specific constructor.
 injectVariantF :: forall n s fs f. ConstructorIndex n s => Field n -> RecordF f fs -> VariantF f s
 injectVariantF _ (RowRep r) =
   RowRep (injectRep (constructorIndex @_ @n @s) (toList (repVals r)))
 
 -- | Project an HKD record from an HKD variant.
-projectVariantF :: forall n s fs f. ConstructorIndex n s => Field n -> VariantF f s -> Maybe (RecordF f fs)
+projectVariantF :: forall (n :: Symbol) (f :: Type -> Type) (s :: SumRowHKD f).
+                   ConstructorIndex n s
+                => Field n -> VariantF f s -> Maybe (RecordF f (ConstructorPayloadHKD f n s))
 projectVariantF _ (RowRep r) =
   case projectRep (constructorIndex @_ @n @s) r of
     Just vals -> Just (RowRep (productRep vals))
     Nothing   -> Nothing
 
 -- | Pattern synonym for matching and constructing HKD variants safely.
-pattern VariantF :: forall n s fs f. ConstructorIndex n s => Field n -> RecordF f fs -> VariantF f s
+pattern VariantF :: forall (n :: Symbol) (f :: Type -> Type) (s :: SumRowHKD f).
+                    ConstructorIndex n s
+                 => Field n -> RecordF f (ConstructorPayloadHKD f n s) -> VariantF f s
 pattern VariantF f r <- ( (\v -> (Field :: Field n, projectVariantF (Field :: Field n) v)) -> (f, Just r) )
   where VariantF f r = injectVariantF f r
 
 -- | Inject a record of fields into a variant for a specific constructor.
---
--- The constraint @'ConstructorIndex' n s@ ensures that the constructor @n@
--- exists in the sum row @s@, and provides its tag index at compile time.
--- This function is typically used via the 'Variant' pattern synonym.
 injectVariant :: forall n s fs. ConstructorIndex n s => Field n -> Record fs -> Variant s
 injectVariant _ (RowRep r) =
   RowRep (injectRep (constructorIndex @_ @n @s) (toList (repVals r)))
 
 -- | Project a specific constructor from a variant.
---
--- Returns 'Just' the fields if the variant's active tag matches the requested
--- constructor @n@, or 'Nothing' otherwise.
-projectVariant :: forall n s fs. ConstructorIndex n s => Field n -> Variant s -> Maybe (Record fs)
+projectVariant :: forall (n :: Symbol) (s :: SumRow).
+                  ConstructorIndex n s
+               => Field n -> Variant s -> Maybe (Record (ConstructorPayload n s))
 projectVariant _ (RowRep r) =
   case projectRep (constructorIndex @_ @n @s) r of
     Just vals -> Just (RowRep (productRep vals))
     Nothing   -> Nothing
 
 -- | A pattern synonym for matching and constructing variants safely.
---
--- This pattern allows ergonomic matching on a 'Variant' without exposing the
--- internal 'Rep' or tag values.
---
--- @
--- case v of
---   Variant (Field \@"Foo") r -> ...
---   Variant (Field \@"Bar") r -> ...
--- @
-pattern Variant :: forall n s fs. ConstructorIndex n s => Field n -> Record fs -> Variant s
+pattern Variant :: forall (n :: Symbol) (s :: SumRow).
+                   ConstructorIndex n s
+                => Field n -> Record (ConstructorPayload n s) -> Variant s
 pattern Variant f r <- ( (\v -> (Field :: Field n, projectVariant (Field :: Field n) v)) -> (f, Just r) )
   where Variant f r = injectVariant f r
 
@@ -260,3 +281,59 @@ narrowVariant (RowRep rep) =
   in case drop tag narrowMap of
     (Just subTag : _) -> Just (RowRep (Rep subTag (repVals rep)))
     _                 -> Nothing
+
+{-------------------------------------------------------------------------------
+  Syntactic Devices & Helpers (Source Plugin)
+-------------------------------------------------------------------------------}
+
+-- | Syntactic marker for anonymous record construction and pattern matching.
+-- Desugared by the @Polytropos@ source plugin.
+data REC = REC
+  deriving (Show, Eq)
+
+-- | Syntactic marker for anonymous functorial/HKD record construction.
+-- Desugared by the @Polytropos@ source plugin.
+data REC_F = REC_F
+  deriving (Show, Eq)
+
+-- | Syntactic marker for anonymous variant injection and pattern matching.
+-- Desugared by the @Polytropos@ source plugin.
+data VAR = VAR
+  deriving (Show, Eq)
+
+-- | Syntactic alias for 'VAR'.
+type VARIANT = VAR
+
+pattern VARIANT :: VAR
+pattern VARIANT = VAR
+
+-- | Marker for record update syntax: @REC_UPD r { x = 42 }@.
+-- Desugared by the @Polytropos@ source plugin into 'setField' calls.
+data REC_UPD = REC_UPD
+  deriving (Show, Eq)
+
+-- | Marker for functorial/HKD record update syntax: @REC_UPD_F r { x = Just 42 }@.
+-- Desugared by the @Polytropos@ source plugin into 'setFieldF' calls.
+data REC_UPD_F = REC_UPD_F
+  deriving (Show, Eq)
+
+-- | Marker class for open record declarations desugared by the source plugin.
+class OpenRecord a
+
+-- | Marker class for open variant declarations desugared by the source plugin.
+class OpenVariant a
+
+-- | Fetch a field value from a record, used for pattern matching and field access.
+recordField :: forall n a r. HasField n (Record r) (Identity a) => Field n -> Record r -> a
+recordField _ r = case getField @n r of Identity x -> x
+
+-- | Update an existing field in a 'Record'.
+setField :: forall n a r. FieldIndex n r a => Field n -> a -> Record r -> Record r
+setField _ val (RowRep rep) =
+  RowRep (setFieldAt (fieldIndex @_ @n @r @a) (Identity (noInlineUnsafeCo val)) rep)
+
+-- | Update an existing field in a 'RecordF'.
+setFieldF :: forall n a f r. FieldIndex n r a => Field n -> f a -> RecordF f r -> RecordF f r
+setFieldF _ val (RowRep rep) =
+  RowRep (setFieldAt (fieldIndex @_ @n @r @a) (noInlineUnsafeCo val) rep)
+

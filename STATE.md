@@ -7,16 +7,19 @@ Operational frontier. Read with `PLAN.md`; update before ending a session.
 Phases 3, 4A and 4B/4D foundations are in. Tasks `task-01` through `task-19` have been executed
 and verified through their deterministic gates. Milestones §1.1 (`AllFields` generic field-class dictionary supply),
 §1.2 (HKD-aware row vocabulary), §1.3 (type-level row metadata + plugin rewriting), §1.4 (subrow/projection evidence
-for sums/variants), and §1.5 (compile-time label hashing `KnownHash`) of `plans/2026-10-09-plugin-gap-roadmap.md` are implemented and verified.
+for sums/variants), §1.5 (compile-time label hashing `KnownHash`), and §1.6 (source-plugin construction syntax & open declaration forms)
+of `plans/2026-10-09-plugin-gap-roadmap.md` are implemented and verified.
 All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
 - `polytropos-core` passes 32 tests (primitive SmallArray CoW updates, `setFieldsAt` batch updates,
   `MRep` transient builders, `Polytropos` consumer surface, `Record`, `Variant`).
-- `polytropos-plugin-smoke` passes 33 tests with `-fplugin=Polytropos.Plugin` (`RowEq`, `RowShow`,
+- `polytropos-plugin-smoke` passes 43 tests with `-fplugin=Polytropos.Plugin` (`RowEq`, `RowShow`,
   `RowEqSum`, `RowShowSum`, native `OverloadedRecordDot` on bare and `RecordF Maybe` records,
   `AllFields` generic dictionary supply across standard and HKD product rows, `FieldIndex`/`ConstructorIndex` on HKD rows,
   compile-time `Refl` type equality rewriting for `FieldNames`, `SimpleFieldTypes`, and `FieldTypes`,
   `SubRow`/`SubSum` projection, injection, and narrowing evidence with `projectRecord`, `widenVariant`, and `narrowVariant`,
-  and `KnownHash` compile-time label hashing with literal FNV-1a 64-bit `Word` dictionaries).
+  `KnownHash` compile-time label hashing with literal FNV-1a 64-bit `Word` dictionaries,
+  and source-plugin syntactic devices: `REC`, `REC_F`, field punning, `VAR`, `VARIANT`, `REC_UPD`, `REC_UPD_F`,
+  record & variant view pattern matching, and `deriving OpenRecord` / `deriving OpenVariant` declaration forms).
 - `polytropos-generics-test` passes 6 tests (`Generic` datatype generics bridge over flat `Rep`,
   `geq`, `gshowsPrec`, product and sum roundtrips).
 - `polytropos-optics-test` passes 6 tests (`optics-core` + `LabelOptic` `#field` lenses and variant prisms).

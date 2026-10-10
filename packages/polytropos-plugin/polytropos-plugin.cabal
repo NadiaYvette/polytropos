@@ -33,14 +33,13 @@ common warnings
 library
   import:           warnings
   exposed-modules:  Polytropos.Plugin
+                  , Polytropos.Plugin.Source
   hs-source-dirs:   src
   default-language: GHC2021
   build-depends:
       base       >= 4.19 && < 4.23
     , ghc         >= 9.14 && < 9.15
     , ghc-tcplugin-api >= 0.1 && < 0.21
-    , polytropos-core
-    , primitive   >= 0.9  && < 0.10
 
 test-suite polytropos-plugin-smoke
   import:           warnings

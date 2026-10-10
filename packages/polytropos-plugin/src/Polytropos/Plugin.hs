@@ -175,12 +175,19 @@ import GHC.TcPlugin.API.Internal
   , TcPluginRewriter
   )
 
+import Polytropos.Plugin.Source
+  ( sourcePlugin
+  )
+
 -------------------------------------------------------------------------------
 -- Plugin entry point
 -------------------------------------------------------------------------------
 
 plugin :: Plugin
-plugin = defaultPlugin { tcPlugin = const $ Just $ mkTcPlugin polytroposPlugin }
+plugin = defaultPlugin
+  { tcPlugin           = const $ Just $ mkTcPlugin polytroposPlugin
+  , parsedResultAction = \opts _modSummary -> sourcePlugin opts
+  }
 
 polytroposPlugin :: TcPlugin
 polytroposPlugin = TcPlugin

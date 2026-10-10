@@ -273,13 +273,20 @@ Plugin obligations, in order (design note §6):
 2. resolve a constructor name to a literal tag (solves `ConstructorIndex`);
 3. emit `RowEq` / `RowShow` bodies as literals (solves the evidence-class methods);
 4. index `Rep` by its row, retiring §5's `Proxy` debt (Case 3 wrapper — obligation
-   4 is satisfied by the wrapper, not by changing the erased `Rep`).
+   4 is satisfied by the wrapper, not by changing the erased `Rep`);
+5. emit `SubRow` and `SubSum` projection/narrowing indices as literal evidence;
+6. compile-time label hashing via `KnownHash` solving;
+7. source-plugin syntactic devices & open declaration forms (`Polytropos.Plugin.Source`):
+   - Anonymous record construction & punning: `REC { x = 1, y = True }` / `REC_F { msg = Just "ok" }`.
+   - Anonymous variant injection: `VAR { ok = ... }` / `VARIANT { err = ... }`.
+   - Record update desugaring: `(REC_UPD r) { x = 42 }` into `setField` chains, `REC_UPD_F` for HKD.
+   - Record & variant pattern matching: desugars into view patterns (`recordField`, `projectVariant`).
+   - Open declaration forms: `data Person = Person { ... } deriving OpenRecord` and
+     `data Status = Success { ... } | Failure { ... } deriving OpenVariant`, providing ergonomic
+     nominal-looking syntax that compiles into open, structural, row-polymorphic types under the hood.
 
-Status: obligations 1 and 2 implemented and passing; obligation 3 has the plugin
-infrastructure (name lookup, `PluginState`, type-aware row walking) in place but
-the Core builders for `RowEq`/`RowShow`/`RowEqSum`/`RowShowSum` are stubs pending
-Eq-dictionary resolution; obligation 4 is decided (Case 3) and sketched but not
-yet realised in code.
+Status: obligations 1 through 7 fully implemented, verified with 43 tests in `polytropos-plugin-smoke`,
+and tested across all 10 workspace packages with zero compiler warnings and zero errors.
 
 ---
 
