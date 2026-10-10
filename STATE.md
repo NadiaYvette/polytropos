@@ -107,6 +107,10 @@ All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
 - `docs/notes/PHASE2_SKETCH.md` — Phase 2 sketch (all refinements resolved)
 - `docs/notes/FIELD_UPDATE_EFFICIENCY_DESIGN.md` — architectural roadmap for hardware-vectorized CoW updates
 - `docs/notes/SATELLITE_INTERFACES_DESIGN.md` — architecture and package catalogue for 12 ecosystem satellites
+- `docs/notes/EFFECT_SYSTEMS_PORTING_MASTER_PLAN.md` — master architectural plan for porting and forking algebraic effect systems (`effectful`, `polysemy`, `kernmantle`) to `polytropos`
+- `docs/notes/EFFECTFUL_POLYTROPOS_PORT_PLAN.md` — implementation plan for `effectful-polytropos` (flat open product rows, `FieldIndex` literal index solving, eliminating `effectful-plugin`)
+- `docs/notes/POLYSEMY_POLYTROPOS_PORT_PLAN.md` — implementation plan for `polysemy-polytropos` (freer monad union variant over `Rep`, $O(1)$ tag `decomp`, eliminating `polysemy-plugin`)
+- `docs/notes/KERNMANTLE_POLYTROPOS_PORT_PLAN.md` — implementation plan for `kernmantle-polytropos` (forked from `master`, dropping `vinyl` and discarding `large-anon`, `RecordF` Higher-Kinded Data ropes)
 - `docs/task_packets/` — 19 structured task packets (`task-01` through `task-19`)
 - `scripts/tasks/` — deterministic test verification scripts for task packet gates (`task-01` through `task-19`)
 - `bin/yamaarashi-exec` & `.agents/skills/yamaarashi/SKILL.md` — runner script and skill with SQLite ledger

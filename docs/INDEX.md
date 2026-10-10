@@ -18,6 +18,10 @@ Status: LIVING DOCUMENT · v0.1 · 2026-10-05
 | `notes/OCAML_ROW_TAIL_SUBTYPE_MECHANISM.md` | notes | draft | cross-cutting | — |
 | `notes/ROW_ROLE_DEFNS_DRAFT.ott` | notes | draft | cross-cutting | — |
 | `notes/REVIEWER_WFU_ARGUMENT.md` | notes | draft | cross-cutting | — |
+| `notes/EFFECT_SYSTEMS_PORTING_MASTER_PLAN.md` | plan | draft | cross-cutting | — |
+| `notes/EFFECTFUL_POLYTROPOS_PORT_PLAN.md` | plan | draft | cross-cutting | — |
+| `notes/POLYSEMY_POLYTROPOS_PORT_PLAN.md` | plan | draft | cross-cutting | — |
+| `notes/KERNMANTLE_POLYTROPOS_PORT_PLAN.md` | plan | draft | cross-cutting | — |
 | `registers/PACKAGES.md` | register | live | cross-cutting | — |
 | `transcripts/gemini-large-data-hybrid-variant-records-spec.md` | transcript | archive | cross-cutting | inconsistent |
 | `transcripts/gemini-powerful-abstraction-techniques-in-haskell.md` | transcript | archive | cross-cutting | — |
@@ -55,6 +59,12 @@ and Q5 (polytropos/large-anon coexistence).
 `notes/FIELD_UPDATE_EFFICIENCY_DESIGN.md` & `notes/SATELLITE_INTERFACES_DESIGN.md`
 → sequential task packets in `task_packets/` (`task-01-field-update-cow.yaml` through
 `task-19-satellite-quickcheck.yaml`) executed via `bin/yamaarashi-exec run`.
+
+**Effect System Implementer / Library Porter.**
+`notes/EFFECT_SYSTEMS_PORTING_MASTER_PLAN.md` (tri-paradigm synthesis)
+→ per-package plans: `notes/EFFECTFUL_POLYTROPOS_PORT_PLAN.md` (`effectful` in-place environment),
+`notes/POLYSEMY_POLYTROPOS_PORT_PLAN.md` (`polysemy` freer union variant),
+`notes/KERNMANTLE_POLYTROPOS_PORT_PLAN.md` (`kernmantle` arrow pipeline).
 
 **Someone new to the idea.** The transcripts in `transcripts/` record the
 ideation context: `transcripts/gemini-powerful-abstraction-techniques-in-haskell.md`
