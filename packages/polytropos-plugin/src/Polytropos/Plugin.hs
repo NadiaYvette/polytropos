@@ -52,7 +52,6 @@ import GHC.Plugins
   ( Plugin (..)
   , defaultPlugin
   , tcPlugin
-  , ppr
   , Expr(..)
   , Type
   , mkTcOcc
@@ -68,7 +67,6 @@ import GHC.Plugins
   , Literal(..)
   , LitNumType(..)
   , wordTyCon
-  , showSDocUnsafe
   , Var(..)
   , varType
   , intTy
@@ -87,6 +85,8 @@ import GHC.Plugins
   , getOccName
   , occNameString
   , fsLit
+  , nullFS
+  , nilFS
   , TyCon
   )
 
@@ -482,7 +482,8 @@ solveFieldIndex
 solveFieldIndex ct cls tys = do
   case tys of
     [_k, nTy, rowTy, _aTy] -> do
-      case isStrLitTy (unwrapSynonyms nTy) of
+      let unwrapN = unwrapSynonyms nTy
+      case isStrLitTy unwrapN of
         Just fieldName -> do
           case findFieldIndex fieldName rowTy of
             Just i -> do
@@ -490,7 +491,13 @@ solveFieldIndex ct cls tys = do
                   dictExpr = evDataConApp (classDataCon cls) tys [iExpr]
               pure $ Left (EvExpr dictExpr, ct)
             Nothing -> pure $ Right ()
-        Nothing -> pure $ Right ()
+        Nothing -> do
+          case findFieldIndexByType unwrapN rowTy of
+            Just i -> do
+              let iExpr = mkCoreConApps intDataCon [Lit (mkLit (fromIntegral i :: Integer))]
+                  dictExpr = evDataConApp (classDataCon cls) tys [iExpr]
+              pure $ Left (EvExpr dictExpr, ct)
+            Nothing -> pure $ Right ()
     _ -> pure $ Right ()
 
 -------------------------------------------------------------------------------
@@ -505,7 +512,8 @@ solveConstructorIndex
 solveConstructorIndex ct cls tys = do
   case tys of
     [_k, nTy, rowTy] -> do
-      case isStrLitTy (unwrapSynonyms nTy) of
+      let unwrapN = unwrapSynonyms nTy
+      case isStrLitTy unwrapN of
         Just conName -> do
           case findConstructorIndex conName rowTy of
             Just w -> do
@@ -513,7 +521,13 @@ solveConstructorIndex ct cls tys = do
                   dictExpr = evDataConApp (classDataCon cls) tys [wExpr]
               pure $ Left (EvExpr dictExpr, ct)
             Nothing -> pure $ Right ()
-        Nothing -> pure $ Right ()
+        Nothing -> do
+          case findConstructorIndexByType unwrapN rowTy of
+            Just w -> do
+              let wExpr = mkCoreConApps wordDataCon [Lit (mkLit (fromIntegral w :: Integer))]
+                  dictExpr = evDataConApp (classDataCon cls) tys [wExpr]
+              pure $ Left (EvExpr dictExpr, ct)
+            Nothing -> pure $ Right ()
     _ -> pure $ Right ()
 
 -------------------------------------------------------------------------------
@@ -983,7 +997,9 @@ solveSubRow ct cls tys
     matchFields :: [(Int, FastString, Type)] -> [(Int, FastString, Type)] -> Maybe [Int]
     matchFields [] _ = Just []
     matchFields ((_, name, fieldTy) : rest) sFields =
-      case [ j | (j, sName, sFieldTy) <- sFields, sName == name, fieldTy `eqType` sFieldTy ] of
+      case [ j | (j, sName, sFieldTy) <- sFields
+               , (if nullFS name || nullFS sName then True else sName == name)
+               , fieldTy `eqType` sFieldTy ] of
         (j : _) -> (j :) <$> matchFields rest sFields
         []      -> Nothing
 
@@ -1005,10 +1021,14 @@ solveSubSum ct cls tys
             injectExpr = mkListExpr wordTy (map wordDataExpr injectIndices)
 
             narrowIndices =
-              [ case [ fromIntegral i :: Word | (i, sName, _) <- subCons, sName == superName ] of
+              [ case [ fromIntegral i :: Word
+                     | (i, sName, sConRowTy) <- subCons
+                     , (if nullFS sName || nullFS superName then True else sName == superName)
+                     , sameRow sConRowTy superConRowTy
+                     ] of
                   (subIdx : _) -> Just subIdx
                   []           -> Nothing
-              | (_j, superName, _superRow) <- superCons
+              | (_j, superName, superConRowTy) <- superCons
               ]
 
             maybeWordTy = mkAppTy (mkTyConTy maybeTyCon) wordTy
@@ -1024,7 +1044,9 @@ solveSubSum ct cls tys
     matchCons :: [(Int, FastString, Type)] -> [(Int, FastString, Type)] -> Maybe [Word]
     matchCons [] _ = Just []
     matchCons ((_, conName, conRowTy) : rest) sCons =
-      case [ j | (j, sName, sRowTy) <- sCons, sName == conName, sameRow conRowTy sRowTy ] of
+      case [ j | (j, sName, sRowTy) <- sCons
+               , (if nullFS conName || nullFS sName then True else sName == conName)
+               , sameRow conRowTy sRowTy ] of
         (j : _) -> (fromIntegral j :) <$> matchCons rest sCons
         []      -> Nothing
 
@@ -1033,7 +1055,7 @@ solveSubSum ct cls tys
       | Just fs1 <- walkRowWithTypes_maybe r1
       , Just fs2 <- walkRowWithTypes_maybe r2
       = length fs1 == length fs2 &&
-        and [ n1 == n2 && t1 `eqType` t2 | ((_, n1, t1), (_, n2, t2)) <- zip fs1 fs2 ]
+        and [ (if nullFS n1 || nullFS n2 then True else n1 == n2) && t1 `eqType` t2 | ((_, n1, t1), (_, n2, t2)) <- zip fs1 fs2 ]
       | otherwise = False
 
 -------------------------------------------------------------------------------
@@ -1083,7 +1105,7 @@ walkRowWithTypes_maybe rowTy = do
           , let fieldTy = args !! (length args - 1)
           , Just n <- isStrLitTy (unwrapSynonyms nameTy)
           -> Just (i, n, fieldTy)
-        _ -> Nothing
+        _ -> Just (i, nilFS, elemTy)
 
 walkSumRowWithTypes_maybe :: Type -> Maybe [(Int, FastString, Type)]
 walkSumRowWithTypes_maybe rowTy = do
@@ -1098,7 +1120,7 @@ walkSumRowWithTypes_maybe rowTy = do
           , let conRowTy = args !! (length args - 1)
           , Just n <- isStrLitTy (unwrapSynonyms nameTy)
           -> Just (i, n, conRowTy)
-        _ -> Nothing
+        _ -> Just (i, nilFS, elemTy)
 
 -------------------------------------------------------------------------------
 -- Row walking
@@ -1130,7 +1152,7 @@ walkRowWithTypes rowTy =
           , let fieldTy = args !! (length args - 1)
           , Just n <- isStrLitTy (unwrapSynonyms nameTy)
           -> (i, n, fieldTy)
-        _ -> error $ "walkRowWithTypes: malformed field entry: " ++ showSDocUnsafe (ppr elemTy)
+        _ -> (i, nilFS, elemTy)
 
 walkSumRowWithTypes :: Type -> [(Int, FastString, Type)]
 walkSumRowWithTypes rowTy =
@@ -1144,7 +1166,7 @@ walkSumRowWithTypes rowTy =
           , let conRowTy = args !! (length args - 1)
           , Just n <- isStrLitTy (unwrapSynonyms nameTy)
           -> (i, n, conRowTy)
-        _ -> error $ "walkSumRowWithTypes: malformed constructor entry: " ++ showSDocUnsafe (ppr elemTy)
+        _ -> (i, nilFS, elemTy)
 
 findFieldIndex :: FastString -> Type -> Maybe Int
 findFieldIndex fieldName rowTy =
@@ -1155,6 +1177,18 @@ findFieldIndex fieldName rowTy =
 findConstructorIndex :: FastString -> Type -> Maybe Word
 findConstructorIndex conName rowTy =
   case [fromIntegral i | (i, n, _) <- walkSumRowWithTypes rowTy, n == conName] of
+    (w : _) -> Just w
+    []      -> Nothing
+
+findFieldIndexByType :: Type -> Type -> Maybe Int
+findFieldIndexByType targetTy rowTy =
+  case [i | (i, _, ty) <- walkRowWithTypes rowTy, targetTy `eqType` ty] of
+    (i : _) -> Just i
+    []      -> Nothing
+
+findConstructorIndexByType :: Type -> Type -> Maybe Word
+findConstructorIndexByType targetTy rowTy =
+  case [fromIntegral i | (i, _, ty) <- walkSumRowWithTypes rowTy, targetTy `eqType` ty] of
     (w : _) -> Just w
     []      -> Nothing
 
