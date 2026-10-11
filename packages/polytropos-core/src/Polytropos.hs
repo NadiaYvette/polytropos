@@ -73,6 +73,19 @@ module Polytropos
   , widenVariantF
   , narrowVariant
   , narrowVariantF
+    -- * Elimination & Peeling
+  , peel
+  , peelF
+  , type Delete
+  , type HandlerRecordRow
+  , type HandlerRecordRowM
+  , type HandlerRecordRowHetero
+  , type HandlerRecordRowHeteroM
+  , eliminateUniform
+  , eliminateUniformM
+  , eliminate
+  , eliminateM
+  , matchVariant
     -- * Re-exports
   , Pair(..)
   , RowEq(..)
@@ -292,6 +305,126 @@ narrowVariant (RowRep rep) =
   in case drop tag narrowMap of
     (Just subTag : _) -> Just (RowRep (Rep subTag (repVals rep)))
     _                 -> Nothing
+
+{-------------------------------------------------------------------------------
+  Elimination & Peeling
+-------------------------------------------------------------------------------}
+
+-- | Delete a constructor @n@ from a sum row @s@.
+type family Delete (n :: Symbol) (s :: [Pair Symbol k]) :: [Pair Symbol k] where
+  Delete n ((n ':= fs) ': rest) = rest
+  Delete n ((m ':= fs) ': rest) = (m ':= fs) ': Delete n rest
+  Delete n '[]                  = '[]
+
+-- | Peel a constructor @n@ from an open variant in O(1) time.
+--
+-- If the variant contains constructor @n@, returns @Right (Record fs)@.
+-- Otherwise, returns @Left (Variant (Delete n s))@ with the runtime tag
+-- adjusted in O(1) time without copying the payload array.
+peel :: forall (n :: Symbol) (s :: SumRow).
+        ConstructorIndex n s
+     => Variant s
+     -> Either (Variant (Delete n s)) (Record (ConstructorPayload n s))
+peel (RowRep r) =
+  case peelRep (constructorIndex @_ @n @s) r of
+    Right vals -> Right (RowRep (productRep vals))
+    Left remR  -> Left (RowRep remR)
+
+-- | Peel a constructor @n@ from an open HKD variant in O(1) time.
+peelF :: forall (n :: Symbol) (f :: Type -> Type) (s :: SumRowHKD f).
+         ConstructorIndex n s
+      => VariantF f s
+      -> Either (VariantF f (Delete n s)) (RecordF f (ConstructorPayloadHKD f n s))
+peelF (RowRep r) =
+  case peelRep (constructorIndex @_ @n @s) r of
+    Right vals -> Right (RowRep (productRep vals))
+    Left remR  -> Left (RowRep remR)
+
+-- | Row of handler functions for a sum row @s@ returning a uniform result @res@.
+type family HandlerRecordRow (s :: SumRow) (res :: Type) :: Row where
+  HandlerRecordRow '[] _ = '[]
+  HandlerRecordRow ((n ':= fs) ': rest) res = (n ':= (Record fs -> res)) ': HandlerRecordRow rest res
+
+-- | Row of monadic handler functions for a sum row @s@ returning @m res@.
+type family HandlerRecordRowM (s :: SumRow) (m :: Type -> Type) (res :: Type) :: Row where
+  HandlerRecordRowM '[] _ _ = '[]
+  HandlerRecordRowM ((n ':= fs) ': rest) m res = (n ':= (Record fs -> m res)) ': HandlerRecordRowM rest m res
+
+-- | Row of heterogeneous handler functions mapping constructors in @s@ to results in @resRow@.
+type family HandlerRecordRowHetero (s :: SumRow) (resRow :: SumRow) :: Row where
+  HandlerRecordRowHetero '[] _ = '[]
+  HandlerRecordRowHetero ((n ':= fs) ': rest) ((n ':= rfs) ': rrest) =
+    (n ':= (Record fs -> Record rfs)) ': HandlerRecordRowHetero rest rrest
+
+-- | Row of heterogeneous monadic handler functions mapping constructors in @s@ to monadic results in @m (Record rfs)@.
+type family HandlerRecordRowHeteroM (s :: SumRow) (resRow :: SumRow) (m :: Type -> Type) :: Row where
+  HandlerRecordRowHeteroM '[] _ _ = '[]
+  HandlerRecordRowHeteroM ((n ':= fs) ': rest) ((n ':= rfs) ': rrest) m =
+    (n ':= (Record fs -> m (Record rfs))) ': HandlerRecordRowHeteroM rest rrest m
+
+-- | Eliminate a closed variant uniformly with O(1) array jump table dispatch.
+eliminateUniform :: forall (s :: SumRow) a.
+                    Record (HandlerRecordRow s a)
+                 -> Variant s
+                 -> a
+eliminateUniform (RowRep (Rep _ hVals)) (RowRep (Rep tag vals)) =
+  let Identity hAny = indexSmallArray hVals (fromIntegral tag)
+      h = unsafeCoerce hAny :: Record '[] -> a
+      payload = RowRep (Rep 0 vals) :: Record '[]
+  in h payload
+
+-- | Eliminate a closed variant uniformly inside a monad @m@ with O(1) array jump table dispatch.
+eliminateUniformM :: forall (s :: SumRow) m a.
+                     Record (HandlerRecordRowM s m a)
+                  -> Variant s
+                  -> m a
+eliminateUniformM (RowRep (Rep _ hVals)) (RowRep (Rep tag vals)) =
+  let Identity hAny = indexSmallArray hVals (fromIntegral tag)
+      h = unsafeCoerce hAny :: Record '[] -> m a
+      payload = RowRep (Rep 0 vals) :: Record '[]
+  in h payload
+
+-- | Full hybrid eliminator: eliminate a closed variant into an open variant of per-constructor results.
+eliminate :: forall (s :: SumRow) (resRow :: SumRow).
+             Record (HandlerRecordRowHetero s resRow)
+          -> Variant s
+          -> Variant resRow
+eliminate (RowRep (Rep _ hVals)) (RowRep (Rep tag vals)) =
+  let Identity hAny = indexSmallArray hVals (fromIntegral tag)
+      h = unsafeCoerce hAny :: Record '[] -> Record '[]
+      payload = RowRep (Rep 0 vals) :: Record '[]
+      RowRep (Rep _ resVals) = h payload
+  in RowRep (Rep tag resVals)
+
+-- | Full monadic hybrid eliminator: eliminate a closed variant into an open variant of per-constructor results inside @m@.
+eliminateM :: forall (s :: SumRow) (resRow :: SumRow) m.
+              Monad m
+           => Record (HandlerRecordRowHeteroM s resRow m)
+           -> Variant s
+           -> m (Variant resRow)
+eliminateM (RowRep (Rep _ hVals)) (RowRep (Rep tag vals)) =
+  let Identity hAny = indexSmallArray hVals (fromIntegral tag)
+      h = unsafeCoerce hAny :: Record '[] -> m (Record '[])
+      payload = RowRep (Rep 0 vals) :: Record '[]
+  in do
+    RowRep (Rep _ resVals) <- h payload
+    pure (RowRep (Rep tag resVals))
+
+-- | Syntactic synonym for 'eliminateUniform' taking the variant value first.
+--
+-- Convenient for direct pattern matching expressions:
+--
+-- @
+-- matchVariant expr REC
+--   { lit = \(REC { val }) -> val
+--   , add = \(REC { left, right }) -> left + right
+--   }
+-- @
+matchVariant :: forall (s :: SumRow) a.
+                Variant s
+             -> Record (HandlerRecordRow s a)
+             -> a
+matchVariant = flip eliminateUniform
 
 {-------------------------------------------------------------------------------
   Syntactic Devices & Helpers (Source Plugin)

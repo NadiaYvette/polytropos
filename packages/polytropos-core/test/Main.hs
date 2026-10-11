@@ -245,6 +245,18 @@ evidenceTests = testGroup "evidence classes (hand-written)"
   Consumer API Tests
 -------------------------------------------------------------------------------}
 
+type TwoSum = '[ "Neg" ':= '[ "v" ':= Int ], "Pos" ':= '[ "v" ':= Int ] ]
+type ResRow = '[ "Neg" ':= '[ "out" ':= Int ], "Pos" ':= '[ "out" ':= Int ] ]
+
+instance ConstructorIndex "Neg" TwoSum where
+  constructorIndex = 0
+
+instance ConstructorIndex "Pos" TwoSum where
+  constructorIndex = 1
+
+instance ConstructorIndex "Pos" '[ "Pos" ':= '[ "v" ':= Int ] ] where
+  constructorIndex = 0
+
 instance ConstructorIndex "Neg" '[ "Neg" ':= '[ "v" ':= Int ] ] where
   constructorIndex = 0
 
@@ -263,6 +275,49 @@ consumerTests = testGroup "consumer api (Polytropos)"
       case v of
         Variant (Field :: Field "Neg") r' -> unslot (fieldAt 0 (unRowRep r')) @?= (7 :: Int)
         _ -> error "Pattern match failed"
+  , testCase "peel isolates target constructor" $ do
+      let r = insertField (Field @"v") (10 :: Int) emptyRecord
+          v = injectVariant (Field @"Neg") r :: Variant TwoSum
+      case peel @"Neg" v of
+        Right r' -> unslot (fieldAt 0 (unRowRep r')) @?= (10 :: Int)
+        Left _   -> error "Expected Right on matching constructor"
+  , testCase "peel remaps tag on non-matching constructor" $ do
+      let r = insertField (Field @"v") (20 :: Int) emptyRecord
+          v = injectVariant (Field @"Pos") r :: Variant TwoSum
+      case peel @"Neg" v of
+        Left (remV :: Variant '[ "Pos" ':= '[ "v" ':= Int ] ]) ->
+          repTag (unRowRep remV) @?= 0
+        Right _ -> error "Expected Left on non-matching constructor"
+  , testCase "eliminateUniform dispatches to matching handler in O(1)" $ do
+      let rNeg = insertField (Field @"v") (7 :: Int) emptyRecord
+          rPos = insertField (Field @"v") (7 :: Int) emptyRecord
+          vNeg = injectVariant (Field @"Neg") rNeg :: Variant TwoSum
+          vPos = injectVariant (Field @"Pos") rPos :: Variant TwoSum
+          handlers = insertField (Field @"Neg") (\r -> -(unslot (fieldAt 0 (unRowRep r)) :: Int))
+                   $ insertField (Field @"Pos") (\r -> (unslot (fieldAt 0 (unRowRep r)) :: Int))
+                   $ emptyRecord
+      eliminateUniform handlers vNeg @?= (-7)
+      eliminateUniform handlers vPos @?= 7
+      matchVariant vNeg handlers @?= (-7)
+  , testCase "eliminateUniformM dispatches inside monad" $ do
+      let rNeg = insertField (Field @"v") (3 :: Int) emptyRecord
+          vNeg = injectVariant (Field @"Neg") rNeg :: Variant TwoSum
+          handlersM = insertField (Field @"Neg") (\r -> pure (-(unslot (fieldAt 0 (unRowRep r)) :: Int)))
+                    $ insertField (Field @"Pos") (\r -> pure ((unslot (fieldAt 0 (unRowRep r)) :: Int)))
+                    $ emptyRecord
+      eliminateUniformM handlersM vNeg @?= Just (-3)
+  , testCase "eliminate produces heterogeneous Variant result" $ do
+      let rNeg = insertField (Field @"v") (4 :: Int) emptyRecord
+          rPos = insertField (Field @"v") (4 :: Int) emptyRecord
+          vNeg = injectVariant (Field @"Neg") rNeg :: Variant TwoSum
+          vPos = injectVariant (Field @"Pos") rPos :: Variant TwoSum
+          hHet = insertField (Field @"Neg") (\r -> insertField (Field @"out") (-(unslot (fieldAt 0 (unRowRep r)) :: Int)) emptyRecord)
+               $ insertField (Field @"Pos") (\r -> insertField (Field @"out") ((unslot (fieldAt 0 (unRowRep r)) :: Int) * 10) emptyRecord)
+               $ emptyRecord
+          outNeg = eliminate @_ @ResRow hHet vNeg
+          outPos = eliminate @_ @ResRow hHet vPos
+      repTag (unRowRep outNeg) @?= 0
+      repTag (unRowRep outPos) @?= 1
   ]
 
 main :: IO ()

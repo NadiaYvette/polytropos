@@ -80,6 +80,7 @@ module Polytropos.Core (
   , setFieldSumAt
   , projectRep
   , matchRep
+  , peelRep
     -- * Evidence classes
   , RowEq(..)
   , RowShow(..)
@@ -248,12 +249,12 @@ instance RowFlavour SumRowHKDT where
   type EntryKind SumRowHKDT = Pair Symbol Row
 
 -- | A handlerrow entry: a handler type (see 'HandlerType').
--- instance RowFlavour HandlerRowT where  -- reserved for Phase 4
---  type EntryKind HandlerRowT = HandlerType  -- not yet implemented
+instance RowFlavour HandlerRowT where
+  type EntryKind HandlerRowT = Pair Symbol Type
 
 -- | A result-row entry: a result type (see 'ResultType').
--- instance RowFlavour ResultRowT where  -- reserved for Phase 4
---  type EntryKind ResultRowT = ResultType  -- not yet implemented
+instance RowFlavour ResultRowT where
+  type EntryKind ResultRowT = Pair Symbol Type
 
 -- | A handler type: \"handler for constructor n, with field types fs,
 -- returning result type res in monad m\".
@@ -432,6 +433,17 @@ projectRep t (Rep t' v)
 -- unsettled — see note §4.
 matchRep :: (Word -> [f Any] -> a) -> Rep f a -> a
 matchRep k r = k (repTag r) (toListSlots (repVals r))
+
+-- | Peel a target tag from a sum representation in O(1) time.
+--
+-- If @repTag r == targetTag@, returns @Right (toListSlots (repVals r))@.
+-- Otherwise, returns @Left r'@ where the remaining tag is preserved if
+-- @repTag r < targetTag@, or decremented by 1 if @repTag r > targetTag@.
+peelRep :: Word -> Rep f a -> Either (Rep f a) [f Any]
+peelRep targetTag (Rep t v)
+  | t == targetTag = Right (toListSlots v)
+  | t < targetTag  = Left (Rep t v)
+  | otherwise      = Left (Rep (t - 1) v)
 
 {-------------------------------------------------------------------------------\n  §5  Evidence classes\n\n  The instance bodies are intended to be produced as integer literals by the\n  TcPlugin, the same way @large-anon@ produces @DictRowHasField@. Until the\n  plugin exists, the defaults are @undefined@; the concrete instances in the\n  test suite are hand-written and stand in for what the plugin will emit.\n-------------------------------------------------------------------------------}
 

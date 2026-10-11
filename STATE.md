@@ -10,9 +10,10 @@ and verified through their deterministic gates. All milestones of `plans/2026-10
 §1.4 subrow/subsum projection evidence, §1.5 compile-time label hashing `KnownHash`, §1.6 source-plugin construction syntax & open declaration forms,
 and §1.7 generic instance layer over rows & dynamic dictionary emission) are implemented and verified.
 All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
-- `polytropos-core` passes 32 tests (primitive SmallArray CoW updates, `setFieldsAt` batch updates,
-  `MRep` transient builders, `Polytropos` consumer surface, `Record`, `Variant`).
-- `polytropos-plugin-smoke` passes 52 tests with `-fplugin=Polytropos.Plugin` (`RowEq`, `RowShow`,
+- `polytropos-core` passes 37 tests (primitive SmallArray CoW updates, `setFieldsAt` batch updates,
+  `MRep` transient builders, `Polytropos` consumer surface, `Record`, `Variant`, `peel`, `peelF`,
+  `eliminateUniform`, `eliminateUniformM`, `eliminate`, `matchVariant`).
+- `polytropos-plugin-smoke` passes 54 tests with `-fplugin=Polytropos.Plugin` (`RowEq`, `RowShow`,
   `RowEqSum`, `RowShowSum`, native `OverloadedRecordDot` on bare and `RecordF Maybe` records,
   `AllFields` generic dictionary supply across standard and HKD product rows, `FieldIndex`/`ConstructorIndex` on HKD rows,
   compile-time `Refl` type equality rewriting for `FieldNames`, `SimpleFieldTypes`, and `FieldTypes`,
@@ -20,6 +21,7 @@ All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
   `KnownHash` compile-time label hashing with literal FNV-1a 64-bit `Word` dictionaries,
   source-plugin syntactic devices (`REC`, `REC_F`, field punning, `VAR`, `VARIANT`, `REC_UPD`, `REC_UPD_F`,
   record & variant view pattern matching, and `deriving OpenRecord` / `deriving OpenVariant` declaration forms),
+  $O(1)$ eliminator jump tables (`eliminateUniform`, `eliminateUniformM`, `eliminate`) and single-constructor peeling (`peel`),
   and human-centric `TypeError` diagnostics with Levenshtein-distance fuzzy suggestions and schema summaries
   for missing fields, missing constructors, field type mismatches, and `SubRow`/`SubSum` structural discrepancies).
 - `polytropos-generics-test` passes 13 tests (`Generic` and `GInstances` datatype generics bridge over flat `Rep`
@@ -150,14 +152,16 @@ All three algebraic effect system ports planned in `docs/notes/EFFECT_SYSTEMS_PO
 - `benchmark/variants/` — six-arm compile-time harness: empirical validation of `Polytropos.Plugin`
   variants (Arm P, 122× Core reduction vs type-level search, 5,876 simpl lines) and records
   (Arm PR, $O(N)$ exponent 1.03, beating nominal Haskell records at 5,602 lines Core vs 6,070)
+- `examples/nanopass/` — worked live tutorial executable (`example-nanopass`), building and running cleanly via `cabal run example-nanopass`
+- `docs/TUTORIAL.md` — interactive tutorial with worked Nanopass compiler pass, $O(1)$ peeling, and total elimination
+- `docs/notes/TUTORIAL_EXAMPLES_EVALUATION.md` — pedagogical evaluation matrix and staging roadmap for tutorial chapters
 - `.agents/rules/` — subdivided AI coding assistant operational rules
 
 ## What is deliberately missing
 
-- Full hybrid coproduct eliminator `eliminate :: Variant r -> HandlerRow ... -> m (Results ...)` (slated for Milestone T2).
 - SIMD vectorized array copies for $>32$ fields (slated for Milestone T3).
 
 ## Next action
 
-- Advance to Milestone T2 (`[COLLABORATIVE-ASYNC]`): The Full Hybrid Eliminator (`eliminate`) & Row Flavour Settlement (`HandlerRowT` / `ResultRowT`).
-- Advance to Documentation Agenda Tier 1 (`TUTORIAL.md` / `NEWBIE_GUIDE.md`) and Tier 3 (`MAINTAINER_GUIDE.md` overhaul) for human-collaborative review.
+- Advance to Documentation Agenda Tier 1 (`NEWBIE_GUIDE.md` expansion), Tier 2 (Haddock audit for API callers), and Tier 3 (`MAINTAINER_GUIDE.md` overhaul) for human-collaborative review.
+- Advance to Milestone T3: SIMD Vectorized CoW Updates for large records (>32 fields).

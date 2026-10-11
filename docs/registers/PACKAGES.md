@@ -30,6 +30,7 @@ not used: `../notes/PROVENANCE.md`.
 | Path | Package | Class | Upstream | Licence | Notes |
 | --- | --- | --- | --- | --- | --- |
 | `packages/polytropos-core` | `polytropos-core` | native | — | BSD-3-Clause | Rows, `Rep`, evidence classes. Depends on `base`, `primitive`. |
+| `examples/nanopass` | `example-nanopass` | native | — | BSD-3-Clause | Worked Nanopass compiler tutorial executable. |
 | `benchmark/variants` | `bench-variants` | benchmark | — | BSD-3-Clause | Four-arm compile-time harness. Standalone `cabal.project`, `-O0`, never built by `cabal build all`. |
 
 ## Dependencies

@@ -7,6 +7,7 @@ Status: LIVING DOCUMENT · v0.1 · 2026-10-05
 | Path | Genre | Stage | Tier | Flags |
 |---|---|---|---|---|
 | `NEWBIE_GUIDE.md` | guide | live | cross-cutting | — |
+| `TUTORIAL.md` | tutorial | live | cross-cutting | Live compilable Nanopass tutorial (`cabal run example-nanopass`) |
 | `MAINTAINER_GUIDE.md` | guide | live | cross-cutting | — |
 | `notes/POLYTROPOS_DESIGN.md` | design | draft | cross-cutting | §4 answered; §7 Q1–Q3 closed; §7 Q4 nuanced; §7 Q5 open |
 | `notes/DESIGN_REVIEW_CLAUDE-OPUS-4.6.md` | review | draft | cross-cutting | — |
@@ -23,6 +24,7 @@ Status: LIVING DOCUMENT · v0.1 · 2026-10-05
 | `notes/POLYSEMY_POLYTROPOS_PORT_PLAN.md` | plan | draft | cross-cutting | — |
 | `notes/KERNMANTLE_POLYTROPOS_PORT_PLAN.md` | plan | draft | cross-cutting | — |
 | `notes/ADOPTION_BARRIERS_AND_MITIGATIONS.md` | design | draft | cross-cutting | — |
+| `notes/TUTORIAL_EXAMPLES_EVALUATION.md` | strategy | live | cross-cutting | — |
 | `registers/PACKAGES.md` | register | live | cross-cutting | — |
 | `transcripts/gemini-large-data-hybrid-variant-records-spec.md` | transcript | archive | cross-cutting | inconsistent |
 | `transcripts/gemini-powerful-abstraction-techniques-in-haskell.md` | transcript | archive | cross-cutting | — |
@@ -34,6 +36,7 @@ Status: LIVING DOCUMENT · v0.1 · 2026-10-05
 ## Part 2 — Reading paths
 
 **Newcomer.** `README.md` → `NEWBIE_GUIDE.md` (workflow & token conservation)
+→ `TUTORIAL.md` (hands-on live code & Nanopass compiler pass)
 → design note §§0–2 (what and how it is represented) → §6 (why a plugin)
 → §7 (what is still open).
 

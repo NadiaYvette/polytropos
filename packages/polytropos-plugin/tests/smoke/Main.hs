@@ -274,6 +274,28 @@ main = defaultMain $ testGroup "plugin RowEq/RowShow smoke"
           eval s1 @?= 200
           eval s2 @?= 11
       ]
+  , testGroup "Eliminators and Peeling (§1.7)"
+      [ testCase "eliminateUniform handles variants in O(1) with REC handlers" $ do
+          let v1 = VAR { ok = REC { val = (42 :: Int) } } :: Variant '[ "ok" := '[ "val" := Int ], "err" := '[ "msg" := String ] ]
+              v2 = VAR { err = REC { msg = ("error!" :: String) } } :: Variant '[ "ok" := '[ "val" := Int ], "err" := '[ "msg" := String ] ]
+              handlers = REC
+                { ok = \(REC { val }) -> "Success: " ++ show (val :: Int)
+                , err = \(REC { msg }) -> "Failure: " ++ (msg :: String)
+                }
+          eliminateUniform handlers v1 @?= "Success: 42"
+          eliminateUniform handlers v2 @?= "Failure: error!"
+      , testCase "peel isolates single constructor and updates remaining variant tag" $ do
+          let vOk = VAR { ok = REC { val = (100 :: Int) } } :: Variant '[ "ok" := '[ "val" := Int ], "err" := '[ "msg" := String ] ]
+              vErr = VAR { err = REC { msg = ("oops" :: String) } } :: Variant '[ "ok" := '[ "val" := Int ], "err" := '[ "msg" := String ] ]
+          case peel @"ok" vOk of
+            Right (REC { val }) -> val @?= (100 :: Int)
+            Left _ -> error "expected Right"
+          case peel @"ok" vErr of
+            Right _ -> error "expected Left"
+            Left rest -> case projectVariant (Field @"err") rest of
+              Just (REC { msg }) -> msg @?= "oops"
+              Nothing -> error "expected err in rest"
+      ]
   , testGroup "TypeError human-centric diagnostics"
       [ testCase "missing field diagnostic with available fields list" $
           checkGhcDiag
