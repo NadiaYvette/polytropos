@@ -48,6 +48,18 @@ All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
   `hfield`, `hfieldAt`, `htabulate`, `hmap`, `htraverse`, `hzipWith`).
 - `polytropos-quickcheck-test` passes 9 tests (record and variant arbitrary generation and convergence shrinking).
 
+### Tooling Integration: Haskell Language Server (Completed & Verified)
+
+Milestone T4's `haskell-language-server` autocompletion support has been implemented, tested, and committed on branch `polytropos-row-completions` in `/home/nyc/src/haskell-language-server` (commit `f0c588d35`):
+- **Row type inspection in `ghcide` (`Development.IDE.Plugin.Completions.Logic`):**
+  * Traverses promoted type-level cons lists (`:`) unwrapping type synonyms via `coreView`.
+  * Extracts field labels and types from both standard promoted tuple pairs `'(Symbol, Type)` and polytropos `Pair Symbol Type` / custom wrapper constructors.
+  * Queries `identType` from `nodeIdentifiers` in addition to `nodeType`, resolving identifier occurrences (variable bindings like `recVal`) to their concrete row types.
+  * Corrected guard precedence in `Logic.hs` where `T.null prefixScope` matched uncapitalized record variable prefixes first and prematurely discarded record-dot suggestions.
+  * Mapped completion positions back through `fromDelta` position deltas (`PositionMapping`) with `lowerRange`, preserving query accuracy on active document edits.
+  * Added synchronous fallback from `useWithStaleFast` to `useWithStale GetHieAst` when fast in-memory cache misses.
+  * Verified with passing tests in `ghcide-test:test:ghcide-tests` (`row polymorphic record dot completion` and `polytropos Pair row dot completion`).
+
 ### Algebraic Effect Systems Ports (Completed & Verified)
 
 All three algebraic effect system ports planned in `docs/notes/EFFECT_SYSTEMS_PORTING_MASTER_PLAN.md` have been implemented, tested, and committed on their respective `polytropos-port` branches:
@@ -165,7 +177,7 @@ All three algebraic effect system ports planned in `docs/notes/EFFECT_SYSTEMS_PO
 
 ## Next action
 
-- Advance Milestone T4: verify and land `OverloadedRecordDot` row autocompletion in `haskell-language-server` (`ghcide`), enabling instant completion of record fields and variant constructors for open row types.
-- Follow up on tooling integrations in `FULL_COMPLETION_ROADMAP.md` (Milestones T4, T6–T8: `hls-explicit-record-fields-plugin`, `retrie`, `stan`, `hlint`, `liquidhaskell`, formatters).
+- Advance Milestone T4 further: expand HLS integrations beyond core completions (e.g. `hls-explicit-record-fields-plugin` and code actions for row construction/pattern-matching).
+- Follow up on tooling integrations in `FULL_COMPLETION_ROADMAP.md` (Milestones T6–T8: `retrie`, `stan`, `hlint`, `liquidhaskell`, formatters `ormolu`/`fourmolu`).
 - Human-in-the-loop review of the revised documentation tiers (Audience 1 `TUTORIAL.md` & `NEWBIE_GUIDE.md`, Audience 2 Haddock polish, Audience 3 `MAINTAINER_GUIDE.md`).
 - Advance to Milestone T3: SIMD Vectorized CoW Updates for large records (>32 fields).

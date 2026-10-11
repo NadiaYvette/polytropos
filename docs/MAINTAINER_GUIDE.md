@@ -16,41 +16,44 @@ SPDX-License-Identifier: BSD-3-Clause
 ### 1.1 The Single-Representation Doctrine (`Rep`)
 The central thesis of `polytropos` is that the nominal/structural design space collapses into a single mechanism:
 ```haskell
-data Rep f a = Rep
-  { repTag  :: {-# UNPACK #-} !Word
-  , repVals :: {-# UNPACK #-} !(SmallArray (f Any))
-  }
+data Rep (f :: Type -> Type) a = Rep
+  {-# UNPACK #-} !Word
+  !(SmallArray (f Any))
+
+repTag  :: Rep f a -> Word
+repVals :: Rep f a -> SmallArray (f Any)
 ```
 
 - **Products (Records):** `repTag` is identically `0`. The `SmallArray` stores all $N$ field values consecutively. Memory overhead is identical to a standard nominal data constructor with $N$ strict fields.
 - **Sums (Variants):** `repTag` stores the active constructor index ($0, 1, 2, \dots$). The `SmallArray` stores that constructor's payload fields.
+- **Positional Representation & Accessors:** `Rep` uses positional constructor fields rather than named record selectors. Field projection is accessed via top-level accessor functions (`repTag`, `repVals`) to prevent selector collisions in consumer modules (enforcing §3 Recipe 3).
 - **Typed Wrapper (`RowRep`):** To avoid passing untyped `Rep` values to consumer code, `RowRep f flavour row a` wraps `Rep` at the type level. The row type is purely phantom at runtime; no type-level dictionary searching or linked-list traversal ever occurs during evaluation.
 
 ### 1.2 Zero-Contamination Doctrine
 1. **Zero Assistant Tooling in Cabal:** Developer tooling (`tricorder`, `contextful`, `ast-grep`, `hasktags`) must **never** be added as dependencies to `cabal.project` or the `.cabal` files in `packages/`.
 2. **Pristine Core Builds:** Any contributor cloning the repo must be able to build and pass all tests under the **Tier 0 POSIX Baseline** (`cabal build all`, `cabal test all` on GHC 9.14.1 / Cabal 3.18) without any background daemons installed.
-3. **Job Parallelism:** Always compile and test with `--jobs=20` to maximize multicore throughput.
+3. **Job Parallelism:** Always compile and test with `--jobs` (e.g. `--jobs=20` on multicore host runners) to maximize throughput.
 
 ---
 
 ## 2. The `Polytropos.Plugin` Architecture
 
-The typechecker plugin (`packages/polytropos-plugin/src/Polytropos/Plugin.hs`) is the load-bearing component that gives `polytropos` its compile-time performance advantage (Arm P: 122× reduction in Core vs unassisted search; Arm PR: linear $O(N)$ exponent 1.03).
+The typechecker plugin (`packages/polytropos-plugin/src/Polytropos/Plugin.hs`) is the load-bearing component that gives `polytropos` its compile-time performance advantage (Arm P: 122× reduction in Core vs unassisted search; Arm PR: linear $\mathcal{O}(N)$ exponent 1.03).
 
 ### 2.1 The Two-Phase Plugin Pipeline
 
 ```mermaid
 flowchart LR
-    subgraph Phase 1: Source Plugin
-        Src[Parsed AST] --> SP[Polytropos.Plugin.Source]
-        SP --> Rewritten[Desugared AST]
+    subgraph P1 ["Phase 1: Source Plugin"]
+        Src["Parsed AST"] --> SP["Polytropos.Plugin.Source"]
+        SP --> Rewritten["Desugared AST"]
     end
 
-    subgraph Phase 2: TcPlugin (Typechecker)
-        Rewritten --> Solvers[Constraint Solvers]
-        Solvers --> Wanted[Solve Wanted Constraints]
-        Wanted --> CoreGen[Emit Literal Core AST]
-        Wanted --> Diag[Emit Human-Centric TypeErrors]
+    subgraph P2 ["Phase 2: TcPlugin (Typechecker)"]
+        Rewritten --> Solvers["Constraint Solvers"]
+        Solvers --> Wanted["Solve Wanted Constraints"]
+        Wanted --> CoreGen["Emit Literal Core AST"]
+        Wanted --> Diag["Emit Human-Centric TypeErrors"]
     end
 ```
 
@@ -61,7 +64,7 @@ flowchart LR
 
 2. **TcPlugin (`Polytropos.Plugin`):**
    - Runs during GHC constraint solving.
-   - Intercepts wanted constraints for `FieldIndex`, `ConstructorIndex`, `AllFields`, `SubRow`, `SubSum`, and `KnownHash`.
+   - Intercepts wanted constraints for `FieldIndex`, `ConstructorIndex`, `AllFields`, `SubRow`, `SubSum`, `KnownHash`, and `HasField`.
    - Solves them in native compiled Haskell code and emits literal constants directly into Core AST expressions.
    - If a constraint cannot be solved, intercepts the failure and synthesizes a formatted, human-centric `TypeError` with Levenshtein-distance fuzzy suggestions.
 
@@ -71,6 +74,7 @@ flowchart LR
 |---|---|---|
 | `FieldIndex name row a` | Determines 0-indexed slot offset of field `name` | Literal `Int` index dictionary |
 | `ConstructorIndex tag row` | Determines 0-indexed tag of constructor `tag` | Literal `Word` tag dictionary |
+| `GHC.Records.HasField name (Record row) a` | Solves `OverloadedRecordDot` (`r.name`) field lookup | Literal $\mathcal{O}(1)$ array index selector lambda |
 | `AllFields c row` | Supplies type-erased dictionaries for all fields | Pre-allocated `SmallArray (DictAny c)` |
 | `SubRow sub super` | Verifies field subset; computes projection map | Literal integer list `[Int]` |
 | `SubSum sub super` | Verifies constructor subset; computes injection & narrowing maps | Literal `[Word]` (inject) and `[Maybe Word]` (narrow) |

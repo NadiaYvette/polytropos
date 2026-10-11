@@ -24,6 +24,23 @@ cabal repl example-nanopass
 
 The executable source code is located at [`examples/nanopass/src/Main.hs`](../examples/nanopass/src/Main.hs).
 
+### Standard GHC Extensions & Setup
+
+To use `polytropos`, your modules typically require the typechecker plugin and a standard set of GHC language extensions:
+
+```haskell
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE OverloadedRecordDot #-}
+{-# LANGUAGE NamedFieldPuns #-}      -- For { field } pattern matching and punning
+{-# LANGUAGE ViewPatterns #-}        -- For variant pattern matching
+{-# LANGUAGE TypeApplications #-}    -- For Field @"name" type applications
+{-# LANGUAGE ScopedTypeVariables #-} -- For explicit type signatures in handlers
+{-# OPTIONS_GHC -fplugin=Polytropos.Plugin #-}
+
+import Polytropos
+```
+
 ---
 
 # Part I: The Foundational 5-Lesson Plan
@@ -35,12 +52,14 @@ Standard Haskell data types are **nominal** and **closed**:
 
 `polytropos` introduces **structural row polymorphism** for both products (records) and sums (variants). Under the hood, both collapse into a single flat representation:
 ```haskell
-data Rep f a = Rep
-  { repTag  :: {-# UNPACK #-} !Word
-  , repVals :: {-# UNPACK #-} !(SmallArray (f Any))
-  }
+data Rep (f :: Type -> Type) a = Rep
+  {-# UNPACK #-} !Word
+  !(SmallArray (f Any))
+
+repTag  :: Rep f a -> Word
+repVals :: Rep f a -> SmallArray (f Any)
 ```
-All row operations compile down to literal array index reads, writes, and tag jumps evaluated in $O(1)$ time by the `Polytropos.Plugin` typechecker plugin.
+All row operations compile down to literal array index reads, writes, and tag jumps evaluated in $\mathcal{O}(1)$ time by the `Polytropos.Plugin` typechecker plugin.
 
 ---
 
@@ -100,7 +119,7 @@ Thanks to the plugin solving GHC's `HasField` constraints into literal integer a
 let greeting = "Hello, " ++ user.name
 let isAdult  = user.age >= 18
 ```
-This is **not** a dictionary lookup at runtime; GHC emits an $O(1)$ direct array index (`indexSmallArray vals 0`).
+This is **not** a dictionary lookup at runtime; GHC emits an $\mathcal{O}(1)$ direct array index (`indexSmallArray vals 0`).
 
 ### 2.2 Functional Updates (`setField` & `REC_UPD`)
 You can update fields functionally using `setField` or the `REC_UPD` syntax:
@@ -114,11 +133,13 @@ let olderUser = (REC_UPD user) { age = 31 }
 
 ### 2.3 Update Performance: Copy-on-Write vs Batch Updates
 In `polytropos`, single-field updates use copy-on-write:
-- An $N$-field record creates a new `SmallArray` of size $N$ sharing all untouched slot pointers ($O(N)$ allocation).
-- For multiple field updates, **batch updates** (`setFieldsAt`) copy the array **once**, avoiding intermediate allocations:
+- An $N$-field record creates a new `SmallArray` of size $N$ sharing all untouched slot pointers ($\mathcal{O}(N)$ allocation).
+- For multiple field updates, **batch updates** (`setFieldsAt` in `Polytropos.Core`) copy the array **once**, avoiding intermediate allocations:
   ```haskell
+  import Polytropos.Core (slot, setFieldsAt, unRowRep)
+
   -- Mutates slots 0 and 1 in a single copy:
-  let updated = setFieldsAt [(0, slot "Charlie"), (1, slot (40 :: Int))] user
+  let updatedRep = setFieldsAt [(0, slot "Charlie"), (1, slot (40 :: Int))] (unRowRep user)
   ```
 - For high-throughput imperatively-styled builders, transient builders (`thawRep` / `freezeRep`) permit chained in-place mutations in `ST` before freezing into an immutable `Record`.
 
@@ -132,27 +153,32 @@ A **variant** is an open sum type: it represents one active constructor selected
 A variant row maps constructor names (`Symbol`) to their payload rows:
 ```haskell
 type StatusRow =
-  '[ "Ok"    := '[ "code" := Int, "body" := String ]
-   , "Err"   := '[ "reason" := String ]
-   , "Retry" := '[]
+  '[ "ok"    := '[ "code" := Int, "body" := String ]
+   , "err"   := '[ "reason" := String ]
+   , "retry" := '[]
    ]
 
 type Status = Variant StatusRow
 ```
 
+> [!NOTE] Haskell Grammar Invariant: Field vs Constructor Names
+> In Haskell 2010 syntax, record braces `{ label = value }` require `label` to be a variable identifier (`varid`), which must begin with a lowercase letter or underscore. When working with anonymous `VAR { tag = ... }` or `REC { field = ... }`, constructor tags must be lowercase (e.g. `ok`, `err`, `retry`).
+>
+> If you prefer standard capitalized constructor syntax (e.g. `Success { val = 200 }` or `Failure { msg = "..." }`), use **`deriving OpenVariant`** (§3.4), where GHC's grammar permits top-level nominal data declarations that the plugin maps directly into open variants.
+
 ### 3.2 Injecting into a Variant (`VAR`)
 ```haskell
 -- Success with multiple fields:
 let s1 :: Status
-    s1 = VAR { Ok = REC { code = 200 :: Int, body = "OK" } }
+    s1 = VAR { ok = REC { code = 200 :: Int, body = "OK" } }
 
 -- Error with a single field:
 let s2 :: Status
-    s2 = VAR { Err = REC { reason = "Gateway Timeout" } }
+    s2 = VAR { err = REC { reason = "Gateway Timeout" } }
 
 -- Nullary constructor:
 let s3 :: Status
-    s3 = VAR { Retry = REC {} }
+    s3 = VAR { retry = REC {} }
 ```
 
 ### 3.3 Pattern Matching & View Patterns
@@ -160,14 +186,14 @@ You can pattern-match on variants using view patterns:
 ```haskell
 describeStatus :: Status -> String
 describeStatus s = case s of
-  VAR { Ok = REC { code, body } } -> "200: " ++ body
-  VAR { Err = REC { reason } }    -> "Error: " ++ reason
-  VAR { Retry = REC {} }          -> "Please retry"
+  VAR { ok = REC { code, body } } -> "200: " ++ body
+  VAR { err = REC { reason } }    -> "Error: " ++ reason
+  VAR { retry = REC {} }          -> "Please retry"
   _                               -> "Other"
 ```
 
 ### 3.4 Nominal Declaration Sugar (`deriving OpenVariant`)
-If you prefer standard Haskell data type declarations, you can derive `OpenVariant`:
+If you prefer standard Haskell data type declarations with uppercase constructors, you can derive `OpenVariant`:
 ```haskell
 data Response
   = Success { val :: Int }
@@ -196,13 +222,13 @@ The `Polytropos.Plugin` verifies that `BasicUser` is a subset of `FullProfile` a
 ### 4.2 Variant Widening (`widenVariant` & `SubSum`)
 Dually, if you have a function that returns a small set of errors, you can embed it into a broader error variant:
 ```haskell
-type IoErrors  = '[ "NotFound" := '[ "path" := FilePath ], "PermissionDenied" := '[] ]
-type AppErrors = ("NetworkError" := '[ "code" := Int ]) ': IoErrors
+type IoErrors  = '[ "notFound" := '[ "path" := FilePath ], "permissionDenied" := '[] ]
+type AppErrors = ("networkError" := '[ "code" := Int ]) ': IoErrors
 
 liftIoError :: Variant IoErrors -> Variant AppErrors
 liftIoError err = widenVariant err
 ```
-`widenVariant` is **total** and takes $O(1)$ time: it uses a literal lookup table emitted by the plugin to remap the constructor tag without copying the payload.
+`widenVariant` is **total** and takes $\mathcal{O}(1)$ time: it uses a literal lookup table emitted by the plugin to remap the constructor tag without copying the payload.
 
 ### 4.3 Variant Narrowing (`narrowVariant`)
 To attempt to downcast a super-variant back into a sub-variant:
@@ -220,7 +246,7 @@ How do you eliminate a closed variant into a result without writing fragile, un-
 
 ### 5.1 The Eliminator Problem
 In traditional Haskell, pattern matching with `case` trees has two problems:
-1. $O(N)$ sequential branching: matching the 50th constructor checks 49 failed conditions before finding a match.
+1. $\mathcal{O}(N)$ sequential branching: matching the 50th constructor checks 49 failed conditions before finding a match.
 2. Code reuse: you cannot easily parameterize or share handler records across different passes.
 
 ### 5.2 Uniform Elimination (`eliminateUniform`)
@@ -234,38 +260,63 @@ eliminateUniform
 
 Example:
 ```haskell
-data Expr
-  = Lit { val :: Int }
-  | Add { left :: Expr, right :: Expr }
-  | Neg { sub :: Expr }
+type ExprRow =
+  '[ "lit" := '[ "val" := Int ]
+   , "neg" := '[ "sub" := Int ]
+   , "add" := '[ "left" := Int, "right" := Int ]
+   ]
 
-evalExpr :: Variant '[ "Lit" := '[ "val" := Int ], "Neg" := '[ "sub" := Int ] ] -> Int
+type Expr = Variant ExprRow
+
+evalExpr :: Expr -> Int
 evalExpr expr = eliminateUniform handlers expr
   where
     handlers = REC
-      { Lit = \(REC { val }) -> val
-      , Neg = \(REC { sub }) -> -sub
+      { lit = \(REC { val }) -> val
+      , neg = \(REC { sub }) -> -sub
+      , add = \(REC { left, right }) -> left + right
       }
 ```
 
 **How it works under the hood:**
 - Handlers are stored in a contiguous `Record` array indexed by constructor tag.
-- When `eliminateUniform` runs, it reads the variant's integer tag $t$ and immediately indexes slot $t$ in the handler array ($O(1)$ jump table).
+- When `eliminateUniform` runs, it reads the variant's integer tag $t$ and immediately indexes slot $t$ in the handler array ($\mathcal{O}(1)$ jump table).
 - GHC verifies that **every single constructor** in the row is handled. If you miss one, compilation fails with an informative error.
 
 ### 5.3 Data-First Elimination (`matchVariant`)
 If you prefer a data-first syntax matching Swift or Rust `match`, use `matchVariant`:
 ```haskell
 result = matchVariant expr REC
-  { Lit = \(REC { val }) -> val
-  , Neg = \(REC { sub }) -> -sub
+  { lit = \(REC { val }) -> val
+  , neg = \(REC { sub }) -> -sub
+  , add = \(REC { left, right }) -> left + right
   }
 ```
 
-### 5.4 Heterogeneous & Monadic Eliminators (`eliminate` & `eliminateM`)
+### 5.4 Heterogeneous & Monadic Eliminators (`eliminate`, `eliminateM`, `eliminateUniformM`)
 When different branches compute different result types or require a monad `m`, `polytropos` provides:
-- `eliminateM`: runs handlers inside monad `m` (e.g. `IO` or `Reader`).
-- `eliminate`: returns an open `Variant resRow` preserving the active constructor tag.
+- **`eliminateUniformM`**: runs handlers uniformly inside a monad `m` (e.g. `IO` or `Reader`):
+  ```haskell
+  logAndEval :: Expr -> IO Int
+  logAndEval expr = eliminateUniformM handlers expr
+    where
+      handlers = REC
+        { lit = \(REC { val }) -> putStrLn ("Lit " ++ show val) >> pure val
+        , neg = \(REC { sub }) -> putStrLn ("Neg " ++ show sub) >> pure (-sub)
+        , add = \(REC { left, right }) -> putStrLn "Add" >> pure (left + right)
+        }
+  ```
+- **`eliminate`**: heterogeneous elimination mapping `Variant s` to `Variant resRow` with $\mathcal{O}(1)$ constructor tag preservation:
+  ```haskell
+  stringifyExpr :: Expr -> Variant '[ "lit" := '[ "val" := String ], "neg" := '[ "sub" := String ] ]
+  stringifyExpr expr = eliminate handlers expr
+    where
+      handlers = REC
+        { lit = \(REC { val }) -> REC { val = show val }
+        , neg = \(REC { sub }) -> REC { sub = show (-sub) }
+        }
+  ```
+- **`eliminateM`**: full monadic heterogeneous elimination returning `m (Variant resRow)`.
 
 ---
 
@@ -311,7 +362,7 @@ newtype SurfaceStmt = SurfaceStmt (Variant SurfaceStmtRow)
 newtype CoreStmt    = CoreStmt    (Variant CoreStmtRow)
 ```
 
-### A.3 The Lowering Pass: $O(1)$ Single-Constructor Peeling (`peel`)
+### A.3 The Lowering Pass: $\mathcal{O}(1)$ Single-Constructor Peeling (`peel`)
 To implement `desugarStmt :: SurfaceStmt -> CoreStmt`, we use `peel @"while_"`:
 
 ```haskell
@@ -336,7 +387,7 @@ Notice line:
   Left rest -> rest
 ```
 What happened here?
-1. `peel @"while_"` inspected the active constructor tag in $O(1)$ time.
+1. `peel @"while_"` inspected the active constructor tag in $\mathcal{O}(1)$ time.
 2. If `stmt` was not `"while_"`, it returned `Left rest`.
 3. The type of `rest` is `Variant (Delete "while_" SurfaceStmtRow)`.
 4. Because `SurfaceStmtRow = ("while_" := ...) ': CoreStmtRow`, deleting `"while_"` produces **definitionally and exactly** `CoreStmtRow`!
@@ -345,8 +396,14 @@ What happened here?
 **We did not write a single line of boilerplate for `assign`, `print`, `loop`, or `break_`!** Even if our language had 100 other statements, `Left rest -> rest` passes them all through instantly, with zero array copying and zero heap allocations.
 
 ### A.5 Modular Interpretation: Reusing Pretty Printers
-We write the target IR pretty-printer using `eliminateUniform`:
+We write the target IR pretty-printer using `eliminateUniform` (with `Data.List (intercalate)` and a standard 2-space `indent` helper):
+
 ```haskell
+import Data.List (intercalate)
+
+indent :: String -> String
+indent = unlines . map ("  " ++) . lines
+
 ppCore :: CoreStmt -> String
 ppCore (CoreStmt stmt) = eliminateUniform handlers stmt
   where
@@ -377,7 +434,7 @@ ppSurface (SurfaceStmt stmt) = case peel @"while_" stmt of
 |---|---|---|
 | **Addendum B** | *Resilient Parsing & Error ASTs ("Stope and Winze")* | Explicit variant error nodes (`ParseHole`), semantic error containment, IDE language server fault tolerance. |
 | **Addendum C** | *Relational Database Models* | High-throughput SQL table schemas and query projection with `polytropos-rel8` and `polytropos-persistent`. |
-| **Addendum D** | *Extensible Algebraic Effects* | Modular effect rows and $O(1)$ handler dispatch with `effectful-polytropos` and `kernmantle-polytropos`. |
+| **Addendum D** | *Extensible Algebraic Effects* | Modular effect rows and $\mathcal{O}(1)$ handler dispatch with `effectful-polytropos` and `kernmantle-polytropos`. |
 
 ---
 
