@@ -83,11 +83,17 @@ To avoid blocking progress when human maintainers are unavailable, all roadmap t
 
 ### Milestone T4: HLS / IDE Autocompletion Ergonomics & Tooling Bridge
 - **Execution Mode:** `[COLLABORATIVE-ASYNC]`
-- **Motivation:** Directly resolves Barrier #6 ("No autocompletion in IDE / tooling").
+- **Motivation:** Directly resolves Barrier #6 ("No autocompletion in IDE / tooling — nigh impossible to use comfortably compared to nominal records").
 - **Deliverables:**
-  1. Evaluate how `Haskell Language Server` handles `OverloadedRecordDot` over `Record r` and identify why completions are missing.
-  2. Design a lightweight HLS plugin or code-action provider / nominal wrapper generator that exposes record field symbols to the LSP completion engine.
-- **Verification:** Manual verification in VS Code / Neovim with HLS.
+  1. **OverloadedRecordDot Row Autocompletion (ghcide):**
+     Extend `ghcide`'s `Development.IDE.Plugin.Completions.Logic` to inspect `Type` arguments when `tyConFieldLabels` yields no nominal selectors. Extract type-level string literals (`LitTy (StrTyLit fs)`) and field types from promoted row lists (`Pair Symbol Type`, promoted tuples), delivering instant completion popup items (`CompletionItemKind_Field`) with field names and type annotations for `Record r` and `Variant s`.
+  2. **`hls-explicit-record-fields-plugin` Extension:**
+     Update `hls-explicit-record-fields-plugin` to recognize open record wildcards (`REC { .. }`) and synthesize explicit field puns from the expected row type. Add constructor branch expansion for open variants (`VAR { .. }`).
+  3. **HLS Hover Type Summaries:**
+     Render type-level rows with clean human-readable record syntax (`{ name :: String, age :: Int }`) in hover tooltips rather than raw `RowRep Identity ProductRowT ('[ 'Pair ...])` type ASTs.
+  4. **LSP QuickFix CodeActions for `TypeError` Diagnostics:**
+     Wire `Polytropos.Plugin`'s Levenshtein-distance fuzzy suggestions ("Did you mean: 'name'?") directly to LSP QuickFix CodeActions, enabling one-click typo correction in VS Code, Neovim, and Emacs.
+- **Verification:** Test cases in `ghcide/test/exe/CompletionTests.hs` asserting completions on `Record` and `Variant` types.
 
 ---
 
@@ -100,6 +106,56 @@ To avoid blocking progress when human maintainers are unavailable, all roadmap t
   3. Compare against unassisted type-level search (Arm C, $O(N^{2.8})$) and nominal records/sums (Arms R and A):
      - **Variant (Arm P):** Slashes N=100 Core from 2,081,480 lines down to 17,066 lines (**122× reduction**), peak RSS from 804 MB to 290 MB. Post-simplification Core (5,876 lines) is smaller than nominal sums (5,945 lines).
      - **Record (Arm PR):** $O(N)$ linear scaling (exponent 1.03), requiring **less Core than nominal Haskell records** (5,602 lines vs 6,070 lines).
+
+---
+
+### Milestone T6: Refactoring, Linters & Semantic Code Modernizers
+- **Execution Mode:** `[COLLABORATIVE-ASYNC]`
+- **Motivation:** Automate the migration from nominal ADTs to open rows and prevent performance pitfalls in downstream codebases.
+- **Deliverables:**
+  1. **`retrie` & `hls-retrie-plugin` Equational Rewrites:**
+     Define semantic rewrite rules for automated codebase modernization:
+     - Chained `insertField` $\to$ `REC { ... }`
+     - Legacy nominal record declarations $\to$ `deriving OpenRecord` / `Record r`
+     - Chained `setField` $\to$ `REC_UPD`
+     - Constructor injection $\to$ `VAR { ... }`
+  2. **`stan` & `hls-stan-plugin` Static Analysis:**
+     Custom static analysis passes detecting:
+     - Repeated CoW updates in hot loops, issuing warnings to use `setFieldsAt` or transient `MRep` builders.
+     - Unused fields in row types.
+     - Redundant subtyping casts (`widenVariant` when types are already identical).
+  3. **`hlint` & `hls-hlint-plugin` Rules:**
+     Custom HLint hint rules (`.hlint.yaml` / HLS linter) recommending:
+     - `eliminateUniform` instead of cascading `case` trees on variants.
+     - Overloaded dot access (`r.field`) instead of manual slot indexing.
+  4. **`hls-tactics-plugin` (Wingman) Case Analysis:**
+     Integrate tactic-based hole filling and exhaustive case splitting for `Variant s` constructors.
+
+---
+
+### Milestone T7: Program Synthesis, Formal Verification & Continuous Compilation
+- **Execution Mode:** `[COLLABORATIVE-ASYNC]`
+- **Motivation:** Bridge `polytropos` with formal methods, type-directed synthesis, and continuous zero-log compiler verification.
+- **Deliverables:**
+  1. **`liquidhaskell` Refinement Types:**
+     Develop LiquidHaskell specifications over row predicates:
+     - Refinement types on record fields (e.g. `Record '[ "age" := {v: Int | v >= 0} ]`).
+     - Provably safe subrow projections without out-of-bounds slot accesses.
+  2. **`synquid` Program Synthesis:**
+     Type-directed synthesis of record adapters and variant eliminator bodies given input and output row types.
+  3. **`tricorder` Continuous Compilation:**
+     Maintain zero-log background compiler diagnostics via MCP JSON-RPC, enabling instant feedback during row refactoring.
+
+---
+
+### Milestone T8: Source Formatters & Layout Engines
+- **Execution Mode:** `[COLLABORATIVE-ASYNC]`
+- **Motivation:** Ensure formatters do not mangle ergonomic syntactic sugar (`REC`, `VAR`, `REC_UPD`) or type-level row lists.
+- **Deliverables:**
+  1. **`ormolu` & `fourmolu` Support:**
+     Ensure AST-preserving formatting for `REC { ... }`, `REC_F { ... }`, `VAR { ... }`, and `REC_UPD` without syntax errors.
+  2. **`brittany` & `floskell` Layout Support:**
+     Custom column-alignment and indentation styles for type-level rows (`'[ "a" := Int, "b" := Bool ]`).
 
 ---
 
@@ -170,26 +226,29 @@ Governed by [`docs/notes/DOC_STRATEGY.md`](../docs/notes/DOC_STRATEGY.md):
 
 ```mermaid
 flowchart TD
-    subgraph Phase 1: Machine Technical Enhancements
-        T1["T1: Plugin Custom TypeError Diagnostics<br>[AUTONOMOUS-MACHINE]"]
-        T5["T5: Scale Re-Measurement in benchmark/variants<br>[AUTONOMOUS-MACHINE]"]
-        A4_doc["B4: AI Governance & Rules Refinement<br>[AUTONOMOUS-MACHINE]"]
+    subgraph Phase 1: Machine Technical Enhancements [COMPLETED]
+        T1["T1: Plugin Custom TypeError Diagnostics<br>[AUTONOMOUS-MACHINE] ✅"]
+        T5["T5: Scale Re-Measurement in benchmark/variants<br>[AUTONOMOUS-MACHINE] ✅"]
+        A4_doc["B4: AI Governance & Rules Refinement<br>[AUTONOMOUS-MACHINE] ✅"]
     end
 
-    subgraph Phase 2: Collaborative Documentation Drafts
-        B1_draft["B1: Tutorial & Newbie Guide Draft<br>[COLLABORATIVE-ASYNC]"]
-        B3_draft["B3: Authoritative Maintainer Guide Draft<br>[COLLABORATIVE-ASYNC]"]
-        B2_audit["B2: Haddock Scan & Clunkiness Audit<br>[COLLABORATIVE-ASYNC]"]
+    subgraph Phase 2: Collaborative Documentation & Eliminators [COMPLETED]
+        T2["T2: Hybrid Eliminator & Peeling Primitives<br>[COLLABORATIVE-ASYNC] ✅"]
+        B1_draft["B1: Tutorial & Newbie Guide Draft<br>[COLLABORATIVE-ASYNC] ✅"]
+        B3_draft["B3: Authoritative Maintainer Guide Draft<br>[COLLABORATIVE-ASYNC] ✅"]
+        B2_audit["B2: Haddock Scan & Clunkiness Audit<br>[COLLABORATIVE-ASYNC] ✅"]
     end
 
-    subgraph Phase 3: Advanced Capabilities & Settlement
-        T2["T2: Hybrid Eliminator & RowFlavour Settlement<br>[COLLABORATIVE-ASYNC]"]
+    subgraph Phase 3: Tooling & IDE Infrastructure Integration [ACTIVE]
+        T4["T4: HLS / IDE Autocompletion & CodeActions<br>[COLLABORATIVE-ASYNC]"]
+        T6["T6: Retrie, Stan, HLint & Wingman Tooling<br>[COLLABORATIVE-ASYNC]"]
+        T7["T7: LiquidHaskell, Synquid & Tricorder Synthesis<br>[COLLABORATIVE-ASYNC]"]
+        T8["T8: Ormolu, Fourmolu & Source Formatters<br>[COLLABORATIVE-ASYNC]"]
         T3["T3: Hardware SIMD CoW Updates<br>[AUTONOMOUS-MACHINE]"]
-        T4["T4: HLS Autocompletion Exploration<br>[COLLABORATIVE-ASYNC]"]
     end
 
     Phase 1 --> Phase 2
     Phase 2 --> Phase 3
 ```
 
-- **Immediate Step:** Begin Phase 1 (Target T1: Custom `TypeError` diagnostics in `Polytropos.Plugin` and Target B4: AI rules refinement), which requires zero human blocking and directly eliminates the community's primary frustration regarding error messages.
+- **Immediate Step:** Advance Phase 3 (Milestone T4: Implementing `OverloadedRecordDot` row autocompletion in `haskell-language-server`).

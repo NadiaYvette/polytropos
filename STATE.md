@@ -165,5 +165,7 @@ All three algebraic effect system ports planned in `docs/notes/EFFECT_SYSTEMS_PO
 
 ## Next action
 
+- Advance Milestone T4: verify and land `OverloadedRecordDot` row autocompletion in `haskell-language-server` (`ghcide`), enabling instant completion of record fields and variant constructors for open row types.
+- Follow up on tooling integrations in `FULL_COMPLETION_ROADMAP.md` (Milestones T4, T6–T8: `hls-explicit-record-fields-plugin`, `retrie`, `stan`, `hlint`, `liquidhaskell`, formatters).
 - Human-in-the-loop review of the revised documentation tiers (Audience 1 `TUTORIAL.md` & `NEWBIE_GUIDE.md`, Audience 2 Haddock polish, Audience 3 `MAINTAINER_GUIDE.md`).
-- Advance to Milestone T3: SIMD Vectorized CoW Updates for large records (>32 fields) and Milestone T4: HLS autocompletion bridge.
+- Advance to Milestone T3: SIMD Vectorized CoW Updates for large records (>32 fields).
