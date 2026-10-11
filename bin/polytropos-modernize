@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# bin/polytropos-modernize
+# Automated semantic code modernizer and linter runner for polytropos codebases
+# ==============================================================================
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+RULES_DIR="${ROOT_DIR}/rules"
+HLINT_RULES="${RULES_DIR}/hlint/polytropos.yaml"
+
+usage() {
+    cat << EOF
+Usage: $(basename "$0") [OPTIONS] [FILES_OR_DIRS...]
+
+Automated semantic linter and modernization runner for polytropos.
+
+Options:
+  --check          Run HLint inspection using polytropos rules (default)
+  --apply          Apply automatic in-place refactorings where supported
+  --rules          List all available modernization rules
+  --retrie-rules   Display available Retrie equational rewrite files
+  --stan-spec      Display Stan static analysis inspection catalog
+  --help, -h       Show this help message
+
+Examples:
+  $(basename "$0") --check packages/
+  $(basename "$0") --apply src/MyModule.hs
+EOF
+}
+
+ACTION="check"
+TARGETS=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --check)
+            ACTION="check"
+            shift
+            ;;
+        --apply|--refactor)
+            ACTION="apply"
+            shift
+            ;;
+        --rules)
+            ACTION="rules"
+            shift
+            ;;
+        --retrie-rules)
+            ACTION="retrie-rules"
+            shift
+            ;;
+        --stan-spec)
+            ACTION="stan-spec"
+            shift
+            ;;
+        --help|-h)
+            usage
+            exit 0
+            ;;
+        *)
+            TARGETS+=("$1")
+            shift
+            ;;
+    esac
+done
+
+if [[ "${ACTION}" == "rules" ]]; then
+    echo "=== Polytropos HLint Modernization Rules ==="
+    cat "${HLINT_RULES}"
+    exit 0
+fi
+
+if [[ "${ACTION}" == "retrie-rules" ]]; then
+    echo "=== Available Retrie Equational Rewrite Files ==="
+    ls -l "${RULES_DIR}/retrie/"
+    exit 0
+fi
+
+if [[ "${ACTION}" == "stan-spec" ]]; then
+    cat "${RULES_DIR}/stan/POLYTROPOS_INSPECTIONS.md"
+    exit 0
+fi
+
+if [[ ${#TARGETS[@]} -eq 0 ]]; then
+    TARGETS=("packages" "examples" "test")
+fi
+
+# Filter only directories or files that actually exist
+EXISTING_TARGETS=()
+for t in "${TARGETS[@]}"; do
+    if [[ -e "$t" ]]; then
+        EXISTING_TARGETS+=("$t")
+    fi
+done
+
+if [[ ${#EXISTING_TARGETS[@]} -eq 0 ]]; then
+    echo "No valid target paths found among: ${TARGETS[*]}"
+    exit 1
+fi
+
+if ! command -v hlint >/dev/null 2>&1; then
+    echo "Error: 'hlint' is not installed or not in PATH."
+    exit 1
+fi
+
+if [[ "${ACTION}" == "check" ]]; then
+    echo "Running HLint with Polytropos Modernization Rules on: ${EXISTING_TARGETS[*]}..."
+    hlint --hint="${HLINT_RULES}" "${EXISTING_TARGETS[@]}"
+elif [[ "${ACTION}" == "apply" ]]; then
+    echo "Applying automatic refactorings on: ${EXISTING_TARGETS[*]}..."
+    for t in "${EXISTING_TARGETS[@]}"; do
+        if [[ -f "$t" ]]; then
+            hlint --hint="${HLINT_RULES}" --refactor --refactor-options="--inplace" "$t"
+        elif [[ -d "$t" ]]; then
+            find "$t" -name "*.hs" -exec hlint --hint="${HLINT_RULES}" --refactor --refactor-options="--inplace" {} +
+        fi
+    done
+    echo "Modernization complete."
+fi

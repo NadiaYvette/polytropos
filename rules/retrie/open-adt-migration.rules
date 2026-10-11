@@ -1,0 +1,15 @@
+-- ==============================================================================
+-- Retrie Equational Rewrite Rules: Open ADT & Sugar Migration
+--
+-- Translates legacy nested constructor / product idioms into polytropos REC / VAR.
+-- ==============================================================================
+
+-- Empty record constructors
+emptyRecord = REC {}
+
+-- Chained insertField to REC sugar
+forall k1 k2 v1 v2. insertField @k1 v1 (insertField @k2 v2 emptyRecord) = REC { k1 = v1, k2 = v2 }
+forall k1 k2 k3 v1 v2 v3. insertField @k1 v1 (insertField @k2 v2 (insertField @k3 v3 emptyRecord)) = REC { k1 = v1, k2 = v2, k3 = v3 }
+
+-- Variant injection to VAR sugar
+forall tag x. injectVariant @tag x = VAR { tag = x }

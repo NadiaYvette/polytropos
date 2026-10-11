@@ -320,10 +320,110 @@ consumerTests = testGroup "consumer api (Polytropos)"
       repTag (unRowRep outPos) @?= 1
   ]
 
+{-------------------------------------------------------------------------------
+  Milestone T3: Hardware-vectorized SIMD CoW tests (records > 32 fields)
+-------------------------------------------------------------------------------}
+
+simdTests :: TestTree
+simdTests = testGroup "simd-cow (records > 32 fields)"
+  [ testCase "setFieldAt on 64-field record correctly updates index 0" $ do
+      let n = 64
+          initial = productRep [slot (i :: Int) | i <- [0 .. n - 1]]
+          updated = setFieldAt 0 (slot (999 :: Int)) initial
+      repArity updated @?= n
+      repTag updated @?= 0
+      unslot (fieldAt 0 updated) @?= (999 :: Int)
+      map (\i -> unslot (fieldAt i updated) :: Int) [1 .. n - 1] @?= [1 .. n - 1]
+
+  , testCase "setFieldAt on 64-field record correctly updates middle and last slots" $ do
+      let n = 64
+          initial = productRep [slot (i :: Int) | i <- [0 .. n - 1]]
+          updMid = setFieldAt 32 (slot (777 :: Int)) initial
+          updLast = setFieldAt 63 (slot (888 :: Int)) updMid
+      unslot (fieldAt 32 updLast) @?= (777 :: Int)
+      unslot (fieldAt 63 updLast) @?= (888 :: Int)
+      unslot (fieldAt 0 updLast) @?= (0 :: Int)
+      unslot (fieldAt 31 updLast) @?= (31 :: Int)
+      unslot (fieldAt 33 updLast) @?= (33 :: Int)
+
+  , testCase "setFieldAt on 100-field record scales cleanly" $ do
+      let n = 100
+          initial = productRep [slot (i * 2 :: Int) | i <- [0 .. n - 1]]
+          updated = setFieldAt 99 (slot (12345 :: Int)) initial
+      repArity updated @?= 100
+      unslot (fieldAt 99 updated) @?= (12345 :: Int)
+      unslot (fieldAt 0 updated) @?= (0 :: Int)
+      unslot (fieldAt 50 updated) @?= (100 :: Int)
+
+  , testCase "setFieldsAt batch updates multiple slots in 64-field record" $ do
+      let n = 64
+          initial = productRep [slot (i :: Int) | i <- [0 .. n - 1]]
+          batch = [(0, slot (100 :: Int)), (15, slot (200 :: Int)), (32, slot (300 :: Int)), (63, slot (400 :: Int))]
+          updated = setFieldsAt batch initial
+      repArity updated @?= 64
+      unslot (fieldAt 0 updated) @?= (100 :: Int)
+      unslot (fieldAt 15 updated) @?= (200 :: Int)
+      unslot (fieldAt 32 updated) @?= (300 :: Int)
+      unslot (fieldAt 63 updated) @?= (400 :: Int)
+      unslot (fieldAt 1 updated) @?= (1 :: Int)
+      unslot (fieldAt 14 updated) @?= (14 :: Int)
+      unslot (fieldAt 16 updated) @?= (16 :: Int)
+      unslot (fieldAt 31 updated) @?= (31 :: Int)
+      unslot (fieldAt 62 updated) @?= (62 :: Int)
+
+  , testCase "setFieldsAt on 100-field record handles sorted and unsorted batches" $ do
+      let n = 100
+          initial = productRep [slot (i :: Int) | i <- [0 .. n - 1]]
+          batch = [(90, slot (990 :: Int)), (10, slot (110 :: Int)), (50, slot (550 :: Int))]
+          updated = setFieldsAt batch initial
+      repArity updated @?= 100
+      unslot (fieldAt 10 updated) @?= (110 :: Int)
+      unslot (fieldAt 50 updated) @?= (550 :: Int)
+      unslot (fieldAt 90 updated) @?= (990 :: Int)
+      unslot (fieldAt 99 updated) @?= (99 :: Int)
+
+  , testCase "MRep fast-path batch write and slice copy on 64-field builder" $ do
+      let n = 64
+          initial = productRep [slot (i :: Int) | i <- [0 .. n - 1]]
+          res = runST $ do
+            m <- thawRep initial
+            writeFieldsAt m [(5, slot (555 :: Int)), (35, slot (355 :: Int))]
+            freezeRep m
+      unslot (fieldAt 5 res) @?= (555 :: Int)
+      unslot (fieldAt 35 res) @?= (355 :: Int)
+      unslot (fieldAt 0 res) @?= (0 :: Int)
+
+  , testCase "MRep newMRep and copyFieldsFrom block copies" $ do
+      let n = 64
+          src = productRep [slot (i :: Int) | i <- [0 .. n - 1]]
+          res = runST $ do
+            dst <- newMRep 0 n (slot (0 :: Int))
+            copyFieldsFrom src 10 dst 10 40
+            freezeRep dst
+      unslot (fieldAt 0 res) @?= (0 :: Int)
+      unslot (fieldAt 9 res) @?= (0 :: Int)
+      unslot (fieldAt 10 res) @?= (10 :: Int)
+      unslot (fieldAt 49 res) @?= (49 :: Int)
+      unslot (fieldAt 50 res) @?= (0 :: Int)
+
+  , testCase "thawRepSlice and copyMFields between builders" $ do
+      let n = 64
+          src = productRep [slot (i * 10 :: Int) | i <- [0 .. n - 1]]
+          res = runST $ do
+            sub <- thawRepSlice src 20 10
+            dst <- newMRep 0 10 (slot (0 :: Int))
+            copyMFields sub 0 dst 0 10
+            freezeRep dst
+      repArity res @?= 10
+      unslot (fieldAt 0 res) @?= (200 :: Int)
+      unslot (fieldAt 9 res) @?= (290 :: Int)
+  ]
+
 main :: IO ()
 main = defaultMain $ testGroup "polytropos-core"
   [ productTests
   , sumTests
   , evidenceTests
   , consumerTests
+  , simdTests
   ]

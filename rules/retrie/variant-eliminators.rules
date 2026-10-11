@@ -1,0 +1,15 @@
+-- ==============================================================================
+-- Retrie Equational Rewrite Rules: Variant Eliminators & Peeling
+--
+-- Modernizes variant dispatch to O(1) jump tables and single-constructor peeling.
+-- ==============================================================================
+
+-- Modernize matchVariant to eliminateUniform
+forall h v. matchVariant v h = eliminateUniform h v
+
+-- Strip identity / redundant variant widening
+forall v. widenVariant v = v
+
+-- Flip eliminate arguments if applied with flip
+forall h v. flip eliminateUniform v h = eliminateUniform h v
+forall h v. flip eliminate v h = eliminate h v

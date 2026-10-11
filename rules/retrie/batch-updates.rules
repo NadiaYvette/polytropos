@@ -1,0 +1,15 @@
+-- ==============================================================================
+-- Retrie Equational Rewrite Rules: CoW Update Batching
+--
+-- Coalesces sequential single-field setField updates into batched transient MRep builders,
+-- eliminating intermediate SmallArray copies (O(N*K) -> O(N)).
+-- ==============================================================================
+
+-- 2-field update coalescing
+forall f1 f2 v1 v2 r. setField @f1 v1 (setField @f2 v2 r) = runMRep (setFieldM @f1 v1 >> setFieldM @f2 v2) r
+
+-- 3-field update coalescing
+forall f1 f2 f3 v1 v2 v3 r. setField @f1 v1 (setField @f2 v2 (setField @f3 v3 r)) = runMRep (setFieldM @f1 v1 >> setFieldM @f2 v2 >> setFieldM @f3 v3) r
+
+-- 4-field update coalescing
+forall f1 f2 f3 f4 v1 v2 v3 v4 r. setField @f1 v1 (setField @f2 v2 (setField @f3 v3 (setField @f4 v4 r))) = runMRep (setFieldM @f1 v1 >> setFieldM @f2 v2 >> setFieldM @f3 v3 >> setFieldM @f4 v4) r

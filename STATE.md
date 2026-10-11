@@ -60,6 +60,22 @@ Milestone T4's `haskell-language-server` autocompletion support has been impleme
   * Added synchronous fallback from `useWithStaleFast` to `useWithStale GetHieAst` when fast in-memory cache misses.
   * Verified with passing tests in `ghcide-test:test:ghcide-tests` (`row polymorphic record dot completion` and `polytropos Pair row dot completion`).
 
+### Hardware-Vectorized SIMD CoW Updates (Completed & Verified)
+
+Milestone T3 has been implemented, tested, and verified via `polytropos-core-test`:
+- **Vectorized Copy Primitives:** `setFieldAt` and `setFieldsAt` use non-overlapping block copies (`copySmallArray`) for records $>32$ fields, avoiding redundant reads and in-place overwrites.
+- **In-Place Batch Fast-Paths in `MRep`:** Implemented `writeFieldsAt`, `copyFieldsFrom`, `copyMFields`, `newMRep`, and `thawRepSlice` in `Polytropos.Core`.
+- **Verification:** 8 unit tests in `packages/polytropos-core/test/Main.hs` covering 64-field and 100-field record scaling, slice copy roundtrips, and batch mutation fast-paths.
+
+### Refactoring, Linters & Semantic Code Modernizers (Completed & Verified)
+
+Milestone T6 has been implemented, tested, and deterministically verified via `scripts/tasks/verify-milestone-t6.sh`:
+- **`hlint` & `hls-hlint-plugin` Rules:** Root `.hlint.yaml` and modular `rules/hlint/polytropos.yaml` implementing 8 custom semantic and performance rules (`Use OverloadedRecordDot`, `Avoid chained setField`, `Avoid repeated setField in foldl`, `Use peel for single-constructor elimination`, `Use eliminateUniform for handler dispatch`, `Redundant widenVariant`, `Use REC sugar instead of nested insertField`, `Use VAR pattern matching`).
+- **`retrie` Equational Rewrites:** Structured rewrite rule files in `rules/retrie/` covering `record-dot.rules`, `batch-updates.rules`, `variant-eliminators.rules`, and `open-adt-migration.rules`.
+- **`stan` Static Analysis:** Project `.stan.toml` configuration and `rules/stan/POLYTROPOS_INSPECTIONS.md` inspection catalog covering `STAN-P01` (hot-loop CoW allocations), `STAN-P02` (redundant variant widening), `STAN-P03` (dead row fields), and `STAN-P04` (non-exhaustive manual cascades).
+- **CLI Runner & Documentation:** `bin/polytropos-modernize` executable runner and comprehensive guide `docs/tools/MODERNIZER_AND_LINTER_GUIDE.md`.
+- **Verification Gate:** `rules/test/ModernizerFixtures.hs` and `scripts/tasks/verify-milestone-t6.sh` passing all assertions cleanly.
+
 ### Algebraic Effect Systems Ports (Completed & Verified)
 
 All three algebraic effect system ports planned in `docs/notes/EFFECT_SYSTEMS_PORTING_MASTER_PLAN.md` have been implemented, tested, and committed on their respective `polytropos-port` branches:
@@ -173,11 +189,12 @@ All three algebraic effect system ports planned in `docs/notes/EFFECT_SYSTEMS_PO
 
 ## What is deliberately missing
 
-- SIMD vectorized array copies for $>32$ fields (slated for Milestone T3).
+- The plugin itself (now in development).
+- Subsumption for sum elimination when the result row is not syntactically identical.
 
 ## Next action
 
-- Advance Milestone T4 further: expand HLS integrations beyond core completions (e.g. `hls-explicit-record-fields-plugin` and code actions for row construction/pattern-matching).
-- Follow up on tooling integrations in `FULL_COMPLETION_ROADMAP.md` (Milestones T6–T8: `retrie`, `stan`, `hlint`, `liquidhaskell`, formatters `ormolu`/`fourmolu`).
+- Advance Milestone T7: Program Synthesis, Formal Verification & Continuous Compilation (`liquidhaskell` row predicates, `synquid` type-directed synthesis, and `tricorder` continuous compilation diagnostics).
+- Follow up on Milestone T8: Source Formatters & Layout Engines (`ormolu`, `fourmolu`, `brittany`, `floskell`).
+- Expand HLS integrations (e.g. `hls-explicit-record-fields-plugin` open record wildcard expansion and `TypeError` code actions).
 - Human-in-the-loop review of the revised documentation tiers (Audience 1 `TUTORIAL.md` & `NEWBIE_GUIDE.md`, Audience 2 Haddock polish, Audience 3 `MAINTAINER_GUIDE.md`).
-- Advance to Milestone T3: SIMD Vectorized CoW Updates for large records (>32 fields).

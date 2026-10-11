@@ -1,0 +1,33 @@
+# ==============================================================================
+# Stan Static Analysis Configuration
+# https://github.com/kowainik/stan
+#
+# Static analysis and performance guardrails for polytropos codebases
+# ==============================================================================
+
+# Exclude build and generated artifacts
+[[remove]]
+directory = "dist-newstyle/"
+
+[[remove]]
+directory = ".ok/"
+
+[[remove]]
+directory = "benchmark/variants/"
+
+# Standard checks
+[[check]]
+type   = "Include"
+filter = "all"
+scope  = "all"
+
+# Suppress test-suite false positives
+[[check]]
+type = "Exclude"
+directory = "packages/polytropos-core/test/"
+id = "STAN-0208"
+
+[[check]]
+type = "Exclude"
+directory = "packages/polytropos-plugin/test/"
+id = "STAN-0208"

@@ -1,0 +1,73 @@
+# ==============================================================================
+# Polytropos HLint Configuration
+# https://github.com/ndmitchell/hlint
+#
+# Custom semantic hints and performance guardrails for row-polymorphic records,
+# open variants, and single-representation ADTs.
+# ==============================================================================
+
+- arguments:
+    - -XOverloadedRecordDot
+    - -XDataKinds
+    - -XTypeOperators
+    - -XTypeApplications
+
+# ------------------------------------------------------------------------------
+# 1. Record Dot Syntax Modernization
+# ------------------------------------------------------------------------------
+- warn:
+    name: "Use OverloadedRecordDot"
+    lhs: "getField @a x"
+    rhs: "x.a"
+    note: "Prefer native OverloadedRecordDot syntax (e.g. x.field) over explicit getField"
+
+# ------------------------------------------------------------------------------
+# 2. Performance Guardrails: CoW Array Updates
+# ------------------------------------------------------------------------------
+- warn:
+    name: "Avoid chained setField (O(N*K) allocations)"
+    lhs: "setField @a u (setField @b v r)"
+    rhs: "runMRep (setFieldM @a u >> setFieldM @b v) r"
+    note: "Chaining setField performs multiple array copies; use setFieldsAt or transient MRep builder"
+
+- warn:
+    name: "Avoid repeated setField in foldl"
+    lhs: "foldl (\\acc (k, v) -> setField k v acc) r xs"
+    rhs: "runMRep (traverse_ (uncurry setFieldM) xs) r"
+    note: "Repeated setField in foldl causes O(N*M) allocations; use transient MRep or setFieldsAt"
+
+# ------------------------------------------------------------------------------
+# 3. Variant Elimination & Peeling
+# ------------------------------------------------------------------------------
+- warn:
+    name: "Use peel for single-constructor elimination"
+    lhs: "case narrowVariant x of { Just a -> b; Nothing -> c }"
+    rhs: "case peel x of { Right a -> b; Left _ -> c }"
+    note: "peel @tag provides direct O(1) single-constructor peeling with exact remainder row"
+
+- warn:
+    name: "Use eliminateUniform for handler dispatch"
+    lhs: "matchVariant x h"
+    rhs: "eliminateUniform h x"
+    note: "eliminateUniform uses an O(1) jump table over constructor tags"
+
+- warn:
+    name: "Redundant widenVariant"
+    lhs: "widenVariant x"
+    rhs: "x"
+    note: "widenVariant is redundant if source and target row types already match"
+
+# ------------------------------------------------------------------------------
+# 4. Syntactic Ergonomics
+# ------------------------------------------------------------------------------
+- warn:
+    name: "Use REC sugar instead of nested insertField"
+    lhs: "insertField @a u (insertField @b v emptyRecord)"
+    rhs: "REC { a = u, b = v }"
+    note: "Use REC { field = value, ... } source sugar for readable row construction"
+
+- warn:
+    name: "Use VAR pattern matching"
+    lhs: "case narrowVariant x of Just y -> y"
+    rhs: "case x of VAR { a = y } -> y"
+    note: "Use VAR view pattern matching for readable variant extraction"

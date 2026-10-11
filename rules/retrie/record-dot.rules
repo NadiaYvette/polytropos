@@ -1,0 +1,22 @@
+-- ==============================================================================
+-- Retrie Equational Rewrite Rules: OverloadedRecordDot Modernization
+--
+-- Applies:
+--   retrie --adhoc "forall r. getField @f r = r.f"
+-- ==============================================================================
+
+forall r. getField @"id" r = r.id
+forall r. getField @"name" r = r.name
+forall r. getField @"val" r = r.val
+forall r. getField @"value" r = r.value
+forall r. getField @"key" r = r.key
+forall r. getField @"path" r = r.path
+forall r. getField @"tag" r = r.tag
+forall r. getField @"payload" r = r.payload
+forall r. getField @"code" r = r.code
+forall r. getField @"message" r = r.message
+forall r. getField @"body" r = r.body
+forall r. getField @"data" r = r.data
+forall r. getField @"left" r = r.left
+forall r. getField @"right" r = r.right
+forall r. getField @"sub" r = r.sub

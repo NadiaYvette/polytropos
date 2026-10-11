@@ -63,8 +63,13 @@ module Polytropos.Core (
     -- * Ephemeral transient representation
   , MRep(..)
   , thawRep
+  , thawRepSlice
   , freezeRep
   , writeFieldAt
+  , writeFieldsAt
+  , copyFieldsFrom
+  , copyMFields
+  , newMRep
   , modifyRep
     -- * Row-carrying wrapper (Case 3)
   , RowRep(..)
@@ -109,12 +114,13 @@ module Polytropos.Core (
   , noInlineUnsafeCo
   ) where
 
-import Control.Monad               (forM_)
+import Control.Monad               (forM_, when)
 import Control.Monad.ST            (ST)
 import Data.Bits                   (xor)
 import Data.Char                   (ord)
 import Data.Foldable               (toList)
 import Data.Kind                   (Constraint, Type)
+import Data.List                   (sortOn)
 import Data.Primitive.SmallArray
 import Data.Word                   (Word64)
 -- import Data.Tagged                 (Tagged(..))
@@ -343,10 +349,22 @@ data MRep s (f :: Type -> Type) a = MRep
   {-# UNPACK #-} !Word
   !(SmallMutableArray s (f Any))
 
+-- | Allocate a new mutable 'MRep' pre-initialized with a default payload.
+newMRep :: Word -> Int -> f Any -> ST s (MRep s f a)
+newMRep tag n defaultVal = do
+  m <- newSmallArray n defaultVal
+  pure (MRep tag m)
+
 -- | Safely thaw an immutable 'Rep' into a mutable builder.
 thawRep :: Rep f a -> ST s (MRep s f a)
 thawRep (Rep t v) = do
   m <- thawSmallArray v 0 (sizeofSmallArray v)
+  pure (MRep t m)
+
+-- | Safely thaw a sub-slice of an immutable 'Rep' into a mutable builder.
+thawRepSlice :: Rep f a -> Int -> Int -> ST s (MRep s f a)
+thawRepSlice (Rep t v) off len = do
+  m <- thawSmallArray v off len
   pure (MRep t m)
 
 -- | Safely freeze an ephemeral builder into an immutable 'Rep'.
@@ -358,6 +376,21 @@ freezeRep (MRep t m) = do
 -- | In-place slot write (@O(1)@, zero allocation).
 writeFieldAt :: MRep s f a -> Int -> f Any -> ST s ()
 writeFieldAt (MRep _ m) i !x = writeSmallArray m i x
+
+-- | In-place batch slot writes (@O(K)@, zero allocations).
+writeFieldsAt :: MRep s f a -> [(Int, f Any)] -> ST s ()
+writeFieldsAt (MRep _ m) updates =
+  forM_ updates $ \(i, !x) -> writeSmallArray m i x
+
+-- | Batch copy of a slice of fields from an immutable 'Rep' into an 'MRep'.
+copyFieldsFrom :: Rep f a -> Int -> MRep s f a -> Int -> Int -> ST s ()
+copyFieldsFrom (Rep _ src) srcOff (MRep _ dst) dstOff len =
+  copySmallArray dst dstOff src srcOff len
+
+-- | In-place batch block copy between mutable builders.
+copyMFields :: MRep s f a -> Int -> MRep s f a -> Int -> Int -> ST s ()
+copyMFields (MRep _ src) srcOff (MRep _ dst) dstOff len =
+  copySmallMutableArray dst dstOff src srcOff len
 
 -- | Scoped pure modification wrapper.
 modifyRep :: Rep f a -> (forall s. MRep s f a -> ST s ()) -> Rep f a
@@ -390,23 +423,61 @@ fieldAt i r = noInlineUnsafeCo (indexSmallArray (repVals r) i)
 
 -- | Replace the payload slot at a compile-time-known index.
 --
--- @O(n)@: primitive Copy-on-Write via 'thawSmallArray' and 'writeSmallArray',
--- performing a single contiguous array allocation and single in-place slot write.
+-- For records with @>32@ fields (Milestone T3), uses hardware-vectorized SIMD
+-- non-overlapping block copies ('copySmallArray'), eliminating redundant reads
+-- and writes of slot @i@ from the source array.
+--
+-- For small records (@<=32@ fields), uses direct in-cache 'thawSmallArray'.
 setFieldAt :: forall f a. Int -> f Any -> Rep f a -> Rep f a
-setFieldAt i !x (Rep t v) = Rep t $ runSmallArray $ do
-  m <- thawSmallArray v 0 (sizeofSmallArray v)
-  writeSmallArray m i x
-  pure m
+setFieldAt i !x (Rep t v)
+  | n > 32 = Rep t $ runSmallArray $ do
+      m <- newSmallArray n x
+      when (i > 0) $
+        copySmallArray m 0 v 0 i
+      let !after = i + 1
+          !lenAfter = n - after
+      when (lenAfter > 0) $
+        copySmallArray m after v after lenAfter
+      pure m
+  | otherwise = Rep t $ runSmallArray $ do
+      m <- thawSmallArray v 0 n
+      writeSmallArray m i x
+      pure m
+  where
+    !n = sizeofSmallArray v
 
 -- | Clone once, apply K updates in-place, freeze once.
 --
 -- Reduces multi-field update overhead from @K * O(N)@ to @1 * O(N)@.
+-- For records with @>32@ fields (Milestone T3), sorts update offsets and copies
+-- non-overlapping unchanged slices in contiguous vectorized blocks.
 setFieldsAt :: forall f a. [(Int, f Any)] -> Rep f a -> Rep f a
 setFieldsAt [] r = r
-setFieldsAt updates (Rep t v) = Rep t $ runSmallArray $ do
-  m <- thawSmallArray v 0 (sizeofSmallArray v)
-  forM_ updates $ \(i, !x) -> writeSmallArray m i x
-  pure m
+setFieldsAt [(!i, !x)] r = setFieldAt i x r
+setFieldsAt updates (Rep t v)
+  | n > 32, (firstUpd : _) <- updates = Rep t $ runSmallArray $ do
+      let sortedUpds = sortOn fst updates
+      m <- newSmallArray n (snd firstUpd)
+      let copySlices curIdx [] = do
+            when (curIdx < n) $
+              copySmallArray m curIdx v curIdx (n - curIdx)
+          copySlices curIdx ((i, !x) : rest)
+            | i < curIdx = do
+                writeSmallArray m i x
+                copySlices curIdx rest
+            | otherwise = do
+                when (i > curIdx) $
+                  copySmallArray m curIdx v curIdx (i - curIdx)
+                writeSmallArray m i x
+                copySlices (i + 1) rest
+      copySlices 0 sortedUpds
+      pure m
+  | otherwise = Rep t $ runSmallArray $ do
+      m <- thawSmallArray v 0 n
+      forM_ updates $ \(i, !x) -> writeSmallArray m i x
+      pure m
+  where
+    !n = sizeofSmallArray v
 
 -- | Partial field update for sum constructors.
 --
