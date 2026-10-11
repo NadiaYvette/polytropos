@@ -27,6 +27,8 @@ Status: LIVING DOCUMENT · v0.1 · 2026-10-05
 | `transcripts/gemini-large-data-hybrid-variant-records-spec.md` | transcript | archive | cross-cutting | inconsistent |
 | `transcripts/gemini-powerful-abstraction-techniques-in-haskell.md` | transcript | archive | cross-cutting | — |
 | `transcripts/gemini-resilient-and-error-tolerant-parsing-strategies.md` | transcript | live | cross-cutting | — |
+| `transcripts/gemini-optimising-language-design-for-AI.md` | transcript | live | cross-cutting | — |
+| `transcripts/gemini-scaling-autonomous-coding.md` | transcript | live | cross-cutting | — |
 | `transcripts/discord-adoption-barriers-row-types.md` | transcript | live | cross-cutting | — |
 
 ## Part 2 — Reading paths
