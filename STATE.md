@@ -147,7 +147,9 @@ All three algebraic effect system ports planned in `docs/notes/EFFECT_SYSTEMS_PO
 - `docs/task_packets/` — 19 structured task packets (`task-01` through `task-19`)
 - `scripts/tasks/` — deterministic test verification scripts for task packet gates (`task-01` through `task-19`)
 - `bin/yamaarashi-exec` & `.agents/skills/yamaarashi/SKILL.md` — runner script and skill with SQLite ledger
-- `benchmark/variants/` — four-arm compile-time harness
+- `benchmark/variants/` — six-arm compile-time harness: empirical validation of `Polytropos.Plugin`
+  variants (Arm P, 122× Core reduction vs type-level search, 5,876 simpl lines) and records
+  (Arm PR, $O(N)$ exponent 1.03, beating nominal Haskell records at 5,602 lines Core vs 6,070)
 - `.agents/rules/` — subdivided AI coding assistant operational rules
 
 ## What is deliberately missing

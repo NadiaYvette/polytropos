@@ -30,8 +30,21 @@ ROOT = os.path.dirname(HERE)
 GEN = os.path.join(ROOT, "gen", "out")
 WORK = os.path.join(ROOT, ".work")
 
-ARMS = ["R", "A", "C", "L"]
+ARMS = ["R", "A", "C", "L", "P", "PR"]
 REPEATS = 3
+
+
+def get_pkg_args():
+    dist_db = os.path.abspath(os.path.join(ROOT, "..", "..", "dist-newstyle", "packagedb", "ghc-9.14.1"))
+    store_dbs = sorted(glob.glob(os.path.expanduser("~/.local/state/cabal/store/ghc-9.14.1*/package.db")))
+    pkg_args = []
+    for db in store_dbs:
+        if os.path.exists(db):
+            pkg_args.extend(["-package-db", db])
+    if os.path.exists(dist_db):
+        pkg_args.extend(["-package-db", dist_db])
+    pkg_args.extend(["-package", "polytropos-core", "-package", "polytropos-plugin"])
+    return pkg_args
 
 
 def count_lines(outdir: str, arm: str, n: int, suffix: str) -> int:
@@ -67,6 +80,7 @@ def run_one(arm: str, n: int):
         "/usr/bin/time", "-f", "%e %M",
         "ghc", "--make", "-O0", "-w",
         "-package-env", "-",
+    ] + get_pkg_args() + [
         "-isrc",
         src,
         "-outputdir", outdir,
@@ -100,26 +114,38 @@ def run_one(arm: str, n: int):
 
 def main() -> None:
     os.makedirs(WORK, exist_ok=True)
-    rows = []
-    for arm in ARMS:
-        sizes = sorted(int(f[1:4]) for f in os.listdir(os.path.join(GEN, arm))
+    arms = sys.argv[1:] if len(sys.argv) > 1 else ARMS
+    existing = {}
+    csv_path = os.path.join(ROOT, "results.csv")
+    if os.path.exists(csv_path):
+        with open(csv_path, "r", newline="") as fh:
+            for r in csv.DictReader(fh):
+                existing[(r["arm"], int(r["n"]))] = r
+
+    for arm in arms:
+        sizes = sorted(int(f[len(arm):len(arm)+3]) for f in os.listdir(os.path.join(GEN, arm))
                        if f.endswith(".hs"))
         for n in sizes:
             r = run_one(arm, n)
-            rows.append(r)
             if "error" in r:
                 print(f"{arm} n={n:3d}  FAILED", flush=True)
                 print(r["error"], flush=True)
             else:
-                print(f"{arm} n={n:3d}  ds-preopt={r['ds_preopt']:7d}  "
+                existing[(arm, n)] = r
+                print(f"{arm:2s} n={n:3d}  ds-preopt={r['ds_preopt']:7d}  "
                       f"simpl={r['simpl']:7d}  wall={r['wall_ms']:7d}ms  "
                       f"rss={r['rss_kb']:8d}kB", flush=True)
 
-    with open(os.path.join(ROOT, "results.csv"), "w", newline="") as fh:
+    # Sort all rows by arm order and n
+    order = {a: i for i, a in enumerate(ARMS)}
+    sorted_keys = sorted(existing.keys(), key=lambda k: (order.get(k[0], 99), k[1]))
+
+    with open(csv_path, "w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=[
             "arm", "n", "ds_preopt", "simpl", "wall_ms", "rss_kb"])
         w.writeheader()
-        for r in rows:
+        for k in sorted_keys:
+            r = existing[k]
             if "error" not in r:
                 w.writerow(r)
     print("\nwrote results.csv")

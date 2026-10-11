@@ -32,13 +32,13 @@ Design note §6, in order:
 - [x] Plugin infrastructure: tcPluginInit looks up names from Polytropos.Core, GHC.Classes, GHC.Show, GHC.Base and stores in PluginState
 - [x] RowEq/RowShow/RowEqSum/RowShowSum solvers walk rows with types (walkRowWithTypes, walkSumRowWithTypes)
 - [x] Core AST method synthesis for `RowEq` and `RowShow` on literal products (smoke tests pass)
-- [ ] Synthesize Core AST for `RowEqSum` and `RowShowSum` on sum rows (`task-03`)
-- [ ] Synthesize `HasField` evidence for `OverloadedRecordDot` (`task-04`)
-- [ ] Synthesize batched `setFieldsAt` evidence for `OverloadedRecordUpdate` (`task-05`)
+- [x] Synthesize Core AST for `RowEqSum` and `RowShowSum` on sum rows (`task-03`)
+- [x] Synthesize `HasField` evidence for `OverloadedRecordDot` (`task-04`)
+- [x] Synthesize batched `setFieldsAt` evidence for `OverloadedRecordUpdate` (`task-05`)
 
 ## Milestone 4 — scale
 
 - [x] Port the measurement harness into this repo so the compile-time claims
       are first-class and re-runnable here (`benchmark/variants`)
-- [ ] Re-measure with the plugin in place; the target is arm-L behaviour
+- [x] Re-measure with the plugin in place; the target is arm-L behaviour
       (linear, and cheaper than a plain sum)

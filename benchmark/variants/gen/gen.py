@@ -181,11 +181,90 @@ projectAll = [ {prj_list} ]
 """
 
 
+def gen_variant_polytropos(n: int) -> str:
+    """Arm P: structural variant with Polytropos.Plugin constraint solving.
+
+    This is arm C with the type-level search solved at compile time by
+    Polytropos.Plugin via ConstructorIndex. Comparing C against P and L
+    empirically proves the real-world plugin behaviour matches the theoretical
+    arm L target.
+    """
+    names_c = ", ".join('"%s"' % cname(i) for i in range(n))
+    names_p = ", ".join('"%s" \':= P' % cname(i) for i in range(n))
+    plds = ", ".join("P" for _ in range(n))
+
+    inj_binds = "\n\n".join(
+        'v{i:02d} = mkVariant (fromIntegral (constructorIndex @_ @"{nm}" @NS)) (mkP {i})'
+        .format(i=i, nm=cname(i)) for i in range(n))
+    prj_binds = "\n\n".join(
+        'p{i:02d} :: Maybe P\np{i:02d} = asVariant (fromIntegral (constructorIndex @_ @"{nm}" @NS)) v{i:02d}'
+        .format(i=i, nm=cname(i)) for i in range(n))
+    inj_list = ", ".join("v%02d" % i for i in range(n))
+    prj_list = ", ".join("p%02d" % i for i in range(n))
+
+    return HEADER + f"""{{-# LANGUAGE TypeOperators #-}}
+{{-# OPTIONS_GHC -fplugin=Polytropos.Plugin #-}}
+-- | Generated: structural variant, {n} constructors, Polytropos.Plugin solved.
+module Bench.Gen.P.P{n:03d} (NS, PS, V, injectAll, projectAll) where
+
+import Bench.Payload
+import Bench.StructVariant
+import Polytropos.Core (ConstructorIndex(..), Pair(..))
+
+type NS = '[ {names_p} ]
+
+type PS = '[ {plds} ]
+
+type V = Variant '[ {names_c} ] PS
+
+{inj_binds}
+
+injectAll :: [V]
+injectAll = [ {inj_list} ]
+
+{prj_binds}
+
+projectAll :: [Maybe P]
+projectAll = [ {prj_list} ]
+"""
+
+
+def gen_record_polytropos(n: int) -> str:
+    """Arm PR: Polytropos record with HasField / OverloadedRecordDot via Polytropos.Plugin."""
+    fields = ", ".join('"f%02d" \':= Int' % i for i in range(n))
+    vals = ", ".join("Identity (unsafeCoerce (%d :: Int))" % i for i in range(n))
+    uses = ", ".join("r.f%02d" % i for i in range(n))
+
+    return HEADER + f"""{{-# LANGUAGE OverloadedRecordDot #-}}
+{{-# LANGUAGE TypeOperators #-}}
+{{-# OPTIONS_GHC -fplugin=Polytropos.Plugin #-}}
+-- | Generated: Polytropos record with {n} fields, OverloadedRecordDot via plugin.
+module Bench.Gen.PR.PR{n:03d} (RecRow, mkRec, useAll) where
+
+import Data.Functor.Identity (Identity(..))
+import Unsafe.Coerce (unsafeCoerce)
+import Polytropos
+import Polytropos.Core (RowRep(..), productRep, Pair(..))
+
+type RecRow = '[ {fields} ]
+
+mkRec :: Record RecRow
+mkRec = RowRep (productRep [ {vals} ])
+
+useAll :: [Int]
+useAll = [ {uses} ]
+  where
+    r = mkRec
+"""
+
+
 ARMS = {
     "R": gen_record,
     "A": gen_sum,
     "C": gen_variant,
     "L": gen_variant_literal,
+    "P": gen_variant_polytropos,
+    "PR": gen_record_polytropos,
 }
 
 

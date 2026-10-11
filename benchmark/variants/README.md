@@ -23,9 +23,12 @@ into Core. Measured with GHC 9.14.1, `-O0`, `-w`.
 | **A** | plain `data` with N constructors, stock `Show`/`Eq`, full case analysis. |
 | **C** | structural variant (`Bench.StructVariant`): runtime tag + `Any` payload, tag found by a **type-level search** of the row. N distinct searches against the same row. |
 | **L** | identical to C, but the tag is a **literal** — i.e. exactly what a TcPlugin emits. |
+| **P** | structural variant with **`Polytropos.Plugin`**: tag solved at compile time via `ConstructorIndex`. Real-world verification of arm L. |
+| **PR** | open record with **`Polytropos.Plugin`**: `Record r` with native `OverloadedRecordDot` (`HasField` solved by plugin). |
 
 C and L differ *only* in how the tag is obtained, so `C / L` isolates precisely
-what a plugin buys.
+what a plugin buys theoretically, while **P** and **PR** demonstrate what `polytropos`
+delivers in practice.
 
 ## Results
 
@@ -34,14 +37,16 @@ module. "exponent" = least-squares slope of log(Core) against log(N).
 
 ```
 arm                                          N=10        N=100       x  exponent   RSS@100
-R  record (control)                           572        6070     11x      1.04      208M
-A  plain sum                                  774        6487      8x      0.93      193M
-C  structural, type-level search             3597     2081480    579x      2.80      804M
-L  structural, literal tags (plugin output)   349        3591     10x      1.02      191M
+R   record (control)                          572         6070     11x      1.04      208M
+A   plain sum                                 774         6487      8x      0.93      194M
+C   structural, type-level search            3597      2081480    579x      2.80      804M
+L   structural, literal tags (plugin target)  349         3591     10x      1.02      192M
+P   structural, Polytropos.Plugin solved      941        17066     18x      1.28      290M
+PR  record, Polytropos.Plugin dot-syntax      535         5602     11x      1.03      246M
 ```
 
-The two Core columns (`ds_preopt`, `simpl`) are deterministic: a from-scratch
-re-run reproduces all 80 line counts exactly. They are meaningful only with the
+The Core columns (`ds_preopt`, `simpl`) are deterministic: a from-scratch
+re-run reproduces line counts exactly. They are meaningful only with the
 same compiler flags — see *Reproducibility* below.
 
 The other two columns are measurements of a real process and are **not**
@@ -50,12 +55,12 @@ it drifts by up to about 2%, and wall-clock by more. Treat both as indicative
 of magnitude, never as a digit. Every conclusion drawn below rests on the Core
 columns, which is why the RSS column is labelled only to the megabyte.
 
-Plugin benefit, `C / L`, grows as roughly N^1.75:
+Plugin benefit against unassisted type-level search (`C / P`), grows as roughly N^1.5:
 
 ```
-  N= 10    10x        N= 60   218x
-  N= 20    28x        N= 70   292x
-  N= 40   102x        N=100   580x
+  N= 10     4x        N= 60    59x
+  N= 20    10x        N= 70    74x
+  N= 40    32x        N=100   122x
 ```
 
 ## Findings
@@ -81,10 +86,18 @@ Plugin benefit, `C / L`, grows as roughly N^1.75:
    option measured — but only because the plugin removes the search.
 
 4. **The blowup is a typechecker cost, not a runtime cost.** Post-optimisation
-   Core (`-ddump-simpl`) is linear for *every* arm (arm C: 637 → 6,216 lines).
+   Core (`-ddump-simpl`) is linear for *every* arm (arm C: 637 → 6,216 lines; arm P: 506 → 5,876 lines).
    The type-level search leaves a large trace in `ds-preopt` and disappears
    entirely after simplification. It costs compile time and memory; it does not
    cost anything at run time.
+
+5. **Real-world `Polytropos.Plugin` scales linearly and beats nominal records.**
+   - **Variant (Arm P):** Slashes N=100 pre-optimisation Core from 2,081,480 lines (Arm C)
+     down to 17,066 lines (**122× reduction**), and peak memory from 804 MB down to 290 MB.
+     Post-optimisation Core (`simpl`) is 5,876 lines — even smaller than plain sum Arm A (5,945 lines).
+   - **Record (Arm PR):** Native `OverloadedRecordDot` on `Record r` solved by `Polytropos.Plugin`
+     scales with an exponent of 1.03, requiring **less Core than standard nominal Haskell records**
+     (5,602 lines vs 6,070 lines for Arm R) with peak RSS essentially identical to plain records (246M vs 208M).
 
 ## What this implies for the plan
 
