@@ -21,6 +21,11 @@ module Polytropos.Plugin
 
 import Prelude
 
+import Data.List
+  ( intercalate
+  , sortOn
+  )
+
 import Data.Bits
   ( xor
   )
@@ -36,6 +41,10 @@ import Data.Word
 import Control.Monad
   ( forM
   , zipWithM
+  )
+
+import GHC.Core.DataCon
+  ( promoteDataCon
   )
 
 import GHC.Core.Make
@@ -57,6 +66,7 @@ import GHC.Plugins
   , mkTcOcc
   , nameOccName
   , mkTyConTy
+  , mkTyConApp
   , splitTyConApp_maybe
   , isStrLitTy
   , mkStrLitTy
@@ -88,6 +98,10 @@ import GHC.Plugins
   , nullFS
   , nilFS
   , TyCon
+  , showSDocUnsafe
+  , ppr
+  , isEmptyVarSet
+  , tyCoVarsOfType
   )
 
 import GHC.Unit.Types
@@ -115,6 +129,9 @@ import GHC.Builtin.Types
   , maybeTyCon
   , nothingDataCon
   , justDataCon
+  , unitTyCon
+  , unitDataCon
+  , constraintKind
   , typeSymbolKind
   , liftedTypeKind
   , mkPromotedPairTy
@@ -132,6 +149,9 @@ import GHC.Builtin.Names
   , gHC_INTERNAL_SHOW
   , eqClassName
   , showClassName
+  , errorMessageTypeErrorFamName
+  , typeErrorTextDataConName
+  , typeErrorVAppendDataConName
   )
 
 import GHC.TcPlugin.API
@@ -146,6 +166,7 @@ import GHC.TcPlugin.API
   , className
   , EvTerm (..)
   , Ct
+  , CtLoc
   , TcPluginStage(..)
   , mkTcPlugin
   , listToUFM
@@ -153,6 +174,7 @@ import GHC.TcPlugin.API
   , lookupOrig
   , tcLookupId
   , tcLookupTyCon
+  , tcLookupDataCon
   , findImportedModule
   , resolveImport
   , FindResult(..)
@@ -230,6 +252,9 @@ data PluginState = PluginState
   , psFieldTypesTyCon       :: !TyCon -- ^ Polytropos.Core.FieldTypes
   , psSimpleFieldTypesTyCon :: !TyCon -- ^ Polytropos.Core.SimpleFieldTypes
   , psFieldNamesTyCon       :: !TyCon -- ^ Polytropos.Core.FieldNames
+  , psTypeErrorTyCon        :: !TyCon -- ^ GHC.Internal.TypeError.TypeError
+  , psPromotedText          :: !TyCon -- ^ promoted 'Text
+  , psPromotedVcat          :: !TyCon -- ^ promoted ':$$:
   }
 
 -------------------------------------------------------------------------------
@@ -284,6 +309,13 @@ polytroposInit = do
   fieldNamesOcc <- lookupOrig coreMod (mkTcOcc "FieldNames")
   psFieldNamesTyCon <- tcLookupTyCon fieldNamesOcc
 
+  psTypeErrorTyCon <- tcLookupTyCon errorMessageTypeErrorFamName
+  textDataCon      <- tcLookupDataCon typeErrorTextDataConName
+  vcatDataCon      <- tcLookupDataCon typeErrorVAppendDataConName
+
+  let psPromotedText = promoteDataCon textDataCon
+      psPromotedVcat = promoteDataCon vcatDataCon
+
   pure PluginState
     { psRepTag        = psRepTag
     , psRepArity      = psRepArity
@@ -311,6 +343,9 @@ polytroposInit = do
     , psFieldTypesTyCon       = psFieldTypesTyCon
     , psSimpleFieldTypesTyCon = psSimpleFieldTypesTyCon
     , psFieldNamesTyCon       = psFieldNamesTyCon
+    , psTypeErrorTyCon        = psTypeErrorTyCon
+    , psPromotedText          = psPromotedText
+    , psPromotedVcat          = psPromotedVcat
     }
 
 findModule :: String -> Maybe String -> TcPluginM 'Init Module
@@ -410,6 +445,100 @@ rewriteFieldTypes tyCon _givens args
   | otherwise = pure TcPluginNoRewrite
 
 -------------------------------------------------------------------------------
+-- Human-Centric TypeError Diagnostics Helpers
+-------------------------------------------------------------------------------
+
+levenshtein :: String -> String -> Int
+levenshtein s1 s2 =
+  let n = length s1
+      initRow = [0 .. n]
+      stepRow row c2 = case row of
+        [] -> []
+        d : ds -> scanl (\left (c1, diag, above) ->
+                           let cost = if c1 == c2 then 0 else 1
+                           in min (diag + cost) (min (left + 1) (above + 1)))
+                        (d + 1)
+                        (zip3 s1 row ds)
+  in case foldl' stepRow initRow s2 of
+       [] -> 0
+       res -> last res
+
+suggestSimilar :: String -> [String] -> [String]
+suggestSimilar target candidates =
+  let scored = [ (c, d) | c <- candidates, let d = levenshtein target c, d <= 2 ]
+  in map fst (sortOn snd scored)
+
+formatRecordRow :: [(Int, FastString, Type)] -> String
+formatRecordRow fields =
+  "{ " ++ intercalate ", " [ unpackFS n ++ " :: " ++ showSDocUnsafe (ppr ty) | (_, n, ty) <- fields ] ++ " }"
+
+formatVariantRow :: [(Int, FastString, Type)] -> String
+formatVariantRow ctors =
+  "< " ++ intercalate " | " (map formatCtor ctors) ++ " >"
+  where
+    formatCtor (_, n, conRowTy) =
+      case walkRowWithTypes conRowTy of
+        [] -> unpackFS n
+        [(_, fn, ty)] | nullFS fn -> unpackFS n ++ " :: " ++ showSDocUnsafe (ppr ty)
+        fs -> unpackFS n ++ " " ++ formatRecordRow fs
+
+formatSuggestion :: String -> [String] -> String
+formatSuggestion target candidates =
+  case suggestSimilar target candidates of
+    [] -> case candidates of
+      [] -> "(no fields in record)"
+      _  -> "Available fields: " ++ intercalate ", " (map (\c -> "'" ++ c ++ "'") candidates)
+    suggs -> "Did you mean: " ++ intercalate " or " (map (\s -> "'" ++ s ++ "'") suggs) ++ "?"
+
+formatCtorSuggestion :: String -> [String] -> String
+formatCtorSuggestion target candidates =
+  case suggestSimilar target candidates of
+    [] -> case candidates of
+      [] -> "(no constructors in variant)"
+      _  -> "Available constructors: " ++ intercalate ", " (map (\c -> "'" ++ c ++ "'") candidates)
+    suggs -> "Did you mean: " ++ intercalate " or " (map (\s -> "'" ++ s ++ "'") suggs) ++ "?"
+
+isClosedType :: Type -> Bool
+isClosedType ty = isEmptyVarSet (tyCoVarsOfType (unwrapSynonyms ty))
+
+mkTextMsg :: PluginState -> String -> Type
+mkTextMsg state s = mkTyConApp (psPromotedText state) [mkStrLitTy (fsLit s)]
+
+mkVcatMsgs :: PluginState -> [Type] -> Type
+mkVcatMsgs _ [] = error "mkVcatMsgs: empty list"
+mkVcatMsgs _ [m] = m
+mkVcatMsgs state (m : ms) = mkTyConApp (psPromotedVcat state) [m, mkVcatMsgs state ms]
+
+mkTypeErrorCt :: PluginState -> CtLoc -> [String] -> TcPluginM 'Solve Ct
+mkTypeErrorCt state loc msgLines = do
+  let msgTys = map (mkTextMsg state) msgLines
+      fullMsg = mkVcatMsgs state msgTys
+      predTy = mkTyConApp (psTypeErrorTyCon state) [constraintKind, fullMsg]
+  ev <- newWanted loc predTy
+  pure (mkNonCanonical ev)
+
+mkDummyHasFieldDict :: PluginState -> Class -> [Type] -> TcPluginM 'Solve EvTerm
+mkDummyHasFieldDict state cls tys = do
+  let getFieldId = case classMethods cls of
+        (m : _) -> m
+        [] -> error "Polytropos.Plugin: HasField has no methods"
+      methodFullTy = piResultTys (varType getFieldId) tys
+      (_, _, methodInDictTy) = splitFunTy methodFullTy
+      (tyVars, tauTy) = splitForAllTyCoVars methodInDictTy
+      (argTys, _) = splitFunTys tauTy
+      scaledRTy = argTys !! 0
+      fieldTy = last tys
+  rName <- unsafeLiftTcM $ newName (mkVarOcc "rec")
+  let rVar = mkLocalId rName (scaledMult scaledRTy) (scaledThing scaledRTy)
+      dummyVal = mkCoreApps (Var (psNoInlineCo state))
+                   [ Type (mkTyConTy unitTyCon)
+                   , Type fieldTy
+                   , mkCoreConApps unitDataCon []
+                   ]
+      getFieldExpr = mkCoreLams (tyVars ++ [rVar]) dummyVal
+  pure $ EvExpr (evDataConApp (classDataCon cls) tys [getFieldExpr])
+
+-------------------------------------------------------------------------------
 -- Constraint solving
 -------------------------------------------------------------------------------
 
@@ -442,9 +571,9 @@ solveOne state ct
         case className cls of
           name
             | nameOccName name == mkTcOcc "FieldIndex"
-            -> noNew <$> solveFieldIndex ct cls tys
+            -> solveFieldIndex state ct cls tys
             | nameOccName name == mkTcOcc "ConstructorIndex"
-            -> noNew <$> solveConstructorIndex ct cls tys
+            -> solveConstructorIndex state ct cls tys
             | nameOccName name == mkTcOcc "RowEq"
             -> solveRowEq state ct cls tys
             | nameOccName name == mkTcOcc "RowShow"
@@ -454,13 +583,13 @@ solveOne state ct
             | nameOccName name == mkTcOcc "RowShowSum"
             -> solveRowShowSum state ct cls tys
             | nameOccName name == mkTcOcc "HasField"
-            -> noNew <$> solveHasField state ct cls tys
+            -> solveHasField state ct cls tys
             | nameOccName name == mkTcOcc "AllFields"
             -> solveAllFields state ct cls tys
             | nameOccName name == mkTcOcc "SubRow"
-            -> noNew <$> solveSubRow ct cls tys
+            -> solveSubRow state ct cls tys
             | nameOccName name == mkTcOcc "SubSum"
-            -> noNew <$> solveSubSum ct cls tys
+            -> solveSubSum state ct cls tys
             | nameOccName name == mkTcOcc "KnownHash"
             -> noNew <$> solveKnownHash ct cls tys
             | otherwise
@@ -475,30 +604,72 @@ solveOne state ct
 -------------------------------------------------------------------------------
 
 solveFieldIndex
-  :: Ct
+  :: PluginState
+  -> Ct
   -> Class
   -> [Type]
-  -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
-solveFieldIndex ct cls tys
+  -> TcPluginM 'Solve (Either ((EvTerm, Ct), [Ct]) ())
+solveFieldIndex state ct cls tys
   | length tys >= 3 = do
-      let nTy   = tys !! (length tys - 3)
-          rowTy = tys !! (length tys - 2)
-          unwrapN = unwrapSynonyms nTy
+      let nTy         = tys !! (length tys - 3)
+          rowTy       = tys !! (length tys - 2)
+          expectedATy = last tys
+          unwrapN     = unwrapSynonyms nTy
+          loc         = ctLoc ct
       case isStrLitTy unwrapN of
         Just fieldName -> do
-          case findFieldIndex fieldName rowTy of
-            Just i -> do
-              let iExpr = mkCoreConApps intDataCon [Lit (mkLit (fromIntegral i :: Integer))]
-                  dictExpr = evDataConApp (classDataCon cls) tys [iExpr]
-              pure $ Left (EvExpr dictExpr, ct)
-            Nothing -> pure $ Right ()
+          case findFieldType fieldName rowTy of
+            Just (i, actualTy)
+              | actualTy `eqType` expectedATy || not (isClosedType expectedATy) -> do
+                  let iExpr = mkCoreConApps intDataCon [Lit (mkLit (fromIntegral i :: Integer))]
+                      dictExpr = evDataConApp (classDataCon cls) tys [iExpr]
+                  pure $ Left ((EvExpr dictExpr, ct), [])
+              | otherwise -> do
+                  let dummyExpr = mkCoreConApps intDataCon [Lit (mkLit 0)]
+                      dummyDict = evDataConApp (classDataCon cls) tys [dummyExpr]
+                      diagLines =
+                        [ "Polytropos Record Error:"
+                        , "  Field '" ++ unpackFS fieldName ++ "' in record has type:"
+                        , "    " ++ showSDocUnsafe (ppr actualTy)
+                        , "  but expected:"
+                        , "    " ++ showSDocUnsafe (ppr expectedATy)
+                        ]
+                  errCt <- mkTypeErrorCt state loc diagLines
+                  pure $ Left ((EvExpr dummyDict, ct), [errCt])
+            Nothing -> do
+              case walkRowWithTypes_maybe rowTy of
+                Just fields -> do
+                  let dummyExpr = mkCoreConApps intDataCon [Lit (mkLit 0)]
+                      dummyDict = evDataConApp (classDataCon cls) tys [dummyExpr]
+                      fNames = [ unpackFS n | (_, n, _) <- fields, not (nullFS n) ]
+                      diagLines =
+                        [ "Polytropos Record Error:"
+                        , "  Field '" ++ unpackFS fieldName ++ "' does not exist in record:"
+                        , "    " ++ formatRecordRow fields
+                        , "  " ++ formatSuggestion (unpackFS fieldName) fNames
+                        ]
+                  errCt <- mkTypeErrorCt state loc diagLines
+                  pure $ Left ((EvExpr dummyDict, ct), [errCt])
+                Nothing -> pure $ Right ()
         Nothing -> do
           case findFieldIndexByType unwrapN rowTy of
             Just i -> do
               let iExpr = mkCoreConApps intDataCon [Lit (mkLit (fromIntegral i :: Integer))]
                   dictExpr = evDataConApp (classDataCon cls) tys [iExpr]
-              pure $ Left (EvExpr dictExpr, ct)
-            Nothing -> pure $ Right ()
+              pure $ Left ((EvExpr dictExpr, ct), [])
+            Nothing -> do
+              case walkRowWithTypes_maybe rowTy of
+                Just fields -> do
+                  let dummyExpr = mkCoreConApps intDataCon [Lit (mkLit 0)]
+                      dummyDict = evDataConApp (classDataCon cls) tys [dummyExpr]
+                      diagLines =
+                        [ "Polytropos Record Error:"
+                        , "  Type '" ++ showSDocUnsafe (ppr unwrapN) ++ "' is not a field in record:"
+                        , "    " ++ formatRecordRow fields
+                        ]
+                  errCt <- mkTypeErrorCt state loc diagLines
+                  pure $ Left ((EvExpr dummyDict, ct), [errCt])
+                Nothing -> pure $ Right ()
   | otherwise = pure $ Right ()
 
 -------------------------------------------------------------------------------
@@ -506,30 +677,58 @@ solveFieldIndex ct cls tys
 -------------------------------------------------------------------------------
 
 solveConstructorIndex
-  :: Ct
+  :: PluginState
+  -> Ct
   -> Class
   -> [Type]
-  -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
-solveConstructorIndex ct cls tys
+  -> TcPluginM 'Solve (Either ((EvTerm, Ct), [Ct]) ())
+solveConstructorIndex state ct cls tys
   | length tys >= 2 = do
       let nTy   = tys !! (length tys - 2)
           rowTy = tys !! (length tys - 1)
           unwrapN = unwrapSynonyms nTy
+          loc = ctLoc ct
       case isStrLitTy unwrapN of
         Just conName -> do
           case findConstructorIndex conName rowTy of
             Just w -> do
               let wExpr = mkCoreConApps wordDataCon [Lit (mkLit (fromIntegral w :: Integer))]
                   dictExpr = evDataConApp (classDataCon cls) tys [wExpr]
-              pure $ Left (EvExpr dictExpr, ct)
-            Nothing -> pure $ Right ()
+              pure $ Left ((EvExpr dictExpr, ct), [])
+            Nothing -> do
+              case walkSumRowWithTypes_maybe rowTy of
+                Just ctors -> do
+                  let dummyExpr = mkCoreConApps wordDataCon [Lit (mkLit 0)]
+                      dummyDict = evDataConApp (classDataCon cls) tys [dummyExpr]
+                      cNames = [ unpackFS n | (_, n, _) <- ctors, not (nullFS n) ]
+                      diagLines =
+                        [ "Polytropos Variant Error:"
+                        , "  Constructor '" ++ unpackFS conName ++ "' is not a member of variant:"
+                        , "    " ++ formatVariantRow ctors
+                        , "  " ++ formatCtorSuggestion (unpackFS conName) cNames
+                        ]
+                  errCt <- mkTypeErrorCt state loc diagLines
+                  pure $ Left ((EvExpr dummyDict, ct), [errCt])
+                Nothing -> pure $ Right ()
         Nothing -> do
           case findConstructorIndexByType unwrapN rowTy of
             Just w -> do
               let wExpr = mkCoreConApps wordDataCon [Lit (mkLit (fromIntegral w :: Integer))]
                   dictExpr = evDataConApp (classDataCon cls) tys [wExpr]
-              pure $ Left (EvExpr dictExpr, ct)
-            Nothing -> pure $ Right ()
+              pure $ Left ((EvExpr dictExpr, ct), [])
+            Nothing -> do
+              case walkSumRowWithTypes_maybe rowTy of
+                Just ctors -> do
+                  let dummyExpr = mkCoreConApps wordDataCon [Lit (mkLit 0)]
+                      dummyDict = evDataConApp (classDataCon cls) tys [dummyExpr]
+                      diagLines =
+                        [ "Polytropos Variant Error:"
+                        , "  Type '" ++ showSDocUnsafe (ppr unwrapN) ++ "' is not a payload type in variant:"
+                        , "    " ++ formatVariantRow ctors
+                        ]
+                  errCt <- mkTypeErrorCt state loc diagLines
+                  pure $ Left ((EvExpr dummyDict, ct), [errCt])
+                Nothing -> pure $ Right ()
   | otherwise = pure $ Right ()
 
 -------------------------------------------------------------------------------
@@ -871,13 +1070,14 @@ solveHasField
   -> Ct
   -> Class
   -> [Type]
-  -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
+  -> TcPluginM 'Solve (Either ((EvTerm, Ct), [Ct]) ())
 solveHasField state ct cls tys = do
   let len = length tys
   if len >= 3 then do
     let fieldTy = last tys
         recTy   = tys !! (len - 2)
         nTy     = tys !! (len - 3)
+        loc     = ctLoc ct
     case isStrLitTy (unwrapSynonyms nTy) of
       Just fieldName -> do
         case splitTyConApp_maybe (unwrapSynonyms recTy) of
@@ -914,13 +1114,40 @@ solveHasField state ct cls tys = do
                           raw = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep])
 
                           fFieldTy = mkAppTy fTy actualFieldTy
+                          validTy  = fieldTy `eqType` actualFieldTy
+                                  || fieldTy `eqType` fFieldTy
                           val = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw]
 
                           getFieldExpr = mkCoreLams (tyVars ++ [rVar]) val
                           dictExpr = evDataConApp (classDataCon cls) tys [getFieldExpr]
 
-                      pure $ Left (EvExpr dictExpr, ct)
-                    Nothing -> pure $ Right ()
+                      if isClosedType fieldTy && not validTy
+                        then do
+                          let diagLines =
+                                [ "Polytropos Record Error:"
+                                , "  Field '" ++ unpackFS fieldName ++ "' in record has type:"
+                                , "    " ++ showSDocUnsafe (ppr actualFieldTy)
+                                , "  but context expected:"
+                                , "    " ++ showSDocUnsafe (ppr fieldTy)
+                                ]
+                          errCt <- mkTypeErrorCt state loc diagLines
+                          pure $ Left ((EvExpr dictExpr, ct), [errCt])
+                        else
+                          pure $ Left ((EvExpr dictExpr, ct), [])
+                    Nothing -> do
+                      case walkRowWithTypes_maybe rowTy of
+                        Just fields -> do
+                          dummyDict <- mkDummyHasFieldDict state cls tys
+                          let fNames = [ unpackFS n | (_, n, _) <- fields, not (nullFS n) ]
+                              diagLines =
+                                [ "Polytropos Record Error:"
+                                , "  Field '" ++ unpackFS fieldName ++ "' does not exist in record:"
+                                , "    " ++ formatRecordRow fields
+                                , "  " ++ formatSuggestion (unpackFS fieldName) fNames
+                                ]
+                          errCt <- mkTypeErrorCt state loc diagLines
+                          pure $ Left ((dummyDict, ct), [errCt])
+                        Nothing -> pure $ Right ()
                 _ -> pure $ Right ()
           _ -> pure $ Right ()
       Nothing -> pure $ Right ()
@@ -977,14 +1204,16 @@ solveAllFields state ct cls tys
 -------------------------------------------------------------------------------
 
 solveSubRow
-  :: Ct
+  :: PluginState
+  -> Ct
   -> Class
   -> [Type]
-  -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
-solveSubRow ct cls tys
+  -> TcPluginM 'Solve (Either ((EvTerm, Ct), [Ct]) ())
+solveSubRow state ct cls tys
   | length tys >= 2
   , let subTy   = tys !! (length tys - 2)
   , let superTy = last tys
+  , let loc     = ctLoc ct
   , Just subFields   <- walkRowWithTypes_maybe subTy
   , Just superFields <- walkRowWithTypes_maybe superTy
   = case matchFields subFields superFields of
@@ -992,8 +1221,12 @@ solveSubRow ct cls tys
         let intDataExpr i = mkCoreConApps intDataCon [Lit (mkLit (fromIntegral i :: Integer))]
             indicesExpr   = mkListExpr intTy (map intDataExpr indices)
             dictExpr      = evDataConApp (classDataCon cls) tys [indicesExpr]
-        pure $ Left (EvExpr dictExpr, ct)
-      Nothing -> pure $ Right ()
+        pure $ Left ((EvExpr dictExpr, ct), [])
+      Nothing -> do
+        let dummyDict = evDataConApp (classDataCon cls) tys [mkListExpr intTy []]
+            mismatchDiag = findSubRowMismatch subFields superFields
+        errCt <- mkTypeErrorCt state loc mismatchDiag
+        pure $ Left ((EvExpr dummyDict, ct), [errCt])
   | otherwise = pure $ Right ()
   where
     matchFields :: [(Int, FastString, Type)] -> [(Int, FastString, Type)] -> Maybe [Int]
@@ -1005,15 +1238,43 @@ solveSubRow ct cls tys
         (j : _) -> (j :) <$> matchFields rest sFields
         []      -> Nothing
 
+    findSubRowMismatch :: [(Int, FastString, Type)] -> [(Int, FastString, Type)] -> [String]
+    findSubRowMismatch [] _ =
+      [ "Polytropos SubRow Error:"
+      , "  Sub-record row does not match super-record row."
+      ]
+    findSubRowMismatch ((_, name, fieldTy) : rest) sFields =
+      case [ sFieldTy | (_, sName, sFieldTy) <- sFields
+                      , if nullFS name || nullFS sName then True else sName == name ] of
+        [] ->
+          let sNames = [ unpackFS n | (_, n, _) <- sFields, not (nullFS n) ]
+          in [ "Polytropos SubRow Error:"
+             , "  Cannot project record: field '" ++ unpackFS name ++ "' from sub-record is missing in super-record:"
+             , "    " ++ formatRecordRow sFields
+             , "  " ++ formatSuggestion (unpackFS name) sNames
+             ]
+        (sFieldTy : _)
+          | not (fieldTy `eqType` sFieldTy) ->
+              [ "Polytropos SubRow Error:"
+              , "  Cannot project record: field '" ++ unpackFS name ++ "' has type:"
+              , "    " ++ showSDocUnsafe (ppr fieldTy)
+              , "  in sub-record, but has type:"
+              , "    " ++ showSDocUnsafe (ppr sFieldTy)
+              , "  in super-record."
+              ]
+          | otherwise -> findSubRowMismatch rest sFields
+
 solveSubSum
-  :: Ct
+  :: PluginState
+  -> Ct
   -> Class
   -> [Type]
-  -> TcPluginM 'Solve (Either (EvTerm, Ct) ())
-solveSubSum ct cls tys
+  -> TcPluginM 'Solve (Either ((EvTerm, Ct), [Ct]) ())
+solveSubSum state ct cls tys
   | length tys >= 2
   , let subTy   = tys !! (length tys - 2)
   , let superTy = last tys
+  , let loc     = ctLoc ct
   , Just subCons   <- walkSumRowWithTypes_maybe subTy
   , Just superCons <- walkSumRowWithTypes_maybe superTy
   = case matchCons subCons superCons of
@@ -1039,8 +1300,14 @@ solveSubSum ct cls tys
             narrowExpr = mkListExpr maybeWordTy (map narrowDataExpr narrowIndices)
 
             dictExpr = evDataConApp (classDataCon cls) tys [injectExpr, narrowExpr]
-        pure $ Left (EvExpr dictExpr, ct)
-      Nothing -> pure $ Right ()
+        pure $ Left ((EvExpr dictExpr, ct), [])
+      Nothing -> do
+        let wordTy = mkTyConTy wordTyCon
+            maybeWordTy = mkAppTy (mkTyConTy maybeTyCon) wordTy
+            dummyDict = evDataConApp (classDataCon cls) tys [mkListExpr wordTy [], mkListExpr maybeWordTy []]
+            mismatchDiag = findSubSumMismatch subCons superCons
+        errCt <- mkTypeErrorCt state loc mismatchDiag
+        pure $ Left ((EvExpr dummyDict, ct), [errCt])
   | otherwise = pure $ Right ()
   where
     matchCons :: [(Int, FastString, Type)] -> [(Int, FastString, Type)] -> Maybe [Word]
@@ -1059,6 +1326,32 @@ solveSubSum ct cls tys
       = length fs1 == length fs2 &&
         and [ (if nullFS n1 || nullFS n2 then True else n1 == n2) && t1 `eqType` t2 | ((_, n1, t1), (_, n2, t2)) <- zip fs1 fs2 ]
       | otherwise = False
+
+    findSubSumMismatch :: [(Int, FastString, Type)] -> [(Int, FastString, Type)] -> [String]
+    findSubSumMismatch [] _ =
+      [ "Polytropos SubSum Error:"
+      , "  Sub-variant row does not match super-variant row."
+      ]
+    findSubSumMismatch ((_, conName, conRowTy) : rest) sCons =
+      case [ sRowTy | (_, sName, sRowTy) <- sCons
+                    , if nullFS conName || nullFS sName then True else sName == conName ] of
+        [] ->
+          let sNames = [ unpackFS n | (_, n, _) <- sCons, not (nullFS n) ]
+          in [ "Polytropos SubSum Error:"
+             , "  Cannot widen variant: constructor '" ++ unpackFS conName ++ "' from sub-variant is missing in super-variant:"
+             , "    " ++ formatVariantRow sCons
+             , "  " ++ formatCtorSuggestion (unpackFS conName) sNames
+             ]
+        (sRowTy : _)
+          | not (sameRow conRowTy sRowTy) ->
+              let subFs   = walkRowWithTypes conRowTy
+                  superFs = walkRowWithTypes sRowTy
+              in [ "Polytropos SubSum Error:"
+                 , "  Cannot widen variant: constructor '" ++ unpackFS conName ++ "' has different payload rows:"
+                 , "    sub-variant payload:   " ++ formatRecordRow subFs
+                 , "    super-variant payload: " ++ formatRecordRow superFs
+                 ]
+          | otherwise -> findSubSumMismatch rest sCons
 
 -------------------------------------------------------------------------------
 -- KnownHash solver
@@ -1170,11 +1463,6 @@ walkSumRowWithTypes rowTy =
           -> (i, n, conRowTy)
         _ -> (i, nilFS, elemTy)
 
-findFieldIndex :: FastString -> Type -> Maybe Int
-findFieldIndex fieldName rowTy =
-  case [i | (i, n, _) <- walkRowWithTypes rowTy, n == fieldName] of
-    (i : _) -> Just i
-    []      -> Nothing
 
 findConstructorIndex :: FastString -> Type -> Maybe Word
 findConstructorIndex conName rowTy =

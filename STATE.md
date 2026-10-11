@@ -12,14 +12,16 @@ and §1.7 generic instance layer over rows & dynamic dictionary emission) are im
 All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
 - `polytropos-core` passes 32 tests (primitive SmallArray CoW updates, `setFieldsAt` batch updates,
   `MRep` transient builders, `Polytropos` consumer surface, `Record`, `Variant`).
-- `polytropos-plugin-smoke` passes 43 tests with `-fplugin=Polytropos.Plugin` (`RowEq`, `RowShow`,
+- `polytropos-plugin-smoke` passes 52 tests with `-fplugin=Polytropos.Plugin` (`RowEq`, `RowShow`,
   `RowEqSum`, `RowShowSum`, native `OverloadedRecordDot` on bare and `RecordF Maybe` records,
   `AllFields` generic dictionary supply across standard and HKD product rows, `FieldIndex`/`ConstructorIndex` on HKD rows,
   compile-time `Refl` type equality rewriting for `FieldNames`, `SimpleFieldTypes`, and `FieldTypes`,
   `SubRow`/`SubSum` projection, injection, and narrowing evidence with `projectRecord`, `widenVariant`, and `narrowVariant`,
   `KnownHash` compile-time label hashing with literal FNV-1a 64-bit `Word` dictionaries,
-  and source-plugin syntactic devices: `REC`, `REC_F`, field punning, `VAR`, `VARIANT`, `REC_UPD`, `REC_UPD_F`,
-  record & variant view pattern matching, and `deriving OpenRecord` / `deriving OpenVariant` declaration forms).
+  source-plugin syntactic devices (`REC`, `REC_F`, field punning, `VAR`, `VARIANT`, `REC_UPD`, `REC_UPD_F`,
+  record & variant view pattern matching, and `deriving OpenRecord` / `deriving OpenVariant` declaration forms),
+  and human-centric `TypeError` diagnostics with Levenshtein-distance fuzzy suggestions and schema summaries
+  for missing fields, missing constructors, field type mismatches, and `SubRow`/`SubSum` structural discrepancies).
 - `polytropos-generics-test` passes 13 tests (`Generic` and `GInstances` datatype generics bridge over flat `Rep`
   and `RowRep`, `geq`, `gcompare`, `gshowsPrec`, `gmap`, `gfoldMap` over product and sum ADTs and plugin-solved rows,
   including HKD `RecordF Maybe`).
@@ -93,10 +95,14 @@ All three algebraic effect system ports planned in `docs/notes/EFFECT_SYSTEMS_PO
     and literal injection tags `[Word]` / narrowing maps `[Maybe Word]` for sums
   * `KnownHash` compile-time label hashing: evaluates literal symbol names and synthesizes literal
     FNV-1a 64-bit `Word` dictionaries
+  * Human-centric `TypeError` diagnostics: intercepts unsolvable wanted constraints when rows are closed,
+    synthesizing descriptive `TypeError` constraints with Levenshtein-distance fuzzy suggestions ("Did you mean ...?")
+    and full schema formatting for missing fields, missing constructors, field type mismatches, and `SubRow`/`SubSum` discrepancies.
 - `packages/polytropos-plugin/tests/smoke/Main.hs` — Smoke tests exercising plugin-solved dictionary synthesis,
   `AllFields` generic dictionary supply across homogeneous and heterogeneous rows, compile-time `Refl`
   equality reduction of metadata families, `SubRow`/`SubSum` widening, narrowing, and projection,
-  and `KnownHash` compile-time symbol hashing matching `fnv1a64`
+  `KnownHash` compile-time symbol hashing matching `fnv1a64`, and 9 negative-compilation assertions
+  verifying human-centric compiler stderr diagnostics.
 - `packages/polytropos-generics/` — Datatype generics library unifying nominal Haskell ADTs with `polytropos`
   `Rep` with zero boxed intermediate tree representations
 - `packages/polytropos-optics/` — Satellite package integrating with `optics-core` and `LabelOptic`
@@ -147,10 +153,9 @@ All three algebraic effect system ports planned in `docs/notes/EFFECT_SYSTEMS_PO
 ## What is deliberately missing
 
 - Full hybrid coproduct eliminator `eliminate :: Variant r -> HandlerRow ... -> m (Results ...)` (slated for Milestone T2).
-- Custom `TypeError` diagnostics in `Polytropos.Plugin` (slated for Milestone T1).
 - SIMD vectorized array copies for $>32$ fields (slated for Milestone T3).
 
 ## Next action
 
-- Execute Milestone T1 (`[AUTONOMOUS-MACHINE]`): Implement human-centric `TypeError` diagnostics in `Polytropos.Plugin` for missing fields, tags, and subrow mismatches.
-- Simultaneously draft Milestone B1/B3 documentation foundations for human review and collaborative refinement.
+- Advance to Milestone T2 (`[COLLABORATIVE-ASYNC]`): The Full Hybrid Eliminator (`eliminate`) & Row Flavour Settlement (`HandlerRowT` / `ResultRowT`).
+- Advance to Documentation Agenda Tier 1 (`TUTORIAL.md` / `NEWBIE_GUIDE.md`) and Tier 3 (`MAINTAINER_GUIDE.md` overhaul) for human-collaborative review.

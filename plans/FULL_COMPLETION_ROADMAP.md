@@ -26,8 +26,8 @@ To avoid blocking progress when human maintainers are unavailable, all roadmap t
 
 ## 2. Technical Capabilities Track (Engine & Plugin)
 
-### Milestone T1: Human-Centric `TypeError` Diagnostics in `Polytropos.Plugin`
-- **Execution Mode:** `[AUTONOMOUS-MACHINE]`
+### Milestone T1: Human-Centric `TypeError` Diagnostics in `Polytropos.Plugin` [COMPLETED]
+- **Execution Mode:** `[AUTONOMOUS-MACHINE]` (Implemented & Verified: 52/52 tests in `polytropos-plugin-smoke`)
 - **Motivation:** Directly eliminates Barrier #5 ("Bad type errors & inference fragility — nigh impossible to figure out what has gone wrong").
 - **Deliverables:**
   1. **Missing Field Diagnostic:** When `FieldIndex (name :: Symbol) row a` cannot be solved, intercept the unsolved wanted constraint in `Polytropos.Plugin` and synthesize a custom GHC `TypeError`:

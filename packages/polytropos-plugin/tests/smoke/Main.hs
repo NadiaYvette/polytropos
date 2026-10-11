@@ -17,15 +17,21 @@
 
 module Main (main) where
 
+import Control.Monad (forM_)
 import Data.Functor.Identity (Identity(..))
 import Data.Kind (Type)
+import Data.List (isInfixOf)
 import Data.Primitive.SmallArray (SmallArray, sizeofSmallArray, indexSmallArray)
 import Data.Proxy (Proxy(..))
 import Data.Type.Equality ((:~:)(Refl))
 import GHC.Exts (Any)
 import GHC.TypeLits (Symbol)
+import System.Directory (getTemporaryDirectory, removeFile)
+import System.Exit (ExitCode(..))
+import System.FilePath ((</>))
+import System.Process (readProcessWithExitCode)
 import Test.Tasty (defaultMain, testGroup)
-import Test.Tasty.HUnit (testCase, (@?=))
+import Test.Tasty.HUnit (testCase, (@?=), assertBool)
 
 import Polytropos.Core
 import Polytropos
@@ -268,7 +274,145 @@ main = defaultMain $ testGroup "plugin RowEq/RowShow smoke"
           eval s1 @?= 200
           eval s2 @?= 11
       ]
+  , testGroup "TypeError human-centric diagnostics"
+      [ testCase "missing field diagnostic with available fields list" $
+          checkGhcDiag
+            (unlines
+              [ "{-# LANGUAGE DataKinds, TypeApplications, TypeOperators #-}"
+              , "module Test where"
+              , "import Polytropos.Core"
+              , "t = fieldIndex @_ @\"email\" @'[ \"name\" := String, \"age\" := Int ] @Int"
+              ])
+            [ "Polytropos Record Error:"
+            , "Field 'email' does not exist in record:"
+            , "{ name :: String, age :: Int }"
+            , "Available fields: 'name', 'age'"
+            ]
+      , testCase "missing field diagnostic with fuzzy suggestion" $
+          checkGhcDiag
+            (unlines
+              [ "{-# LANGUAGE DataKinds, TypeApplications, TypeOperators #-}"
+              , "module Test where"
+              , "import Polytropos.Core"
+              , "t = fieldIndex @_ @\"naem\" @'[ \"name\" := String, \"age\" := Int ] @String"
+              ])
+            [ "Polytropos Record Error:"
+            , "Field 'naem' does not exist in record:"
+            , "Did you mean: 'name'?"
+            ]
+      , testCase "field type mismatch diagnostic" $
+          checkGhcDiag
+            (unlines
+              [ "{-# LANGUAGE DataKinds, TypeApplications, TypeOperators #-}"
+              , "module Test where"
+              , "import Polytropos.Core"
+              , "t = fieldIndex @_ @\"name\" @'[ \"name\" := String, \"age\" := Int ] @Int"
+              ])
+            [ "Polytropos Record Error:"
+            , "Field 'name' in record has type:"
+            , "String"
+            , "but expected:"
+            , "Int"
+            ]
+      , testCase "missing constructor diagnostic with available constructors list" $
+          checkGhcDiag
+            (unlines
+              [ "{-# LANGUAGE DataKinds, TypeApplications, TypeOperators #-}"
+              , "module Test where"
+              , "import Polytropos.Core"
+              , "t = constructorIndex @_ @\"Exit\" @'[ \"Start\" := '[ \"x\" := String ], \"Stop\" := '[ \"y\" := Int ] ]"
+              ])
+            [ "Polytropos Variant Error:"
+            , "Constructor 'Exit' is not a member of variant:"
+            , "< Start { x :: String } | Stop { y :: Int } >"
+            , "Available constructors: 'Start', 'Stop'"
+            ]
+      , testCase "missing constructor diagnostic with fuzzy suggestion" $
+          checkGhcDiag
+            (unlines
+              [ "{-# LANGUAGE DataKinds, TypeApplications, TypeOperators #-}"
+              , "module Test where"
+              , "import Polytropos.Core"
+              , "t = constructorIndex @_ @\"Strt\" @'[ \"Start\" := '[ \"x\" := String ], \"Stop\" := '[ \"y\" := Int ] ]"
+              ])
+            [ "Polytropos Variant Error:"
+            , "Constructor 'Strt' is not a member of variant:"
+            , "Did you mean: 'Start' or 'Stop'?"
+            ]
+      , testCase "SubRow missing field diagnostic" $
+          checkGhcDiag
+            (unlines
+              [ "{-# LANGUAGE DataKinds, TypeApplications, TypeOperators #-}"
+              , "module Test where"
+              , "import Polytropos.Core"
+              , "t = subRowIndices @'[ \"z\" := Bool ] @'[ \"a\" := Int, \"b\" := Bool ]"
+              ])
+            [ "Polytropos SubRow Error:"
+            , "Cannot project record: field 'z' from sub-record is missing in super-record:"
+            , "{ a :: Int, b :: Bool }"
+            ]
+      , testCase "SubRow field type mismatch diagnostic" $
+          checkGhcDiag
+            (unlines
+              [ "{-# LANGUAGE DataKinds, TypeApplications, TypeOperators #-}"
+              , "module Test where"
+              , "import Polytropos.Core"
+              , "t = subRowIndices @'[ \"a\" := String ] @'[ \"a\" := Int, \"b\" := Bool ]"
+              ])
+            [ "Polytropos SubRow Error:"
+            , "Cannot project record: field 'a' has type:"
+            , "String"
+            , "in sub-record, but has type:"
+            , "Int"
+            , "in super-record."
+            ]
+      , testCase "SubSum missing constructor diagnostic" $
+          checkGhcDiag
+            (unlines
+              [ "{-# LANGUAGE DataKinds, TypeApplications, TypeOperators #-}"
+              , "module Test where"
+              , "import Polytropos.Core"
+              , "t = subSumInjectIndices @'[ \"Missing\" := '[] ] @'[ \"A\" := '[], \"B\" := '[] ]"
+              ])
+            [ "Polytropos SubSum Error:"
+            , "Cannot widen variant: constructor 'Missing' from sub-variant is missing in super-variant:"
+            , "< A | B >"
+            , "Available constructors: 'A', 'B'"
+            ]
+      , testCase "SubSum payload mismatch diagnostic" $
+          checkGhcDiag
+            (unlines
+              [ "{-# LANGUAGE DataKinds, TypeApplications, TypeOperators #-}"
+              , "module Test where"
+              , "import Polytropos.Core"
+              , "t = subSumInjectIndices @'[ \"A\" := '[ \"x\" := Int ] ] @'[ \"A\" := '[ \"x\" := String ] ]"
+              ])
+            [ "Polytropos SubSum Error:"
+            , "Cannot widen variant: constructor 'A' has different payload rows:"
+            , "sub-variant payload:   { x :: Int }"
+            , "super-variant payload: { x :: String }"
+            ]
+      ]
   ]
+
+checkGhcDiag :: String -> [String] -> IO ()
+checkGhcDiag snippet expectedSubstrings = do
+  tmpDir <- getTemporaryDirectory
+  let tmpFile = tmpDir </> "PolytroposDiagTest.hs"
+  writeFile tmpFile snippet
+  (exitCode, _stdout, stderr) <- readProcessWithExitCode
+    "ghc"
+    [ "-fno-code"
+    , tmpFile
+    , "-fplugin=Polytropos.Plugin"
+    ]
+    ""
+  removeFile tmpFile
+  exitCode @?= ExitFailure 1
+  forM_ expectedSubstrings $ \expected ->
+    assertBool
+      ("Expected diagnostic to contain: " ++ show expected ++ "\nActual stderr:\n" ++ stderr)
+      (expected `isInfixOf` stderr)
 
 -- | Use a supplied array of type-erased Show dictionaries to show every slot.
 showAllFields :: DictAllFields Show
