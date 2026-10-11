@@ -3,7 +3,23 @@
 **Audience:** New human contributors and AI coding assistant drivers (Antigravity, Claude Code, Cursor, Aider).  
 **Parent Strategy:** [`docs/notes/DOC_STRATEGY.md`](notes/DOC_STRATEGY.md)  
 **Corpus Inventory:** [`docs/INDEX.md`](INDEX.md)  
+**Interactive Tutorial:** [`docs/TUTORIAL.md`](TUTORIAL.md)  
 **Maintainer Guide:** [`docs/MAINTAINER_GUIDE.md`](MAINTAINER_GUIDE.md)  
+
+---
+
+## 0. Learning the Concepts First: Start with `TUTORIAL.md`
+
+If you are new to `polytropos` and want to understand how open records and variants work, read the **5-Lesson Interactive Tutorial** in [`docs/TUTORIAL.md`](TUTORIAL.md):
+
+- **Lesson 1:** Constructing Records (`emptyRecord`, `insertField`, `REC { ... }`)
+- **Lesson 2:** Accessing & Updating Fields (`r.field` dot syntax, `setField`, `REC_UPD`)
+- **Lesson 3:** Working with Open Variants (`Variant`, `injectVariant`, `VAR { ... }`, pattern matching)
+- **Lesson 4:** Structural Subtyping in Practice (`projectRecord`, `widenVariant`, `narrowVariant`)
+- **Lesson 5:** Extensible Pipelines & Total Elimination (`eliminateUniform`, `matchVariant`)
+- **Addendum A:** Live worked Nanopass compiler pass (`cabal run example-nanopass`)
+
+Once you are comfortable with the concepts, use this guide for repository navigation and token conservation.
 
 ---
 
@@ -112,14 +128,17 @@ cxf search "<query>" --limit 10
 
 Run the test suites:
 ```bash
-# Core representation tests (25 tests)
-cabal test polytropos-core-test
+# Core representation & eliminator tests (37 tests)
+cabal test --jobs=20 polytropos-core-test
 
-# Typechecker plugin smoke tests (3 tests)
-cabal test polytropos-plugin-smoke
+# Typechecker plugin smoke tests (54 tests)
+cabal test --jobs=20 polytropos-plugin-smoke
 
-# Complete suite
-cabal test all
+# Run the live Nanopass tutorial executable
+cabal run --jobs=20 example-nanopass
+
+# Complete workspace suite (14 packages, ~180 tests)
+cabal test --jobs=20 all
 ```
 
 ---

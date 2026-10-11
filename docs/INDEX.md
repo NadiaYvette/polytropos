@@ -25,6 +25,7 @@ Status: LIVING DOCUMENT · v0.1 · 2026-10-05
 | `notes/KERNMANTLE_POLYTROPOS_PORT_PLAN.md` | plan | draft | cross-cutting | — |
 | `notes/ADOPTION_BARRIERS_AND_MITIGATIONS.md` | design | draft | cross-cutting | — |
 | `notes/TUTORIAL_EXAMPLES_EVALUATION.md` | strategy | live | cross-cutting | — |
+| `../plans/FULL_COMPLETION_ROADMAP.md` | plan | live | cross-cutting | Roadmap resolving technical debt and 4-tier documentation overhaul |
 | `registers/PACKAGES.md` | register | live | cross-cutting | — |
 | `transcripts/gemini-large-data-hybrid-variant-records-spec.md` | transcript | archive | cross-cutting | inconsistent |
 | `transcripts/gemini-powerful-abstraction-techniques-in-haskell.md` | transcript | archive | cross-cutting | — |

@@ -19,9 +19,9 @@ can change the row shape:
 - [x] Q2 widening check: type-level evidence with runtime bounds check elision (PHASE2_SKETCH.md)
 - [x] Q3 row-index `Rep`, or add a row-carrying wrapper beside the erased one (`RowRep` Case 3 wrapper adopted)
 - [x] Field update efficiency architecture (`docs/notes/FIELD_UPDATE_EFFICIENCY_DESIGN.md`)
-- [ ] Implement CoW updates, batched updates, and transient builders (`task-01`, `task-02`)
-- [ ] `OverloadedLabels` / record-dot / record-update instance surface (`task-04`, `task-05`)
-- [ ] Deriving (nominal products/sums) and generics (`task-07`)
+- [x] Implement CoW updates, batched updates, and transient builders (`task-01`, `task-02`)
+- [x] `OverloadedLabels` / record-dot / record-update instance surface (`task-04`, `task-05`)
+- [x] Deriving (nominal products/sums) and generics (`task-07`)
  
 ## Milestone 3 — the plugin
  
@@ -41,4 +41,39 @@ Design note §6, in order:
 - [x] Port the measurement harness into this repo so the compile-time claims
       are first-class and re-runnable here (`benchmark/variants`)
 - [x] Re-measure with the plugin in place; the target is arm-L behaviour
-      (linear, and cheaper than a plain sum)
+      (linear, and cheaper than a plain sum; Arm P achieves 122× Core reduction vs unassisted search; Arm PR exponent 1.03)
+
+## Milestone 5 — ecosystem satellite interfaces
+
+- [x] Optics integration (`task-08` `polytropos-optics`, `task-09` `polytropos-microlens`, `task-10` `polytropos-lens`)
+- [x] Serialization & codecs (`task-11` `polytropos-aeson`, `task-12` `polytropos-cbor`, `task-13` `polytropos-cassava`)
+- [x] Database & relational models (`task-14` `polytropos-beam`, `task-15` `polytropos-hasql`, `task-16` `polytropos-rel8`, `task-17` `polytropos-persistent`)
+- [x] Schema generation & testing (`task-18` `polytropos-openapi3`, `task-19` `polytropos-quickcheck`)
+
+## Milestone 6 — algebraic effect systems ports
+
+- [x] `effectful-polytropos` (`/home/nyc/src/effectful`, branch `polytropos-port`): flat open product rows with compile-time literal index solving
+- [x] `polysemy-polytropos` (`/home/nyc/src/polysemy`, branch `polytropos-port`): $O(1)$ tag `decomp` and `weaken` without Peano search
+- [x] `kernmantle-polytropos` (`/home/nyc/src/kernmantle`, branch `polytropos-port`): forked from master, replacing `vinyl` with `polytropos` Higher-Kinded Data ropes
+
+## Milestone 7 — engine diagnostics, syntax & eliminators
+
+- [x] Human-centric custom `TypeError` diagnostics in `Polytropos.Plugin` (Milestone T1) with Levenshtein-distance fuzzy suggestions
+- [x] Source plugin syntactic devices: `REC`, `REC_F`, `VAR`, `REC_UPD`, view patterns, and `deriving OpenRecord` / `deriving OpenVariant`
+- [x] Full hybrid eliminators and peeling (Milestone T2): `eliminateUniform`, `eliminateUniformM`, `eliminate`, `eliminateM`, `matchVariant`, `peel`, `peelF` with $O(1)$ array jump table dispatch
+
+## Milestone 8 — documentation & pedagogical framework
+
+- [x] Candidate tutorial examples evaluation matrix (`docs/notes/TUTORIAL_EXAMPLES_EVALUATION.md`)
+- [x] Worked live Nanopass tutorial executable in `examples/nanopass/` (`cabal run example-nanopass`)
+- [ ] Four-Audience documentation agenda overhaul:
+  - [x] Audience 1: Foundational 5-Lesson Plan + Nanopass Addendum (`docs/TUTORIAL.md`) and refreshed `docs/NEWBIE_GUIDE.md`
+  - [x] Audience 2: Systematic Haddock audit & polish across `Polytropos` and `Polytropos.Core`
+  - [x] Audience 3: Authoritative architectural guide & maintenance recipes (`docs/MAINTAINER_GUIDE.md`)
+  - [x] Audience 4: AI context projections & agentic governance (`AGENTS.md`, `.agents/rules/`)
+
+## Upcoming / Open
+
+- [ ] Milestone T3: Hardware-vectorized SIMD CoW updates for $>32$ fields (`docs/notes/FIELD_UPDATE_EFFICIENCY_DESIGN.md`)
+- [ ] Milestone T4: HLS / IDE autocompletion exploration
+- [ ] Collaborative human review and polish of revised documentation tiers

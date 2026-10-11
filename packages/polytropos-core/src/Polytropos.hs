@@ -253,6 +253,14 @@ projectRecordF (RowRep rep) =
 -- | Project a sub-record from a super-record (bare).
 --
 -- Extracts only the fields present in @sub@ in the order specified by @sub@.
+--
+-- Complexity: \(\mathcal{O}(|sub|)\) array copy, with literal projection indices
+-- precomputed at compile-time by the @Polytropos.Plugin@.
+--
+-- @
+-- let fullRec = REC { id = 1 :: Int, name = "Alice", role = "Admin" }
+--     subRec  = projectRecord @'["name" ':= String] fullRec
+-- @
 projectRecord :: forall sub super. SubRow sub super => Record super -> Record sub
 projectRecord (RowRep rep) =
   let vals = repVals rep
@@ -273,8 +281,14 @@ widenVariantF (RowRep rep) =
 
 -- | Widen a variant from a sub-row to a super-row (bare).
 --
--- Widening is total and constant time: the active constructor tag in @sub@ is
--- remapped to its corresponding tag in @super@, preserving payload slots.
+-- Widening is total and constant time (\(\mathcal{O}(1)\)): the active constructor
+-- tag in @sub@ is remapped to its corresponding tag in @super@ via a compile-time
+-- synthesized literal tag lookup table, requiring zero payload array allocations.
+--
+-- @
+-- let smallVar = VAR { Ok = REC { val = 200 :: Int } } :: Variant '["Ok" ':= '["val" ':= Int]]
+--     wideVar  = widenVariant @'["Ok" ':= '["val" ':= Int], "Err" ':= '["msg" ':= String]] smallVar
+-- @
 widenVariant :: forall sub super. SubSum sub super => Variant sub -> Variant super
 widenVariant (RowRep rep) =
   let tag = fromIntegral (repTag rep) :: Int
@@ -296,8 +310,10 @@ narrowVariantF (RowRep rep) =
 
 -- | Narrow a variant from a super-row to a sub-row (bare).
 --
--- Returns 'Just' with the active tag remapped to @sub@ if the constructor belongs
--- to @sub@, or 'Nothing' if the constructor is not in @sub@.
+-- Returns 'Just' with the active tag remapped to @sub@ if the active constructor belongs
+-- to @sub@, or 'Nothing' if the constructor is not a member of @sub@.
+--
+-- Complexity: \(\mathcal{O}(1)\) time.
 narrowVariant :: forall sub super. SubSum sub super => Variant super -> Maybe (Variant sub)
 narrowVariant (RowRep rep) =
   let tag = fromIntegral (repTag rep) :: Int
@@ -316,11 +332,21 @@ type family Delete (n :: Symbol) (s :: [Pair Symbol k]) :: [Pair Symbol k] where
   Delete n ((m ':= fs) ': rest) = (m ':= fs) ': Delete n rest
   Delete n '[]                  = '[]
 
--- | Peel a constructor @n@ from an open variant in O(1) time.
+-- | Peel a single constructor @n@ from an open variant in \(\mathcal{O}(1)\) time.
 --
--- If the variant contains constructor @n@, returns @Right (Record fs)@.
+-- If the variant's active constructor is @n@, returns @Right (Record fs)@.
 -- Otherwise, returns @Left (Variant (Delete n s))@ with the runtime tag
--- adjusted in O(1) time without copying the payload array.
+-- decremented if \(t > target\) and preserved if \(t < target\), requiring
+-- __zero__ heap reallocation or payload copying.
+--
+-- This is the core primitive enabling single-construct compiler passes (Nanopass):
+--
+-- @
+-- desugarStmt :: Variant ("While" ':= fs ': CoreRow) -> Variant CoreRow
+-- desugarStmt v = case peel \@"While" v of
+--   Right (REC { cond, body }) -> desugarWhile cond body
+--   Left rest                  -> rest  -- O(1) pass-through for all other constructs!
+-- @
 peel :: forall (n :: Symbol) (s :: SumRow).
         ConstructorIndex n s
      => Variant s
@@ -330,7 +356,7 @@ peel (RowRep r) =
     Right vals -> Right (RowRep (productRep vals))
     Left remR  -> Left (RowRep remR)
 
--- | Peel a constructor @n@ from an open HKD variant in O(1) time.
+-- | Peel a constructor @n@ from an open HKD variant in \(\mathcal{O}(1)\) time.
 peelF :: forall (n :: Symbol) (f :: Type -> Type) (s :: SumRowHKD f).
          ConstructorIndex n s
       => VariantF f s
@@ -362,7 +388,20 @@ type family HandlerRecordRowHeteroM (s :: SumRow) (resRow :: SumRow) (m :: Type 
   HandlerRecordRowHeteroM ((n ':= fs) ': rest) ((n ':= rfs) ': rrest) m =
     (n ':= (Record fs -> m (Record rfs))) ': HandlerRecordRowHeteroM rest rrest m
 
--- | Eliminate a closed variant uniformly with O(1) array jump table dispatch.
+-- | Eliminate a closed variant uniformly with \(\mathcal{O}(1)\) array jump table dispatch.
+--
+-- Handlers are provided as a 'Record' where each field corresponds to a constructor
+-- in @s@. The runtime reads the variant's tag \(t\) and directly indexes slot \(t\)
+-- of the handler array, executing without linear branch cascades.
+--
+-- @
+-- let res = eliminateUniform handlers myVariant
+--   where
+--     handlers = REC
+--       { Ok  = \\(REC { code, body }) -> "Status " ++ show code
+--       , Err = \\(REC { reason })     -> "Error: " ++ reason
+--       }
+-- @
 eliminateUniform :: forall (s :: SumRow) a.
                     Record (HandlerRecordRow s a)
                  -> Variant s
@@ -373,7 +412,7 @@ eliminateUniform (RowRep (Rep _ hVals)) (RowRep (Rep tag vals)) =
       payload = RowRep (Rep 0 vals) :: Record '[]
   in h payload
 
--- | Eliminate a closed variant uniformly inside a monad @m@ with O(1) array jump table dispatch.
+-- | Eliminate a closed variant uniformly inside a monad @m@ with \(\mathcal{O}(1)\) array jump table dispatch.
 eliminateUniformM :: forall (s :: SumRow) m a.
                      Record (HandlerRecordRowM s m a)
                   -> Variant s
@@ -385,6 +424,9 @@ eliminateUniformM (RowRep (Rep _ hVals)) (RowRep (Rep tag vals)) =
   in h payload
 
 -- | Full hybrid eliminator: eliminate a closed variant into an open variant of per-constructor results.
+--
+-- Each handler in @s@ transforms that constructor's payload into a corresponding result in @resRow@.
+-- The resulting variant retains the original constructor tag and payload in \(\mathcal{O}(1)\) time.
 eliminate :: forall (s :: SumRow) (resRow :: SumRow).
              Record (HandlerRecordRowHetero s resRow)
           -> Variant s
@@ -412,12 +454,12 @@ eliminateM (RowRep (Rep _ hVals)) (RowRep (Rep tag vals)) =
 
 -- | Syntactic synonym for 'eliminateUniform' taking the variant value first.
 --
--- Convenient for direct pattern matching expressions:
+-- Convenient for direct pattern matching expressions resembling Swift or Rust @match@:
 --
 -- @
 -- matchVariant expr REC
---   { lit = \(REC { val }) -> val
---   , add = \(REC { left, right }) -> left + right
+--   { lit = \\(REC { val }) -> val
+--   , add = \\(REC { left, right }) -> left + right
 --   }
 -- @
 matchVariant :: forall (s :: SumRow) a.

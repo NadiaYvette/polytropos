@@ -3,122 +3,298 @@ SPDX-License-Identifier: BSD-3-Clause
 -->
 # Interactive Tutorial: Practical Row Polymorphism with Polytropos
 
-**Status:** LIVING TUTORIAL · v1.0 · 2026-10-11  
+**Status:** LIVING TUTORIAL · v1.1 · 2026-10-11  
 **Audience:** Haskell Programmers, Compiler Writers, AI Coding Assistants  
-**Prerequisites:** Familiarity with basic Haskell syntax (types, pattern matching, functions). No prior experience with type-level programming, category theory, or compiler plugins is required!
+**Prerequisites:** Basic Haskell syntax (types, functions, pattern matching). No prior experience with type-level programming or compiler plugins required.  
+**Related Guides:** [`docs/NEWBIE_GUIDE.md`](NEWBIE_GUIDE.md) · [`docs/MAINTAINER_GUIDE.md`](MAINTAINER_GUIDE.md) · [`docs/notes/DOC_STRATEGY.md`](notes/DOC_STRATEGY.md)
 
 ---
 
-## Quick Start: Run the Tutorial Code Live
+## Quick Start: Run the Worked Examples Live
 
-Every code example in this tutorial is live, compilable, and runnable right out of the repository. You can execute the complete worked compiler pass immediately from your terminal:
+Every concept in this tutorial is backed by live, compilable code in this repository. You can run the executable tutorial pass right now from your terminal:
 
 ```bash
 # Build and run the executable tutorial
 cabal run example-nanopass
 
-# Or explore the functions interactively in GHCi
+# Or explore the types and combinators interactively in GHCi
 cabal repl example-nanopass
 ```
 
-The executable source code is located at [`examples/nanopass/src/Main.hs`](../examples/nanopass/src/Main.hs). We encourage you to follow along, edit the code, and test your own language extensions!
+The executable source code is located at [`examples/nanopass/src/Main.hs`](../examples/nanopass/src/Main.hs).
 
 ---
 
-## 1. The Core Mental Model
+# Part I: The Foundational 5-Lesson Plan
 
 Standard Haskell data types are **nominal** and **closed**:
-- A data type declared with `data Stmt = Assign ... | While ...` exists only under that specific name (`Stmt`).
-- You cannot add a constructor to `Stmt` without modifying its definition and breaking every pattern match across your codebase.
-- You cannot take a subset of `Stmt` constructors without declaring an entirely separate data type and writing tedious conversion boilerplate.
+- A type declared with `data Person = Person { name :: String, age :: Int }` exists only under that specific name (`Person`).
+- You cannot add a field or constructor to a data type without modifying its definition and breaking every pattern match across your project.
+- You cannot take a subset of fields or constructors without declaring an entirely separate data type and writing tedious conversion boilerplate.
 
-`polytropos` introduces **structural row polymorphism** for both products (records) and sums (variants).
-
-### 1.1 What is a Row?
-
-A **row** is a type-level association list of names (`Symbol`) and types.
-
-For records:
-```haskell
-type PersonRow = '[ "name" := String, "age" := Int ]
-```
-
-For variants (open sum types):
-```haskell
-type ResultRow = '[ "Ok" := '[ "val" := Int ], "Err" := '[ "msg" := String ] ]
-```
-
-Notice the key symmetry:
-- A **Record** is a product of named fields: it holds a value for *every* field in the row.
-- A **Variant** is a sum of named constructors: it holds *one active constructor* whose payload is a record of that constructor's arguments.
-
-### 1.2 Flat Runtime Architecture ($O(1)$)
-
-Unlike traditional extensible record libraries that encode rows as nested pairs (`(a, (b, (c, ())))`) or recursive typeclass trees (which take $O(N)$ time to access and quadratic time to compile), `polytropos` collapses all rows into a single flat representation:
-
+`polytropos` introduces **structural row polymorphism** for both products (records) and sums (variants). Under the hood, both collapse into a single flat representation:
 ```haskell
 data Rep f a = Rep
   { repTag  :: {-# UNPACK #-} !Word
   , repVals :: {-# UNPACK #-} !(SmallArray (f Any))
   }
 ```
-
-- A **Record** has `repTag = 0` and stores all field values in a contiguous `SmallArray`. Field access is an $O(1)$ direct array index evaluated at compile time.
-- A **Variant** stores the active constructor index in `repTag` and the constructor's payload in `repVals`.
+All row operations compile down to literal array index reads, writes, and tag jumps evaluated in $O(1)$ time by the `Polytropos.Plugin` typechecker plugin.
 
 ---
 
-## 2. Ergonomic Syntax
+## Lesson 1: Constructing Records
 
-With the `Polytropos.Plugin` enabled (`{-# OPTIONS_GHC -fplugin=Polytropos.Plugin #-}`), you can write records and variants using standard Haskell syntax:
+A **record** is an open product type: it holds a value for every named field in a row.
 
-### 2.1 Records: `REC` and OverloadedRecordDot
-
+### 1.1 Type-Level Row Vocabulary
+In `polytropos`, a record's type carries its field names and types as a type-level list of `'Pair Symbol Type`:
 ```haskell
--- Constructing a record:
-let user = REC { name = "Alice", age = 30 :: Int }
+type UserRow = '[ "name" := String, "age" := Int, "active" := Bool ]
+type User = Record UserRow
+```
 
--- Field access via standard dot syntax:
+### 1.2 Core Construction Primitives
+At the lowest level, you build records from `emptyRecord` by chaining `insertField`:
+```haskell
+import Polytropos
+
+user :: User
+user = insertField (Field @"name") "Alice"
+     $ insertField (Field @"age") (30 :: Int)
+     $ insertField (Field @"active") True
+     $ emptyRecord
+```
+
+### 1.3 Ergonomic Syntax (`REC` & Field Punning)
+With the `Polytropos.Plugin` enabled (`{-# OPTIONS_GHC -fplugin=Polytropos.Plugin #-}`), you don't need manual `insertField` chains. You write natural record syntax:
+```haskell
+-- Standard record construction:
+user :: User
+user = REC { name = "Alice", age = 30 :: Int, active = True }
+
+-- Field punning:
+let name = "Bob"
+    age = 25 :: Int
+    active = False
+in REC { name, age, active }
+```
+
+### 1.4 Higher-Kinded Data (HKD) Records (`REC_F`)
+For schemas parameterized by an outer functor `f` (such as `Maybe` for partial updates or `Validation` for forms):
+```haskell
+type PartialUser = RecordF Maybe '[ "name" := String, "age" := Int ]
+
+partialUser :: PartialUser
+partialUser = REC_F { name = Just "Alice", age = Nothing }
+```
+
+---
+
+## Lesson 2: Accessing and Updating Fields
+
+### 2.1 First-Class Dot Syntax (`OverloadedRecordDot`)
+Thanks to the plugin solving GHC's `HasField` constraints into literal integer array indices, you access fields using standard dot syntax:
+```haskell
 let greeting = "Hello, " ++ user.name
+let isAdult  = user.age >= 18
 ```
+This is **not** a dictionary lookup at runtime; GHC emits an $O(1)$ direct array index (`indexSmallArray vals 0`).
 
-### 2.2 Variants: `VAR`
-
+### 2.2 Functional Updates (`setField` & `REC_UPD`)
+You can update fields functionally using `setField` or the `REC_UPD` syntax:
 ```haskell
--- Injecting into an open variant:
-let successVal :: Variant '[ "ok" := '[ "val" := Int ], "err" := '[ "msg" := String ] ]
-    successVal = VAR { ok = REC { val = 200 :: Int } }
+-- Primitive update:
+let olderUser = setField (Field @"age") 31 user
 
-let failureVal = VAR { err = REC { msg = "Not Found" } }
+-- Ergonomic record update syntax:
+let olderUser = (REC_UPD user) { age = 31 }
 ```
+
+### 2.3 Update Performance: Copy-on-Write vs Batch Updates
+In `polytropos`, single-field updates use copy-on-write:
+- An $N$-field record creates a new `SmallArray` of size $N$ sharing all untouched slot pointers ($O(N)$ allocation).
+- For multiple field updates, **batch updates** (`setFieldsAt`) copy the array **once**, avoiding intermediate allocations:
+  ```haskell
+  -- Mutates slots 0 and 1 in a single copy:
+  let updated = setFieldsAt [(0, slot "Charlie"), (1, slot (40 :: Int))] user
+  ```
+- For high-throughput imperatively-styled builders, transient builders (`thawRep` / `freezeRep`) permit chained in-place mutations in `ST` before freezing into an immutable `Record`.
 
 ---
 
-## 3. Worked Case Study: The Nanopass Compiler
+## Lesson 3: Working with Open Variants
 
-The **Nanopass** compiler architecture (pioneered by Sarkar, Waddell, and Dybvig) structures compilers into dozens of tiny, single-purpose passes. Each pass removes, rewrites, or introduces exactly one language construct.
+A **variant** is an open sum type: it represents one active constructor selected from a row of possibilities, accompanied by that constructor's payload.
 
-### 3.1 The Nominal Dilemma
+### 3.1 Type-Level Variant Vocabulary
+A variant row maps constructor names (`Symbol`) to their payload rows:
+```haskell
+type StatusRow =
+  '[ "Ok"    := '[ "code" := Int, "body" := String ]
+   , "Err"   := '[ "reason" := String ]
+   , "Retry" := '[]
+   ]
 
-In traditional Haskell, implementing a nanopass is notoriously painful:
+type Status = Variant StatusRow
+```
 
-1. **Option A (Shared Closed AST):** If all passes share `data Stmt = While ... | Loop ... | Assign ...`, the output type of `desugarWhile` is still `Stmt`. The type system cannot prevent subsequent code generation passes from failing if they encounter an unexpected `While`.
-2. **Option B (Duplicated ASTs):** If you define `data SurfaceStmt` and `data CoreStmt`, you must write 50 lines of boilerplate copying every constructor you *didn't* touch:
+### 3.2 Injecting into a Variant (`VAR`)
+```haskell
+-- Success with multiple fields:
+let s1 :: Status
+    s1 = VAR { Ok = REC { code = 200 :: Int, body = "OK" } }
+
+-- Error with a single field:
+let s2 :: Status
+    s2 = VAR { Err = REC { reason = "Gateway Timeout" } }
+
+-- Nullary constructor:
+let s3 :: Status
+    s3 = VAR { Retry = REC {} }
+```
+
+### 3.3 Pattern Matching & View Patterns
+You can pattern-match on variants using view patterns:
+```haskell
+describeStatus :: Status -> String
+describeStatus s = case s of
+  VAR { Ok = REC { code, body } } -> "200: " ++ body
+  VAR { Err = REC { reason } }    -> "Error: " ++ reason
+  VAR { Retry = REC {} }          -> "Please retry"
+  _                               -> "Other"
+```
+
+### 3.4 Nominal Declaration Sugar (`deriving OpenVariant`)
+If you prefer standard Haskell data type declarations, you can derive `OpenVariant`:
+```haskell
+data Response
+  = Success { val :: Int }
+  | Failure { msg :: String }
+  deriving (Show, Eq, OpenVariant)
+```
+The source plugin translates these declarations into open `Variant` types while letting you write ordinary Haskell constructors!
+
+---
+
+## Lesson 4: Structural Subtyping in Practice
+
+Because rows are structural, `polytropos` allows safe, static conversions between sub-types and super-types without runtime overhead.
+
+### 4.1 Record Projection (`projectRecord` & `SubRow`)
+Suppose you have a large record with 20 fields (e.g., a database user profile), but a function only needs 2 fields:
+```haskell
+type FullProfile = '[ "id" := Int, "name" := String, "email" := String, "role" := String, "created" := String ]
+type BasicUser   = '[ "name" := String, "email" := String ]
+
+stripProfile :: Record FullProfile -> Record BasicUser
+stripProfile full = projectRecord full
+```
+The `Polytropos.Plugin` verifies that `BasicUser` is a subset of `FullProfile` and emits literal projection indices `[1, 2]`. Runtime execution is a single pre-allocated array copy!
+
+### 4.2 Variant Widening (`widenVariant` & `SubSum`)
+Dually, if you have a function that returns a small set of errors, you can embed it into a broader error variant:
+```haskell
+type IoErrors  = '[ "NotFound" := '[ "path" := FilePath ], "PermissionDenied" := '[] ]
+type AppErrors = ("NetworkError" := '[ "code" := Int ]) ': IoErrors
+
+liftIoError :: Variant IoErrors -> Variant AppErrors
+liftIoError err = widenVariant err
+```
+`widenVariant` is **total** and takes $O(1)$ time: it uses a literal lookup table emitted by the plugin to remap the constructor tag without copying the payload.
+
+### 4.3 Variant Narrowing (`narrowVariant`)
+To attempt to downcast a super-variant back into a sub-variant:
+```haskell
+handleIo :: Variant AppErrors -> Maybe (Variant IoErrors)
+handleIo appErr = narrowVariant appErr
+```
+If the active constructor is a member of `IoErrors`, it returns `Just` with the tag remapped; otherwise it returns `Nothing`.
+
+---
+
+## Lesson 5: Extensible Pipelines & Total Elimination
+
+How do you eliminate a closed variant into a result without writing fragile, un-checked cascading `case` trees?
+
+### 5.1 The Eliminator Problem
+In traditional Haskell, pattern matching with `case` trees has two problems:
+1. $O(N)$ sequential branching: matching the 50th constructor checks 49 failed conditions before finding a match.
+2. Code reuse: you cannot easily parameterize or share handler records across different passes.
+
+### 5.2 Uniform Elimination (`eliminateUniform`)
+`polytropos` provides `eliminateUniform`:
+```haskell
+eliminateUniform
+  :: Record (HandlerRecordRow s a)  -- ^ Record of handler functions
+  -> Variant s                      -- ^ The variant to eliminate
+  -> a                              -- ^ Uniform result
+```
+
+Example:
+```haskell
+data Expr
+  = Lit { val :: Int }
+  | Add { left :: Expr, right :: Expr }
+  | Neg { sub :: Expr }
+
+evalExpr :: Variant '[ "Lit" := '[ "val" := Int ], "Neg" := '[ "sub" := Int ] ] -> Int
+evalExpr expr = eliminateUniform handlers expr
+  where
+    handlers = REC
+      { Lit = \(REC { val }) -> val
+      , Neg = \(REC { sub }) -> -sub
+      }
+```
+
+**How it works under the hood:**
+- Handlers are stored in a contiguous `Record` array indexed by constructor tag.
+- When `eliminateUniform` runs, it reads the variant's integer tag $t$ and immediately indexes slot $t$ in the handler array ($O(1)$ jump table).
+- GHC verifies that **every single constructor** in the row is handled. If you miss one, compilation fails with an informative error.
+
+### 5.3 Data-First Elimination (`matchVariant`)
+If you prefer a data-first syntax matching Swift or Rust `match`, use `matchVariant`:
+```haskell
+result = matchVariant expr REC
+  { Lit = \(REC { val }) -> val
+  , Neg = \(REC { sub }) -> -sub
+  }
+```
+
+### 5.4 Heterogeneous & Monadic Eliminators (`eliminate` & `eliminateM`)
+When different branches compute different result types or require a monad `m`, `polytropos` provides:
+- `eliminateM`: runs handlers inside monad `m` (e.g. `IO` or `Reader`).
+- `eliminate`: returns an open `Variant resRow` preserving the active constructor tag.
+
+---
+
+# Part II: Addenda — Worked Real-World Case Studies
+
+The 5 foundational lessons above form the building blocks for real-world architectures. The worked case studies below demonstrate how these primitives solve long-standing software engineering challenges.
+
+---
+
+## Addendum A: Worked Case Study — The Nanopass Compiler
+
+The **Nanopass** compiler architecture (pioneered by Sarkar, Waddell, and Dybvig) breaks compiler pipelines into dozens of tiny, single-purpose passes. Each pass rewrites, eliminates, or lowers exactly one language construct.
+
+### A.1 The Nominal Dilemma
+In traditional Haskell, writing a compiler pass that removes one construct is notoriously frustrating:
+1. **Shared Nominal Type:** If `data Stmt = While ... | Loop ... | Assign ...` is shared across passes, the output type of `desugarWhile` is still `Stmt`. The type system cannot guarantee that subsequent passes won't encounter an unexpected `While`.
+2. **Duplicated Nominal Types:** If you declare `data SurfaceStmt` and `data CoreStmt`, you must write 50 lines of boilerplate copying every constructor you *didn't* touch:
    ```haskell
    desugar (SurfaceAssign v x) = CoreAssign v x
    desugar (SurfacePrint m)    = CorePrint m
    desugar (SurfaceIf c t e)   = CoreIf c (desugar t) (desugar e)
-   -- ... duplicate 50 other statements ...
+   -- 50 lines of identical copy-paste code!
    ```
 
-### 3.2 The Polytropos Solution: Row Subtraction
-
-With row-polymorphic variants, we define our ASTs modularly:
+### A.2 The Polytropos Solution: Row Subtraction
+With row polymorphism, we define the target language IR first, and derive the surface language by simply prepending `"while_"`:
 
 ```haskell
--- 1. The Core Target Language:
--- Primitive assignments, printing, infinite loops, and breaks.
--- (Notice: Core has NO while loops!)
+-- 1. Core Target IR (NO while loops!):
 type CoreStmtRow =
   '[ "assign" := '[ "var" := String, "val" := Int ]
    , "print"  := '[ "msg" := String ]
@@ -126,7 +302,7 @@ type CoreStmtRow =
    , "break_" := '[]
    ]
 
--- 2. The Surface Language:
+-- 2. Surface Language:
 -- Formed by prepending "while_" to CoreStmtRow!
 type SurfaceStmtRow = ("while_" := '[ "cond" := String, "body" := [SurfaceStmt] ]) ': CoreStmtRow
 
@@ -135,20 +311,15 @@ newtype SurfaceStmt = SurfaceStmt (Variant SurfaceStmtRow)
 newtype CoreStmt    = CoreStmt    (Variant CoreStmtRow)
 ```
 
-Look at `SurfaceStmtRow`: `while_` is simply added to `CoreStmtRow`.
-
-### 3.3 The Lowering Pass: $O(1)$ Constructor Peeling
-
-Now, how do we write `desugarStmt :: SurfaceStmt -> CoreStmt`?
-
-We use `peel @"while_"`:
+### A.3 The Lowering Pass: $O(1)$ Single-Constructor Peeling (`peel`)
+To implement `desugarStmt :: SurfaceStmt -> CoreStmt`, we use `peel @"while_"`:
 
 ```haskell
 desugarStmt :: SurfaceStmt -> CoreStmt
 desugarStmt (SurfaceStmt stmt) = CoreStmt $ case peel @"while_" stmt of
   Right (REC { cond, body }) ->
-    -- 1. We encountered a while loop!
-    -- Desugar it into an infinite loop with a condition check and break:
+    -- 1. We isolated the while loop!
+    -- Lower it into a loop with a condition check and break:
     let checkCond = CoreStmt (VAR { print = REC { msg = "check (" ++ cond ++ ")" } })
         breakStmt = CoreStmt (VAR { break_ = REC {} })
         loweredBody = checkCond : (map desugarStmt body ++ [breakStmt])
@@ -159,32 +330,22 @@ desugarStmt (SurfaceStmt stmt) = CoreStmt $ case peel @"while_" stmt of
     rest
 ```
 
-### 3.4 Why `Left rest -> rest` is Magic
-
-Look closely at line:
+### A.4 Why `Left rest -> rest` is Revolutionary
+Notice line:
 ```haskell
   Left rest -> rest
 ```
-
-What just happened here?
-1. `peel @"while_"` inspected the active constructor in $O(1)$ time.
-2. If `stmt` was *not* a `while_`, it returned `Left rest`.
+What happened here?
+1. `peel @"while_"` inspected the active constructor tag in $O(1)$ time.
+2. If `stmt` was not `"while_"`, it returned `Left rest`.
 3. The type of `rest` is `Variant (Delete "while_" SurfaceStmtRow)`.
 4. Because `SurfaceStmtRow = ("while_" := ...) ': CoreStmtRow`, deleting `"while_"` produces **definitionally and exactly** `CoreStmtRow`!
 5. Therefore, `rest` is **already** a valid `Variant CoreStmtRow`!
 
-**We did not write a single line of code for `assign`, `print`, `loop`, or `break_`!** Even if our language had 100 other statements, `Left rest -> rest` passes them all through instantly, with zero array copying and zero heap allocations.
+**We did not write a single line of boilerplate for `assign`, `print`, `loop`, or `break_`!** Even if our language had 100 other statements, `Left rest -> rest` passes them all through instantly, with zero array copying and zero heap allocations.
 
----
-
-## 4. Total Elimination & Modular Interpretation
-
-How do we evaluate or pretty-print our ASTs?
-
-### 4.1 $O(1)$ Total Elimination: `eliminateUniform`
-
-`polytropos` provides `eliminateUniform` to eliminate a variant using a record of handler functions:
-
+### A.5 Modular Interpretation: Reusing Pretty Printers
+We write the target IR pretty-printer using `eliminateUniform`:
 ```haskell
 ppCore :: CoreStmt -> String
 ppCore (CoreStmt stmt) = eliminateUniform handlers stmt
@@ -197,63 +358,49 @@ ppCore (CoreStmt stmt) = eliminateUniform handlers stmt
       }
 ```
 
-**How it works under the hood:**
-- `eliminateUniform` does **not** perform linear sequential `case` matching.
-- It extracts the variant's tag $t$ and immediately indexes slot $t$ of the handler record's array in $O(1)$ time.
-- If you forget any constructor, the compiler will refuse to compile with an informative missing field diagnostic.
-
-### 4.2 Modular Extension: Reusing `ppCore` for `ppSurface`
-
-Now, do we need to rewrite `ppSurface` from scratch? No! We peel off `"while_"` and delegate all other constructors directly to `ppCore`:
-
+And for the surface language, we peel off `"while_"` and delegate all other constructors directly to `ppCore`:
 ```haskell
 ppSurface :: SurfaceStmt -> String
 ppSurface (SurfaceStmt stmt) = case peel @"while_" stmt of
   Right (REC { cond, body }) ->
     "while (" ++ cond ++ ") {\n" ++ indent (intercalate "\n" (map ppSurface body)) ++ "}"
   Left rest ->
-    -- rest is already a CoreStmt! Delegate directly:
     ppCore (CoreStmt rest)
 ```
-
-We get 100% code reuse for free.
+100% code reuse with complete compile-time type safety.
 
 ---
 
-## 5. Try It Yourself: Exercises for the Reader
+## Upcoming Addenda in this Series
 
-To solidify your understanding, open [`examples/nanopass/src/Main.hs`](../examples/nanopass/src/Main.hs) and try these hands-on exercises:
+| Addendum | Architecture | Core Primitives Demonstrated |
+|---|---|---|
+| **Addendum B** | *Resilient Parsing & Error ASTs ("Stope and Winze")* | Explicit variant error nodes (`ParseHole`), semantic error containment, IDE language server fault tolerance. |
+| **Addendum C** | *Relational Database Models* | High-throughput SQL table schemas and query projection with `polytropos-rel8` and `polytropos-persistent`. |
+| **Addendum D** | *Extensible Algebraic Effects* | Modular effect rows and $O(1)$ handler dispatch with `effectful-polytropos` and `kernmantle-polytropos`. |
+
+---
+
+# Part III: Hands-on Reader Exercises
+
+To deepen your mastery, open [`examples/nanopass/src/Main.hs`](../examples/nanopass/src/Main.hs) and experiment with these exercises:
 
 ### Exercise 1: Add a `"for_"` Loop
 Extend `SurfaceStmtRow` with a C-style for-loop:
 ```haskell
 type SurfaceStmtRow =
-  ("for_" := '[ "initVar" :: String, "limit" :: Int, "body" :: [SurfaceStmt] ])
+  ("for_" := '[ "var" := String, "limit" := Int, "body" := [SurfaceStmt] ])
   ': ("while_" := '[ "cond" := String, "body" := [SurfaceStmt] ])
   ': CoreStmtRow
 ```
-Now update `desugarStmt` to peel `"for_"` and lower it into an `"assign"` followed by a `"while_"`. Notice how your lowering pipeline composes!
+Now update `desugarStmt` to peel `"for_"` and lower it into an `"assign"` followed by a `"while_"`. Notice how your lowering passes compose naturally!
 
 ### Exercise 2: Add an `"if_"` Statement to Core
-Add an `"if_"` constructor to `CoreStmtRow`:
+Add an `"if_"` statement to `CoreStmtRow`:
 ```haskell
 , "if_" := '[ "cond" := String, "thenB" := [CoreStmt], "elseB" := [CoreStmt] ]
 ```
-Re-run `cabal run example-nanopass`. Notice that `desugarStmt` **still compiles unchanged without touching a single line**, because `Left rest -> rest` automatically forwards the new constructor!
+Re-run `cabal run example-nanopass`. Notice that `desugarStmt` **still compiles unchanged without modifying a single line**, because `Left rest -> rest` forwards untouched constructors automatically!
 
-### Exercise 3: Observe Compiler Diagnostics
-Deliberately misspell a field name in a record (e.g. `val_` instead of `val`) or omit a constructor in `ppCore`. Notice how the `polytropos` compiler plugin intercepts the error and outputs a crystal-clear human-centric diagnostic suggesting the right field name.
-
----
-
-## 6. Tutorial Roadmap: Upcoming Chapters
-
-This tutorial is the first chapter in our documentation series. Future worked examples will cover:
-
-| Chapter | Topic | Real-World Application |
-|---|---|---|
-| **Chapter 2** | *Resilient Parsing & Error ASTs ("Stope and Winze")* | Modeling syntax errors as explicit open variant nodes (`ParseHole`) for resilient compiler frontends. |
-| **Chapter 3** | *High-Performance Database Models* | Generating relational schemas and SQL queries using `polytropos-rel8` and `polytropos-persistent`. |
-| **Chapter 4** | *Extensible Algebraic Effects* | Defining modular effect signatures with `effectful-polytropos` and `kernmantle-polytropos`. |
-
-Enjoy experimenting with row polymorphism in Haskell!
+### Exercise 3: Inspect Compiler Diagnostics
+Deliberately misspell a field name in a record (e.g. `val_` instead of `val`) or omit a constructor handler in `ppCore`. Observe how the `Polytropos.Plugin` intercepts the unsolved constraint and outputs a custom human-centric diagnostic suggesting the correct name.

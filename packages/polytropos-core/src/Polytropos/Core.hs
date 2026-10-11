@@ -434,11 +434,13 @@ projectRep t (Rep t' v)
 matchRep :: (Word -> [f Any] -> a) -> Rep f a -> a
 matchRep k r = k (repTag r) (toListSlots (repVals r))
 
--- | Peel a target tag from a sum representation in O(1) time.
+-- | Peel a target tag from a sum representation in \(\mathcal{O}(1)\) time.
 --
 -- If @repTag r == targetTag@, returns @Right (toListSlots (repVals r))@.
 -- Otherwise, returns @Left r'@ where the remaining tag is preserved if
 -- @repTag r < targetTag@, or decremented by 1 if @repTag r > targetTag@.
+--
+-- Complexity: \(\mathcal{O}(1)\) time, requiring zero array payload copying or allocations.
 peelRep :: Word -> Rep f a -> Either (Rep f a) [f Any]
 peelRep targetTag (Rep t v)
   | t == targetTag = Right (toListSlots v)
