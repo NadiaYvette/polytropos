@@ -50,8 +50,8 @@ All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
 
 ### Tooling Integration: Haskell Language Server (Completed & Verified)
 
-Milestone T4's `haskell-language-server` autocompletion support has been implemented, tested, and committed on branch `polytropos-row-completions` in `/home/nyc/src/haskell-language-server` (commit `f0c588d35`):
-- **Row type inspection in `ghcide` (`Development.IDE.Plugin.Completions.Logic`):**
+Milestone T4's `haskell-language-server` tooling integration has been implemented, tested, and committed on branch `polytropos-row-completions` in `/home/nyc/src/haskell-language-server` (commits `f0c588d35` and `f01e37d81`):
+- **Row type inspection & autocompletion in `ghcide` (`Development.IDE.Plugin.Completions.Logic`):**
   * Traverses promoted type-level cons lists (`:`) unwrapping type synonyms via `coreView`.
   * Extracts field labels and types from both standard promoted tuple pairs `'(Symbol, Type)` and polytropos `Pair Symbol Type` / custom wrapper constructors.
   * Queries `identType` from `nodeIdentifiers` in addition to `nodeType`, resolving identifier occurrences (variable bindings like `recVal`) to their concrete row types.
@@ -59,6 +59,15 @@ Milestone T4's `haskell-language-server` autocompletion support has been impleme
   * Mapped completion positions back through `fromDelta` position deltas (`PositionMapping`) with `lowerRange`, preserving query accuracy on active document edits.
   * Added synchronous fallback from `useWithStaleFast` to `useWithStale GetHieAst` when fast in-memory cache misses.
   * Verified with passing tests in `ghcide-test:test:ghcide-tests` (`row polymorphic record dot completion` and `polytropos Pair row dot completion`).
+- **Human-readable Hover Type Summaries (`ghcide` `Development.IDE.Spans.AtPoint`):**
+  * Transforms raw GHC `RowRep Identity ProductRowT ('[ 'Pair ...])` and `Record ('[ ...])` AST text into clean, ergonomic `Record { field :: Type, ... }` and `Variant < Con :: Type | ... >` representations in hover tooltips.
+- **Open Record & Variant Wildcard Expansion (`hls-explicit-record-fields-plugin` `Ide.Plugin.ExplicitFields`):**
+  * Added `OpenRecordWildcardExpansion` and `OpenVariantBranchExpansion` recognizing `REC { .. }` and `VAR { .. }` constructs.
+  * Generates code actions to expand open record wildcards and open variant branches into explicit field puns and handlers.
+- **LSP QuickFix CodeActions for `TypeError` Diagnostics (`hls-refactor-plugin` `Development.IDE.Plugin.CodeAction`):**
+  * Extends `extractRenamableTerms` to parse Polytropos Levenshtein-distance fuzzy typo suggestions from GHC `TypeError` diagnostics.
+  * Generates instant `Replace with ‘...’` LSP QuickFix code actions for typos in record fields and variant constructors.
+  * Verified with 4/4 passing unit tests in `hls-refactor-plugin-tests:test:hls-refactor-plugin-tests` (`extractRenamableTerms`).
 
 ### Hardware-Vectorized SIMD CoW Updates (Completed & Verified)
 
