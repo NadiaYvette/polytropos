@@ -22,7 +22,7 @@
 --
 -- 'recordRow' builds a @'Row' (Record r)@ that consumes one column per row
 -- field, in row order, and packs the decoded values straight into the
--- contiguous 'SmallArray' payload of the record. The column decoders are
+-- contiguous 'Data.Primitive.SmallArray.SmallArray' payload of the record. The column decoders are
 -- combined by the 'AllRowDecoder' constraint walk instead of a tuple
 -- constructor, so there are no intermediate tuple allocations and none of
 -- GHC's 62-column tuple limit: a row of any arity decodes in a single
@@ -89,7 +89,7 @@ instance (Column a, AllRowDecoder r) => AllRowDecoder ((n ':= a) ': r) where
 
 -- | Build a hasql row decoder that consumes one column per field of the
 -- row, in row order, and materialises the record directly: the decoded
--- slots go straight into a contiguous 'SmallArray' payload via
+-- slots go straight into a contiguous 'Data.Primitive.SmallArray.SmallArray' payload via
 -- 'productRep'. No intermediate tuples — the walk composes the column
 -- decoders applicatively, so arity is unbounded.
 recordRow :: forall r. AllRowDecoder r => HasqlRow (Record r)

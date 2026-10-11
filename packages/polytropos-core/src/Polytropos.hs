@@ -20,7 +20,7 @@
 --
 -- This module provides the high-level, human-friendly API exports and pattern
 -- synonyms for @polytropos@. It encapsulates the underlying representations
--- (like 'SmallArray' and 'Rep') and presents a clean, ergonomic surface for
+-- (like 'Data.Primitive.SmallArray.SmallArray' and t'Polytropos.Core.Rep') and presents a clean, ergonomic surface for
 -- working with row-polymorphic records and variants.
 --
 -- = Worked Example
@@ -147,13 +147,13 @@ type Record (r :: Row) = RowRep Identity ProductRowT r ()
 
 -- | An open variant type, parametrised by a functor @f@ and a sum row @s@.
 --
--- A 'VariantF' is a single value that can be any one of the constructors
+-- A t'VariantF' is a single value that can be any one of the constructors
 -- defined in the sum row @s@, with each field slot wrapped in @f@.
 type VariantF (f :: Type -> Type) (s :: SumRowHKD f) = RowRep f SumRowHKDT s ()
 
 -- | An open variant type, parametrised by a sum row @s@ with bare field values (@f ~ Identity@).
 --
--- A 'Variant' is a single value that can be any one of the constructors
+-- A t'Variant' is a single value that can be any one of the constructors
 -- defined in the sum row @s@. Its memory layout is exactly identical to a
 -- 'Record', except the tag distinguishes which constructor is currently active.
 type Variant (s :: SumRow) = RowRep Identity SumRowT s ()
@@ -487,9 +487,10 @@ data REC_F = REC_F
 data VAR = VAR
   deriving (Show, Eq)
 
--- | Syntactic alias for 'VAR'.
+-- | Syntactic alias for v'VAR'.
 type VARIANT = VAR
 
+-- | Pattern synonym alias for v'VAR'.
 pattern VARIANT :: VAR
 pattern VARIANT = VAR
 

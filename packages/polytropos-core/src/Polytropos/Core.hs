@@ -19,7 +19,7 @@
 --
 -- 1. The /row vocabulary/: how products and sums are spelled at the type level
 --    (§1 of the note).
--- 2. The /generic representation/: @'Rep'@, a runtime tag plus a flat array of
+-- 2. The /generic representation/: @t'Rep'@, a runtime tag plus a flat array of
 --    payload slots (§2).
 -- 3. The /evidence classes/: @'RowEq'@ and @'RowShow'@, whose instance bodies
 --    are meant to be synthesised as literals by the TcPlugin (§5). They are
@@ -221,7 +221,7 @@ type family FieldTypes (f :: Type -> Type) (r :: k) :: [(Symbol, Type)]
 --
 -- Promoted by DataKinds: the types @ProductRowT@, @SumRowT@, @HandlerRowT@,
 -- @ResultRowT@ have kind @RowType@, and can be used as the row parameter of
--- 'RowRep' and the evidence classes.
+-- t'RowRep' and the evidence classes.
 data RowType
   = ProductRowT        -- ^ field name → field type
   | SumRowT            -- ^ constructor name → fieldrow
@@ -254,11 +254,11 @@ instance RowFlavour ProductRowHKDT where
 instance RowFlavour SumRowHKDT where
   type EntryKind SumRowHKDT = Pair Symbol Row
 
--- | A handlerrow entry: a handler type (see 'HandlerType').
+-- | A handlerrow entry: a handler type (see t'HandlerType').
 instance RowFlavour HandlerRowT where
   type EntryKind HandlerRowT = Pair Symbol Type
 
--- | A result-row entry: a result type (see 'ResultType').
+-- | A result-row entry: a result type (see t'ResultType').
 instance RowFlavour ResultRowT where
   type EntryKind ResultRowT = Pair Symbol Type
 
@@ -279,9 +279,17 @@ data HandlerType (n :: Symbol) (fs :: Row) (res :: Type) (m :: Type -> Type)
 data ResultType (n :: Symbol) (res :: Type)
   = ResultType
 
-{-------------------------------------------------------------------------------\n  §1c  The row-carrying wrapper (Case 3)\n\n  'Rep' stays erased (it does not know its row). The wrapper 'RowRep' carries\n  the row in its type, so that the evidence classes can work over 'RowRep'\n  without a 'Proxy' argument (obligation 4, design note §6).\n\n  See PHASE2_SKETCH.md, Piece 1, §1c.\n-------------------------------------------------------------------------------}
+{-------------------------------------------------------------------------------
+  §1c  The row-carrying wrapper (Case 3)
 
--- | Typed, row-carrying wrapper around 'Rep'.
+  t'Rep' stays erased (it does not know its row). The wrapper t'RowRep' carries
+  the row in its type, so that the evidence classes can work over t'RowRep'
+  without a 'Data.Proxy.Proxy' argument (obligation 4, design note §6).
+
+  See PHASE2_SKETCH.md, Piece 1, §1c.
+-------------------------------------------------------------------------------}
+
+-- | Typed, row-carrying wrapper around t'Rep'.
 --
 -- @f@ is the functor applied to each payload slot.
 -- @r@ is the row flavour (one of 'ProductRowT', 'SumRowT', etc.).
@@ -291,7 +299,7 @@ data ResultType (n :: Symbol) (res :: Type)
 -- At runtime this is exactly @Rep f a@ — a newtype with zero cost.
 data RowRep (f :: Type -> Type) (r :: RowType) (row :: k) a = RowRep (Rep f a)
 
--- | Extract the underlying 'Rep' from a 'RowRep'.
+-- | Extract the underlying t'Rep' from a t'RowRep'.
 unRowRep :: RowRep f r row a -> Rep f a
 unRowRep (RowRep r) = r
   -- Note: @k@ is a kind variable that allows any kind for the row data.
@@ -349,25 +357,25 @@ data MRep s (f :: Type -> Type) a = MRep
   {-# UNPACK #-} !Word
   !(SmallMutableArray s (f Any))
 
--- | Allocate a new mutable 'MRep' pre-initialized with a default payload.
+-- | Allocate a new mutable t'MRep' pre-initialized with a default payload.
 newMRep :: Word -> Int -> f Any -> ST s (MRep s f a)
 newMRep tag n defaultVal = do
   m <- newSmallArray n defaultVal
   pure (MRep tag m)
 
--- | Safely thaw an immutable 'Rep' into a mutable builder.
+-- | Safely thaw an immutable t'Rep' into a mutable builder.
 thawRep :: Rep f a -> ST s (MRep s f a)
 thawRep (Rep t v) = do
   m <- thawSmallArray v 0 (sizeofSmallArray v)
   pure (MRep t m)
 
--- | Safely thaw a sub-slice of an immutable 'Rep' into a mutable builder.
+-- | Safely thaw a sub-slice of an immutable t'Rep' into a mutable builder.
 thawRepSlice :: Rep f a -> Int -> Int -> ST s (MRep s f a)
 thawRepSlice (Rep t v) off len = do
   m <- thawSmallArray v off len
   pure (MRep t m)
 
--- | Safely freeze an ephemeral builder into an immutable 'Rep'.
+-- | Safely freeze an ephemeral builder into an immutable t'Rep'.
 freezeRep :: MRep s f a -> ST s (Rep f a)
 freezeRep (MRep t m) = do
   v <- unsafeFreezeSmallArray m
@@ -382,7 +390,7 @@ writeFieldsAt :: MRep s f a -> [(Int, f Any)] -> ST s ()
 writeFieldsAt (MRep _ m) updates =
   forM_ updates $ \(i, !x) -> writeSmallArray m i x
 
--- | Batch copy of a slice of fields from an immutable 'Rep' into an 'MRep'.
+-- | Batch copy of a slice of fields from an immutable t'Rep' into an t'MRep'.
 copyFieldsFrom :: Rep f a -> Int -> MRep s f a -> Int -> Int -> ST s ()
 copyFieldsFrom (Rep _ src) srcOff (MRep _ dst) dstOff len =
   copySmallArray dst dstOff src srcOff len
@@ -522,7 +530,7 @@ peelRep targetTag (Rep t v)
 
 -- | Field-wise equality for a product row.
 --
--- The method works over 'RowRep', so the row is in the type and no 'Proxy'
+-- The method works over t'RowRep', so the row is in the type and no 'Data.Proxy.Proxy'
 -- argument is needed (obligation 4, design note §6). A plugin will build the
 -- body by substituting literal slot indices and a literal element count, so
 -- there is no type-level search at the use site.
@@ -582,7 +590,7 @@ data Dict (c :: Type -> Constraint) (a :: Type) where
 data DictAny (c :: Type -> Constraint) where
   DictAny :: c Any => DictAny c
 
--- | Wrap a class dictionary into 'DictAny'.
+-- | Wrap a class dictionary into t'DictAny'.
 mkDictAny :: forall c a. c a => DictAny c
 mkDictAny = aux (noInlineUnsafeCo (Dict :: Dict c a) :: Dict c Any)
   where
@@ -768,7 +776,7 @@ class KnownHash (s :: Symbol) where
   knownHash = undefined
 
 -- | Ergonomic helper to extract the compile-time hash of a label via a proxy
--- (such as 'Field' or 'Data.Proxy.Proxy').
+-- (such as t'Field' or 'Data.Proxy.Proxy').
 labelHash :: forall (s :: Symbol) proxy. KnownHash s => proxy s -> Word
 labelHash _ = knownHash @s
 

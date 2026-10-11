@@ -26,15 +26,15 @@
 --
 -- A beam table is normally a Haskell record whose 'Beamable' instance is
 -- derived through GHC.Generics; the generic tree is what blows up compile
--- time on 50+ column tables. A @polytropos@ table is one flat 'SmallArray'
+-- time on 50+ column tables. A @polytropos@ table is one flat 'Data.Primitive.SmallArray.SmallArray'
 -- of payload slots, so 'zipBeamFieldsM' is a lockstep walk of two arrays —
 -- column count costs one array element, not one node of a generic tree —
 -- and 'tblSkeleton' is a spine built once per row arity.
 --
 -- = Shape
 --
--- 'BeamTable' is a zero-cost newtype around @'Polytropos.Core.RowRep' f
--- ProductRowT r ()@ with the column functor @f@ as its second parameter, so
+-- t'BeamTable' is a zero-cost newtype around @RowRep f ProductRowT r ()@
+-- with the column functor @f@ as its second parameter, so
 -- a table's columns are @Columnar f <field-i>@. The 'Beamable' instance is
 -- completely erased — it never names field types — so heterogeneous rows
 -- work exactly like homogeneous ones. Default column names come from the
@@ -80,7 +80,7 @@ instance (KnownSymbol n, FieldNames r) => FieldNames ((n ':= a) ': r) where
 
 -- | A @polytropos@ row presented as a beam table with column functor @f@.
 --
--- Zero cost: unwraps to exactly the same 'Polytropos.Core.Rep' spine as the
+-- Zero cost: unwraps to exactly the same t'Polytropos.Core.Rep' spine as the
 -- corresponding 'Record' (for @f ~ Identity@).
 newtype BeamTable (r :: Row) (f :: Type -> Type)
   = BeamTable (RowRep f ProductRowT r ())

@@ -7,9 +7,9 @@
 
 -- | GHC typechecker plugin for @polytropos@.
 --
--- Solves the evidence-class constraints (@'FieldIndex'@, @'ConstructorIndex'@,
--- @'RowEq'@, @'RowShow'@, @'RowEqSum'@, @'RowShowSum'@) by inspecting the row
--- carried in a @'RowRep'@'s type and emitting literal slot indices, tags, and
+-- Solves the evidence-class constraints (@FieldIndex@, @ConstructorIndex@,
+-- @RowEq@, @RowShow@, @RowEqSum@, @RowShowSum@) by inspecting the row
+-- carried in a @RowRep@'s type and emitting literal slot indices, tags, and
 -- comparison bodies — the same technique @large-anon@ uses for
 -- @DictRowHasField@.
 --
@@ -206,6 +206,7 @@ import Polytropos.Plugin.Source
 -- Plugin entry point
 -------------------------------------------------------------------------------
 
+-- | The polytropos GHC plugin entry point.
 plugin :: Plugin
 plugin = defaultPlugin
   { tcPlugin           = const $ Just $ mkTcPlugin polytroposPlugin

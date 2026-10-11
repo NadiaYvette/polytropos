@@ -124,7 +124,7 @@ import GHC.Driver.Plugins
   Top-Level Source Plugin Entry Point
 -------------------------------------------------------------------------------}
 
--- | Top-level entry point for GHC's 'parsedResultAction'.
+-- | Top-level entry point for GHC's @parsedResultAction@.
 sourcePlugin :: [CommandLineOption] -> ParsedResult -> Hsc ParsedResult
 sourcePlugin _opts res = do
   let pm = parsedResultModule res
@@ -162,7 +162,7 @@ everywhere f x = f (gmapT (everywhere f) x)
   Declaration Analysis (OpenRecord & OpenVariant discovery)
 -------------------------------------------------------------------------------}
 
--- | Scan declarations for 'OpenRecord' and 'OpenVariant' deriving clauses,
+-- | Scan declarations for @OpenRecord@ and @OpenVariant@ deriving clauses,
 -- record their names, and strip the clauses so GHC doesn't attempt stock deriving.
 extractAndCleanDeclarations :: [LHsDecl GhcPs] -> ([String], [String], [LHsDecl GhcPs])
 extractAndCleanDeclarations decls =

@@ -20,9 +20,9 @@
 -- Copyright   : (c) 2026 The Polytropos Authors
 -- License     : BSD-3-Clause
 --
--- Linear @O(N)@ 'ToJSON' and 'FromJSON' instances for 'Record' and 'Variant'
+-- Linear @O(N)@ 'A.ToJSON' and 'A.FromJSON' instances for 'Record' and t'Variant'
 -- without standard GHC.Generics compile slowdowns: the codecs unroll the
--- flat 'Polytropos.Core.Rep' payload directly into a JSON object and back,
+-- flat t'Polytropos.Core.Rep' payload directly into a JSON object and back,
 -- with no generic-representation tree anywhere.
 --
 -- = Encoding

@@ -47,6 +47,12 @@ All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
   `toRecord`/`fromRecord` and `columnsToRow`/`rowToColumns` roundtrips, and columnar combinators
   `hfield`, `hfieldAt`, `htabulate`, `hmap`, `htraverse`, `hzipWith`).
 - `polytropos-quickcheck-test` passes 9 tests (record and variant arbitrary generation and convergence shrinking).
+- **Haddock documentation:** All workspace packages build with 100% Haddock coverage and zero warnings under `cabal --jobs=20 haddock --haddock-for-hackage all`:
+  * Resolved missing link destinations (`KnownSymbol`, boot libraries) via `cabal.project` haddock options.
+  * Disambiguated type/value namespace collisions (`t'Rep'`, `t'RowRep'`, `t'MRep'`, `t'DictAny'`, `t'Field'`, `t'PolyRow'`, `t'Variant'`, `v'VAR'`, `pattern VARIANT`, `t'BeamTable'`, `t'PolyRowEntity'`).
+  * Qualified external symbols and fixed doc markdown code blocks (`SmallArray`, `ToJSON`/`FromJSON`, `ToField`/`FromField`, `ToNamedRecord`/`FromNamedRecord`, `Entity`, `Traversal`).
+  * Added complete module and function documentation across `Polytropos.Plugin` (`plugin`), `Polytropos.Generics`, and `Polytropos.Optics`.
+  * Verified 100% coverage across all 17 library modules with zero doc errors or unlinked symbols.
 
 ### Tooling Integration: Haskell Language Server (Completed & Verified)
 

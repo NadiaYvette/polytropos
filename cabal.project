@@ -31,3 +31,6 @@ constraints: any.aeson ==2.2.5.1
 -- 0.14.2 provides it and the valueParser API polytropos-hasql tests use).
 allow-newer: rel8:base, rel8-internal:base, rel8-internal:hasql, rel8-internal:postgresql-binary, opaleye:base, postgresql-simple:base, postgresql-simple:template-haskell, postgresql-simple:containers, hasql:postgresql-binary, postgresql-binary:base, postgresql-binary:containers, postgresql-binary:bytestring, postgresql-binary:text, postgresql-binary:time, postgresql-binary:vector, postgresql-binary:hashable, postgresql-binary:scientific, postgresql-binary:aeson, postgresql-binary:base16, postgresql-binary:bytestring-strict-tree, postgresql-binary:case-insensitive, postgresql-binary:crypton, postgresql-binary:dlist, postgresql-binary:iproute, postgresql-binary:network-ip, postgresql-binary:these, postgresql-binary:uuid-types
 constraints: any.hasql ==1.9.3.2, any.postgresql-binary ==0.14.2
+
+package *
+  haddock-options: -w

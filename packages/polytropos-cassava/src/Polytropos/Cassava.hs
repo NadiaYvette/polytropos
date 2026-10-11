@@ -20,14 +20,14 @@
 -- License     : BSD-3-Clause
 --
 -- Connects @polytropos@ open records to the standard Haskell CSV library
--- @cassava@ without intermediate nominal conversions: 'ToNamedRecord'
+-- @cassava@ without intermediate nominal conversions: 'Csv.ToNamedRecord'
 -- serializes field names and values straight from the flat
--- 'Polytropos.Core.Rep' payload, and 'FromNamedRecord' looks up each field
+-- t'Polytropos.Core.Rep' payload, and 'Csv.FromNamedRecord' looks up each field
 -- label in the CSV header map in O(1).
 --
 -- Unlike the aeson satellite, the codecs here are genuinely heterogeneous:
 -- the @AllFields c r@ constraint walks the row and requires the CSV field
--- class @c@ ('ToField' / 'FromField') at /each field's own type/, so a row
+-- class @c@ ('Csv.ToField' / 'Csv.FromField') at /each field's own type/, so a row
 -- mixing @Int@ and @Bool@ columns encodes and decodes correctly. No
 -- homogeneity evidence is needed.
 --

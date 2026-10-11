@@ -20,11 +20,11 @@
 -- License     : BSD-3-Clause
 --
 -- Integration of @polytropos@ open rows with Oliver Charles' @rel8@ PostgreSQL
--- framework. 'PolyRow r' is rel8's 'Rel8able' for the product row @r@; its
--- column schema is a right-nested 'HProduct' tree of 'HLabel'ed 'HIdentity'
+-- framework. @t'PolyRow' r@ is rel8's 'Rel8able' for the product row @r@; its
+-- column schema is a right-nested 'H.HProduct' tree of 'H.HLabel'ed 'H.HIdentity'
 -- columns built directly from the row's type-level field list.
 --
--- The flat 'SmallArray' payload of the underlying 'Rep' is read and written
+-- The flat 'SmallArray' payload of the underlying t'Rep' is read and written
 -- slot by slot — one slot per column, in row order — so conversion to and from
 -- rel8's columnar representation never materialises an intermediate tuple and
 -- is unbounded in arity.
@@ -96,15 +96,15 @@ import Polytropos.Core
   Schema: row -> HTable (closed type family)
 -------------------------------------------------------------------------------}
 
--- | Map a polytropos product row to rel8's HTable: a right-nested 'HProduct'
--- tree of 'HLabel'ed 'HIdentity' columns, one per field, named by the field's
--- 'Symbol'.
+-- | Map a polytropos product row to rel8's HTable: a right-nested 'H.HProduct'
+-- tree of 'H.HLabel'ed 'H.HIdentity' columns, one per field, named by the field's
+-- 'GHC.TypeLits.Symbol'.
 type RowHTable :: Row -> K.HTable
 type family RowHTable r where
   RowHTable '[n ':= a] = H.HLabel n (H.HIdentity a)
   RowHTable (n ':= a ': r) = H.HProduct (H.HLabel n (H.HIdentity a)) (RowHTable r)
 
--- | Constraint: every field label is a 'KnownSymbol' and its type is a PostgreSQL
+-- | Constraint: every field label has a 'GHC.TypeLits.KnownSymbol' instance and its type is a PostgreSQL
 -- 'Sql' 'DBType'.
 type AllSql :: Row -> Constraint
 type family AllSql r where
@@ -125,7 +125,7 @@ class (AllSql r, H.HTable (RowHTable r)) => Rel8ableRow (r :: Row) where
   -- | Unroll the nested HTable tree into a list of erased column context slots.
   fromHTable :: forall context. RowHTable r context -> [context Any]
 
-  -- | Lift column values at 'Result' (Identity) into PostgreSQL expressions ('Expr').
+  -- | Lift column values at 'Result' (t'Data.Functor.Identity.Identity') into PostgreSQL expressions ('Expr').
   litHTable :: RowHTable r Result -> RowHTable r Expr
 
   -- | Arity (number of columns).
@@ -159,16 +159,16 @@ instance (KnownSymbol n, Sql DBType a, Rel8ableRow (r1 ': rs)) => Rel8ableRow (n
 -- | A rel8 table row backed by an open polytropos product row @r@.
 --
 -- The newtype is polymorphic in the rel8 context functor @context@ so that rel8
--- can use the same 'Rel8able' at 'Result', 'Expr', 'Name', etc.
+-- can use the same 'Rel8able' at 'Result', 'Expr', 'Rel8.Name', etc.
 newtype PolyRow (r :: Row) (context :: Type -> Type) = PolyRow
   { unPolyRow :: RowRep context 'ProductRowT r ()
   }
 
--- | Convert a 'PolyRow r Result' to a polytropos 'Record r'.
+-- | Convert a @t'PolyRow' r 'Result'@ to a polytropos @'Record' r@.
 toRecord :: PolyRow r Result -> Record r
 toRecord (PolyRow rep) = rep
 
--- | Wrap a polytropos 'Record r' as a 'PolyRow r Result'.
+-- | Wrap a polytropos @'Record' r@ as a @t'PolyRow' r 'Result'@.
 fromRecord :: Record r -> PolyRow r Result
 fromRecord rep = PolyRow rep
 
@@ -195,11 +195,11 @@ instance Rel8ableRow r => Rel8able (PolyRow r) where
   Identity / Result round-trip entry points
 -------------------------------------------------------------------------------}
 
--- | Pack a 'Record r' into its rel8 column tree at 'Identity'.
+-- | Pack a @'Record' r@ into its rel8 column tree at t'Data.Functor.Identity.Identity'.
 rowToColumns :: forall r. Rel8ableRow r => Record r -> RowHTable r Identity
 rowToColumns (RowRep (Rep _ arr)) = fst (toHTable @r arr 0)
 
--- | Unpack rel8 columns (at 'Identity') back into a 'Record r'.
+-- | Unpack rel8 columns (at t'Data.Functor.Identity.Identity') back into a @'Record' r@.
 columnsToRow :: forall r. Rel8ableRow r => RowHTable r Identity -> Record r
 columnsToRow cols = RowRep (Rep 0 (smallArrayFromList (fromHTable @r cols)))
 
@@ -207,14 +207,14 @@ columnsToRow cols = RowRep (Rep 0 (smallArrayFromList (fromHTable @r cols)))
   Lifting to SQL Expressions
 -------------------------------------------------------------------------------}
 
--- | Lift a 'PolyRow r Result' to a 'PolyRow r Expr'.
+-- | Lift a @t'PolyRow' r 'Result'@ to a @t'PolyRow' r 'Expr'@.
 litPolyRow :: forall r. Rel8ableRow r => PolyRow r Result -> PolyRow r Expr
 litPolyRow (PolyRow (RowRep (Rep _ arr))) =
   let (resCols, _) = toHTable @r arr 0
       exprCols = litHTable @r resCols
   in PolyRow (RowRep (Rep 0 (smallArrayFromList (fromHTable @r exprCols))))
 
--- | Lift a polytropos 'Record r' directly into a 'PolyRow r Expr'.
+-- | Lift a polytropos @'Record' r@ directly into a @t'PolyRow' r 'Expr'@.
 litRecord :: forall r. Rel8ableRow r => Record r -> PolyRow r Expr
 litRecord = litPolyRow . fromRecord
 
@@ -228,11 +228,11 @@ hfield :: forall name r context a. FieldIndex name r a
 hfield _ (PolyRow (RowRep (Rep _ arr))) =
   unsafeCoerce (indexSmallArray arr (fieldIndex @_ @name @r @a))
 
--- | Read a field at a slot index from a 'PolyRow'.
+-- | Read a field at a slot index from a t'PolyRow'.
 hfieldAt :: Int -> PolyRow r context -> context Any
 hfieldAt i (PolyRow (RowRep (Rep _ arr))) = indexSmallArray arr i
 
--- | Build a 'PolyRow' by evaluating a generator across each column slot.
+-- | Build a t'PolyRow' by evaluating a generator across each column slot.
 htabulate :: forall r context. Rel8ableRow r
   => (Int -> context Any) -> PolyRow r context
 htabulate f =
@@ -240,7 +240,7 @@ htabulate f =
       vals = [f i | i <- [0 .. n - 1]]
   in PolyRow (RowRep (Rep 0 (smallArrayFromList vals)))
 
--- | Map a natural transformation across all columns in a 'PolyRow'.
+-- | Map a natural transformation across all columns in a t'PolyRow'.
 hmap :: forall r f g. Rel8ableRow r
   => (forall a. f a -> g a) -> PolyRow r f -> PolyRow r g
 hmap f (PolyRow (RowRep (Rep _ arr))) =
@@ -248,7 +248,7 @@ hmap f (PolyRow (RowRep (Rep _ arr))) =
       vals = [unsafeCoerce (f (unsafeCoerce (indexSmallArray arr i))) | i <- [0 .. n - 1]]
   in PolyRow (RowRep (Rep 0 (smallArrayFromList vals)))
 
--- | Traverse all columnar fields in a 'PolyRow'.
+-- | Traverse all columnar fields in a t'PolyRow'.
 htraverse :: forall r f g m. (Applicative m, Rel8ableRow r)
   => (forall a. f a -> m (g a)) -> PolyRow r f -> m (PolyRow r g)
 htraverse f (PolyRow (RowRep (Rep _ arr))) =

@@ -30,8 +30,8 @@
 --
 -- 'PersistField (Record r)' lets a whole record travel through
 -- persistent's value machinery as a 'PersistList' (a nested-column
--- analogue), and 'PolyRowEntity' pairs an integer key with a record in the
--- shape of persistent's 'Entity', marshalling to the
+-- analogue), and t'PolyRowEntity' pairs an integer key with a record in the
+-- shape of persistent's 'Database.Persist.Entity', marshalling to the
 -- key-then-fields row layout backends use for @Entity@ rows.
 module Polytropos.Persistent
   ( -- * Row marshalling
@@ -116,7 +116,7 @@ instance PersistRow r => PersistField (Record r) where
   fromPersistValue (PersistList vs) = fromPersistValuesRecord vs
   fromPersistValue v = Left (T.pack ("polytropos-persistent: expected PersistList, got " ++ show v))
 
--- | Key-plus-record wrapper in the shape of persistent's 'Entity' for a
+-- | Key-plus-record wrapper in the shape of persistent's 'Database.Persist.Entity' for a
 -- record table: an integer key followed by the record's field values.
 data PolyRowEntity (r :: Row) = PolyRowEntity
   { polyRowKey    :: Int64

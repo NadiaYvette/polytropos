@@ -21,20 +21,20 @@
 -- = What this module provides
 --
 --  * Positional lenses: 'Field1' through 'Field9' instances on product
---    records, so @rec '^.' '_1@ and @rec '^.' '_2@ read the first and second
+--    records, so @rec ^. _1@ and @rec ^. _2@ read the first and second
 --    slots by position (from @"Control.Lens"@).
 --  * Container classes: 'Ixed' and 'At' instances keyed by field name, so
---    @rec '^? 'ix' "x"@ and @rec '^.' 'at' "x"@ address fields by symbol name
+--    @rec ^? ix "x"@ and @rec ^. at "x"@ address fields by symbol name
 --    (homogeneous records only; see 'AllFieldsAre').
 --  * A homogeneous traversal: the 'Each' instance over records whose fields
 --    all have the same type.
 --  * Profunctor prisms on sum variants: 'prismVariant' builds a
---    @'Prism'' ('Variant' s) ('Record' fs)@ for one constructor.
+--    @Prism' (Variant s) (Record fs)@ for one constructor.
 --  * 'fieldLens': a lens to one field by name, with the slot index supplied
 --    as a literal by the @polytropos-plugin@.
 --
 -- The positional and name-based instances are all @O(1)@ reads and @O(N)@
--- copy-on-write updates over the flat 'Polytropos.Core.Rep' payload; there is
+-- copy-on-write updates over the flat t'Polytropos.Core.Rep' payload; there is
 -- no generic-representation tree anywhere.
 module Polytropos.Lens
   ( -- * Field lenses by name
@@ -152,8 +152,7 @@ instance Field9 (Record ((n1 ':= a1) ': (n2 ':= a2) ': (n3 ':= a3) ': (n4 ':= a4
   Homogeneous traversal: Each
 -------------------------------------------------------------------------------}
 
--- | @'each' :: 'AllFieldsAre' a r => 'Traversal' ('Record' ((n ':= a) ': r))
--- ('Record' ((n ':= a) ': r)) a a@
+-- | @each :: AllFieldsAre a r => Traversal (Record ((n ':= a) ': r)) ('Record' ((n ':= a) ': r)) a a@
 --
 -- The instance head fixes the element type to the row's field type, which is
 -- what the @Each@ functional dependencies require: for a row-typed record the
@@ -172,7 +171,7 @@ instance AllFieldsAre a r
   Container classes: Ixed and At, keyed by field name
 -------------------------------------------------------------------------------}
 
--- | @'ix' :: 'String' -> 'Traversal'' ('Record' r) ('RowField' r)@
+-- | @ix :: String -> Traversal' (Record r) (RowField r)@
 --
 -- Field access by symbol name for /homogeneous/ records: the name is resolved
 -- at runtime against the reified 'fieldNames' of the row, an @O(N)@ scan, and
@@ -227,7 +226,7 @@ fieldLens _ f (RowRep rep) =
 --
 -- @
 -- 'prismVariant' (Field \@\"Some\") :: 'ConstructorIndex' \"Some\" s
---                                => 'Prism'' ('Variant' s) ('Record' fs)
+--                                => 'Prism'' (t'Variant' s) ('Record' fs)
 -- @
 --
 -- Built from 'Polytropos.injectVariant' and 'Polytropos.Core.projectRep': the

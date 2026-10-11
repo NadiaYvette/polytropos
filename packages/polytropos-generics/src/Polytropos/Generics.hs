@@ -11,6 +11,9 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 
+-- | Generic deriving and conversion for polytropos.
+--
+-- Bridges nominal Haskell ADTs to and from polytropos t'Polytropos.Core.Rep'.
 module Polytropos.Generics (
     Generic(..)
   , I(..)
@@ -35,16 +38,16 @@ import Polytropos.Core
   , noInlineUnsafeCo
   )
 
--- | Identity functor for use with 'Rep'.
+-- | Identity functor for use with t'Polytropos.Core.Rep'.
 newtype I a = I { unI :: a }
 
--- | Generic conversion class. Bridges nominal ADTs to 'Rep'.
+-- | Generic conversion class. Bridges nominal ADTs to t'Polytropos.Core.Rep'.
 class Generic a where
   type RepOf a :: Type
   from :: a -> RepOf a
   to   :: RepOf a -> a
 
--- | Provides an array of constraint dictionaries for each constructor of 'a',
+-- | Provides an array of constraint dictionaries for each constructor of @a@,
 -- and for each field within that constructor.
 class GInstances (c :: Type -> Constraint) a where
   gdicts :: SmallArray (SmallArray (DictAny c))

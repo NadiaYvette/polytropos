@@ -25,7 +25,7 @@
 --
 -- 'Arbitrary (Record r)' generates each field value via that field's own
 -- 'Arbitrary' instance (the walk is heterogeneous: rows may mix field
--- types) and packs the results straight into the contiguous 'SmallArray'
+-- types) and packs the results straight into the contiguous 'Data.Primitive.SmallArray.SmallArray'
 -- payload — no intermediate tuples or generic-representation trees.
 --
 -- Shrinking is slot-indexed: each field slot is shrunk independently, one

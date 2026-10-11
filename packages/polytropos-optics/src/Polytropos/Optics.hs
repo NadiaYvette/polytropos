@@ -11,6 +11,15 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
+-- |
+-- Module      : Polytropos.Optics
+-- Description : optics-core integration for polytropos open records and variants
+-- Copyright   : (c) 2026 The Polytropos Authors
+-- License     : BSD-3-Clause
+--
+-- Integration between @polytropos@ and the @optics@ \/ @optics-core@ library.
+-- Provides Van Laarhoven lenses for fields, prisms for variant constructors,
+-- and 'LabelOptic' instances for overloaded label integration.
 module Polytropos.Optics (
     fieldLens
   , ctorOptic
@@ -24,6 +33,7 @@ import GHC.Records
 import Unsafe.Coerce
 import Data.Functor.Identity
 
+-- | Van Laarhoven lens for a record field specified by label.
 fieldLens :: forall n r a. FieldIndex n r a => Field n -> LensVL (Record r) (Record r) a a
 fieldLens _ f (RowRep r) =
   fmap (\a' -> RowRep (setFieldAt (fieldIndex @_ @n @r @a) (Identity (unsafeCoerce a')) r))
@@ -33,6 +43,7 @@ instance {-# OVERLAPPING #-} (KnownSymbol n, HasField n (Record r) field, FieldI
       => LabelOptic n A_Lens (Record r) (Record r) a b where
   labelOptic = lensVL (fieldLens (Field @n))
 
+-- | Prism optic for a variant constructor specified by label.
 ctorOptic :: forall c s fs. ConstructorIndex c s => Field c -> Optic A_Prism NoIx (Variant s) (Variant s) (Record fs) (Record fs)
 ctorOptic f = prism' (injectVariant f) project
   where

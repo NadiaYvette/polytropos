@@ -23,7 +23,7 @@
 -- A record encodes as a CBOR array: one length header (the row's arity)
 -- followed by the flat payload field encodings in row order. A variant
 -- encodes as a CBOR array of the constructor's Word tag followed by that
--- constructor's payload field encodings — mirroring the runtime 'Rep'
+-- constructor's payload field encodings — mirroring the runtime t'Polytropos.Core.Rep'
 -- layout itself, so encoding is a single pass over the slot array with no
 -- intermediate structure. This is the binary counterpart of the
 -- single-member tagged object shape the aeson satellite uses on the wire.
