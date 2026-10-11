@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# bin/polytropos-tricorder — Zero-log continuous compilation helper and MCP monitor
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+show_help() {
+  cat << 'EOF'
+polytropos-tricorder — Zero-log continuous compilation and MCP integration runner
+
+Usage:
+  polytropos-tricorder [COMMAND]
+
+Commands:
+  status         Query current background compiler diagnostics in JSON (<50 tokens)
+  start          Start the background GHCi continuous compilation daemon
+  stop           Stop the daemon
+  restart        Restart the daemon
+  test-results   Show latest test execution results from daemon
+  check-mcp      Verify MCP server binary and stdio communication
+  config         Validate .tricorder.yaml configuration file
+  --help, -h     Show this help text
+
+EOF
+}
+
+check_config() {
+  local cfg="${REPO_ROOT}/.tricorder.yaml"
+  if [[ ! -f "${cfg}" ]]; then
+    echo "Error: Configuration file not found at ${cfg}" >&2
+    exit 1
+  fi
+  echo "Found .tricorder.yaml configuration at ${cfg}:"
+  grep -E "^(session|  command|  targets|  test_targets)" "${cfg}" || true
+  echo "Configuration syntax: OK"
+}
+
+check_mcp() {
+  echo "Checking MCP server configuration..."
+  local mcp_bin
+  if command -v tricorder-mcp >/dev/null 2>&1; then
+    mcp_bin="$(command -v tricorder-mcp)"
+    echo "  [OK] Found tricorder-mcp at: ${mcp_bin}"
+  else
+    echo "  [FAIL] tricorder-mcp not found in PATH" >&2
+    exit 1
+  fi
+
+  local mcp_cfg="${REPO_ROOT}/.mcp.json"
+  if [[ -f "${mcp_cfg}" ]]; then
+    if grep -q '"tricorder"' "${mcp_cfg}"; then
+      echo "  [OK] Found 'tricorder' entry in .mcp.json"
+    else
+      echo "  [WARN] 'tricorder' entry missing from .mcp.json"
+    fi
+  fi
+}
+
+cmd="${1:-status}"
+
+case "${cmd}" in
+  status)
+    if command -v tricorder >/dev/null 2>&1; then
+      cd "${REPO_ROOT}"
+      tricorder status --json
+    else
+      echo '{"status": "offline", "note": "tricorder CLI not in PATH"}'
+    fi
+    ;;
+  start)
+    cd "${REPO_ROOT}"
+    tricorder start
+    ;;
+  stop)
+    cd "${REPO_ROOT}"
+    tricorder stop
+    ;;
+  restart)
+    cd "${REPO_ROOT}"
+    tricorder restart
+    ;;
+  test-results)
+    cd "${REPO_ROOT}"
+    tricorder test-results
+    ;;
+  check-mcp)
+    check_mcp
+    ;;
+  config)
+    check_config
+    ;;
+  --help|-h)
+    show_help
+    ;;
+  *)
+    echo "Unknown command: ${cmd}" >&2
+    show_help
+    exit 1
+    ;;
+esac

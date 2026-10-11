@@ -1,0 +1,26 @@
+-- | Synquid Specification: Width Subtyping Record Adapter Synthesis
+--
+-- Given an open source record SuperRec and a target projection SubRec,
+-- type-directed synthesis generates the exact projection function.
+
+data SuperRec where
+  SuperRec :: id: Int -> name: Int -> age: Int -> email: Int -> SuperRec
+
+measure superId :: SuperRec -> Int where
+  SuperRec id name age email -> id
+
+measure superAge :: SuperRec -> Int where
+  SuperRec id name age email -> age
+
+data SubRec where
+  SubRec :: id: Int -> age: Int -> SubRec
+
+measure subId :: SubRec -> Int where
+  SubRec id age -> id
+
+measure subAge :: SubRec -> Int where
+  SubRec id age -> age
+
+-- Synthesize width subtyping projection adapter
+adaptSubRow :: r: SuperRec -> {SubRec | subId _v == superId r && subAge _v == superAge r}
+adaptSubRow = ??

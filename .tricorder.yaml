@@ -1,0 +1,15 @@
+session:
+  command: cabal repl --enable-multi-repl
+  targets:
+    - lib:polytropos-core
+    - lib:polytropos-plugin
+  test_targets:
+    - test:polytropos-core-test
+  watch_dirs:
+    - packages/polytropos-core/src
+    - packages/polytropos-core/test
+    - packages/polytropos-plugin/src
+    - packages/polytropos-plugin/test
+  repl_build_dir: dist-newstyle/tricorder
+  test_timeout: 15
+  idle_timeout_seconds: 600

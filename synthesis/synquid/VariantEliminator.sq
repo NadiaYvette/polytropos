@@ -1,0 +1,33 @@
+-- | Synquid Specification: Variant Eliminator Dispatch Synthesis
+--
+-- Given an open variant with 3 branches and corresponding branch handlers,
+-- synthesize exhaustive and total elimination dispatch logic.
+
+data Variant3 where
+  BranchA :: valA: Int -> Variant3
+  BranchB :: valB: Int -> Variant3
+  BranchC :: valC: Int -> Variant3
+
+measure tagOf :: Variant3 -> Int where
+  BranchA a -> 0
+  BranchB b -> 1
+  BranchC c -> 2
+
+data Result where
+  Result :: code: Int -> payload: Int -> Result
+
+measure resPayload :: Result -> Int where
+  Result c p -> p
+
+measure resCode :: Result -> Int where
+  Result c p -> c
+
+-- Synthesize total variant eliminator dispatch
+eliminateVariant3 :: v: Variant3
+                  -> onA: (a: Int -> {Result | resCode _v == 100 && resPayload _v == a})
+                  -> onB: (b: Int -> {Result | resCode _v == 200 && resPayload _v == b})
+                  -> onC: (c: Int -> {Result | resCode _v == 300 && resPayload _v == c})
+                  -> {Result | (tagOf v == 0 ==> resCode _v == 100) &&
+                               (tagOf v == 1 ==> resCode _v == 200) &&
+                               (tagOf v == 2 ==> resCode _v == 300)}
+eliminateVariant3 = ??

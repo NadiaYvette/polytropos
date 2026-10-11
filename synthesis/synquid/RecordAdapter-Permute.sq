@@ -1,0 +1,32 @@
+-- | Synquid Specification: Field Permutation Record Adapter Synthesis
+--
+-- Given a record with fields in order XYZ, synthesize the permutation
+-- mapping it to order ZYX while preserving values.
+
+data RecXYZ where
+  RecXYZ :: x: Int -> y: Int -> z: Int -> RecXYZ
+
+measure getX :: RecXYZ -> Int where
+  RecXYZ x y z -> x
+
+measure getY :: RecXYZ -> Int where
+  RecXYZ x y z -> y
+
+measure getZ :: RecXYZ -> Int where
+  RecXYZ x y z -> z
+
+data RecZYX where
+  RecZYX :: z: Int -> y: Int -> x: Int -> RecZYX
+
+measure getZ' :: RecZYX -> Int where
+  RecZYX z y x -> z
+
+measure getY' :: RecZYX -> Int where
+  RecZYX z y x -> y
+
+measure getX' :: RecZYX -> Int where
+  RecZYX z y x -> x
+
+-- Synthesize permutation adapter
+permuteFields :: r: RecXYZ -> {RecZYX | getX' _v == getX r && getY' _v == getY r && getZ' _v == getZ r}
+permuteFields = ??

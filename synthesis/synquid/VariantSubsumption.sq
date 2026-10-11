@@ -1,0 +1,27 @@
+-- | Synquid Specification: Variant Widening & Subsumption Synthesis
+--
+-- Given a sub-variant SmallVariant and a super-variant LargeVariant,
+-- synthesize the widening injection function preserving constructor tags.
+
+data SmallVariant where
+  SmallA :: a: Int -> SmallVariant
+  SmallB :: b: Int -> SmallVariant
+
+measure smallTag :: SmallVariant -> Int where
+  SmallA a -> 0
+  SmallB b -> 1
+
+data LargeVariant where
+  LargeA :: a: Int -> LargeVariant
+  LargeB :: b: Int -> LargeVariant
+  LargeC :: c: Int -> LargeVariant
+
+measure largeTag :: LargeVariant -> Int where
+  LargeA a -> 0
+  LargeB b -> 1
+  LargeC c -> 2
+
+-- Synthesize variant widening function
+widenVariant :: v: SmallVariant -> {LargeVariant | (smallTag v == 0 ==> largeTag _v == 0) &&
+                                                   (smallTag v == 1 ==> largeTag _v == 1)}
+widenVariant = ??

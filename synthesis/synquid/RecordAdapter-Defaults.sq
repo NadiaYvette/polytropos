@@ -1,0 +1,36 @@
+-- | Synquid Specification: Record Extension with Default Values Synthesis
+--
+-- Given a partial record configuration, synthesize an adapter extending it
+-- into a complete configuration with defaulted optional fields.
+
+data PartialConfig where
+  PartialConfig :: host: Int -> port: Int -> PartialConfig
+
+measure getHost :: PartialConfig -> Int where
+  PartialConfig host port -> host
+
+measure getPort :: PartialConfig -> Int where
+  PartialConfig host port -> port
+
+data FullConfig where
+  FullConfig :: host: Int -> port: Int -> timeout: Int -> retries: Int -> FullConfig
+
+measure fullHost :: FullConfig -> Int where
+  FullConfig host port timeout retries -> host
+
+measure fullPort :: FullConfig -> Int where
+  FullConfig host port timeout retries -> port
+
+measure fullTimeout :: FullConfig -> Int where
+  FullConfig host port timeout retries -> timeout
+
+measure fullRetries :: FullConfig -> Int where
+  FullConfig host port timeout retries -> retries
+
+-- Synthesize configuration adapter extending partial config with defaults
+extendWithDefaults :: p: PartialConfig -> defTimeout: Int -> defRetries: Int ->
+  {FullConfig | fullHost _v == getHost p &&
+                fullPort _v == getPort p &&
+                fullTimeout _v == defTimeout &&
+                fullRetries _v == defRetries}
+extendWithDefaults = ??

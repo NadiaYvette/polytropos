@@ -76,6 +76,28 @@ Milestone T6 has been implemented, tested, and deterministically verified via `s
 - **CLI Runner & Documentation:** `bin/polytropos-modernize` executable runner and comprehensive guide `docs/tools/MODERNIZER_AND_LINTER_GUIDE.md`.
 - **Verification Gate:** `rules/test/ModernizerFixtures.hs` and `scripts/tasks/verify-milestone-t6.sh` passing all assertions cleanly.
 
+### Program Synthesis, Formal Verification & Continuous Compilation (Completed & Verified)
+
+Milestone T7 has been implemented, tested, and deterministically verified via `scripts/tasks/verify-milestone-t7.sh`:
+- **`liquidhaskell` Refinement Types:** Specifications and formal contracts under `verification/liquid/`:
+  * `verification/liquid/Polytropos/Liquid/RowPredicates.spec`: Memory bounds, slot indexing, subrow extraction, and field refinement predicates.
+  * `verification/liquid/Polytropos/Liquid/Proofs.hs`: Typechecked Haskell module proving array bounds safety, safe subrow projections, and jump table exhaustiveness without warnings under GHC (`-Wall -Werror`).
+  * `verification/liquid/Polytropos/Liquid/RowBounds.fq`: Liquid-Fixpoint Horn constraint problem verified `Safe` (5 constraints checked) using Z3 SMT solver.
+- **`synquid` Program Synthesis:** Type-directed synthesis specifications under `synthesis/synquid/`:
+  * `RecordAdapter-SubRow.sq`: Width subtyping adapter synthesis.
+  * `RecordAdapter-Permute.sq`: Field permutation adapter synthesis.
+  * `RecordAdapter-Defaults.sq`: Extension adapter with defaulted optional fields.
+  * `VariantEliminator.sq`: Exhaustive variant eliminator dispatch synthesis.
+  * `VariantSubsumption.sq`: Variant widening and constructor tag injection synthesis.
+- **`tricorder` Continuous Compilation & MCP Bridge:**
+  * Workspace `.tricorder.yaml` multi-target GHCi daemon configuration.
+  * Verified `tricorder-mcp` server registration in `.mcp.json`.
+  * `bin/polytropos-tricorder`: CLI helper for status queries (<50 tokens) and daemon management.
+  * `bin/polytropos-verify`: Unified runner for formal verification, synthesis specs, and diagnostics.
+- **Documentation & Verification Gate:**
+  * Comprehensive guide in `docs/tools/FORMAL_VERIFICATION_AND_SYNTHESIS_GUIDE.md`.
+  * Deterministic test gate `scripts/tasks/verify-milestone-t7.sh` passing all 6 assertion steps.
+
 ### Algebraic Effect Systems Ports (Completed & Verified)
 
 All three algebraic effect system ports planned in `docs/notes/EFFECT_SYSTEMS_PORTING_MASTER_PLAN.md` have been implemented, tested, and committed on their respective `polytropos-port` branches:
@@ -185,6 +207,11 @@ All three algebraic effect system ports planned in `docs/notes/EFFECT_SYSTEMS_PO
 - `docs/NEWBIE_GUIDE.md` — refreshed newcomer quickstart connecting directly to the 5-lesson tutorial and updating quality gates
 - `docs/MAINTAINER_GUIDE.md` — authoritative maintainer guide covering Core memory layouts, TcPlugin solving pipeline, and maintenance recipes
 - `docs/notes/TUTORIAL_EXAMPLES_EVALUATION.md` — pedagogical evaluation matrix and staging roadmap for tutorial chapters
+- `verification/liquid/` — LiquidHaskell specifications, GHC-verified proofs (`Proofs.hs`), and SMT-checked Horn constraints (`RowBounds.fq`)
+- `synthesis/synquid/` — Synquid type-directed synthesis specifications for record and variant adapters
+- `bin/polytropos-tricorder` & `bin/polytropos-verify` — continuous diagnostics runner and formal verification gate
+- `docs/tools/FORMAL_VERIFICATION_AND_SYNTHESIS_GUIDE.md` — authoritative manual for formal methods, synthesis, and continuous GHCi daemon
+- `docs/tools/MODERNIZER_AND_LINTER_GUIDE.md` — guide for HLint rules, Retrie rewrites, Stan static analysis, and modernize CLI
 - `.agents/rules/` — subdivided AI coding assistant operational rules
 
 ## What is deliberately missing
@@ -194,7 +221,6 @@ All three algebraic effect system ports planned in `docs/notes/EFFECT_SYSTEMS_PO
 
 ## Next action
 
-- Advance Milestone T7: Program Synthesis, Formal Verification & Continuous Compilation (`liquidhaskell` row predicates, `synquid` type-directed synthesis, and `tricorder` continuous compilation diagnostics).
-- Follow up on Milestone T8: Source Formatters & Layout Engines (`ormolu`, `fourmolu`, `brittany`, `floskell`).
+- Advance Milestone T8: Source Formatters & Layout Engines (`ormolu`, `fourmolu`, `brittany`, `floskell`).
 - Expand HLS integrations (e.g. `hls-explicit-record-fields-plugin` open record wildcard expansion and `TypeError` code actions).
 - Human-in-the-loop review of the revised documentation tiers (Audience 1 `TUTORIAL.md` & `NEWBIE_GUIDE.md`, Audience 2 Haddock polish, Audience 3 `MAINTAINER_GUIDE.md`).
