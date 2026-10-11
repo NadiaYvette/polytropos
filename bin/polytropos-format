@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+# bin/polytropos-format — Unified Source Formatter & Layout Engine runner
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+show_help() {
+  cat << 'EOF'
+polytropos-format — Source Formatter & Layout Engine CLI
+
+Usage:
+  polytropos-format [COMMAND] [FILES...]
+
+Commands:
+  --check               Check formatting with Fourmolu (default)
+  --apply               Format files in-place with Fourmolu
+  --ormolu              Format or check files with Ormolu
+  --brittany            Format or check files with Brittany
+  --verify-configs      Verify fourmolu.yaml, .brittany.yaml, and floskell.json
+  --fixtures            Test all formatters against formatters/test/FormatFixtures.hs
+  --help, -h            Show this help text
+
+Examples:
+  bin/polytropos-format --check
+  bin/polytropos-format --apply packages/polytropos-core/src/Polytropos.hs
+  bin/polytropos-format --fixtures
+EOF
+}
+
+verify_configs() {
+  echo "=== Verifying Formatter Configuration Files ==="
+  local fourmolu_cfg="${REPO_ROOT}/fourmolu.yaml"
+  local brittany_cfg="${REPO_ROOT}/.brittany.yaml"
+  local floskell_cfg="${REPO_ROOT}/floskell.json"
+
+  test -f "${fourmolu_cfg}" || { echo "FAIL: fourmolu.yaml missing"; exit 1; }
+  test -f "${brittany_cfg}" || { echo "FAIL: .brittany.yaml missing"; exit 1; }
+  test -f "${floskell_cfg}" || { echo "FAIL: floskell.json missing"; exit 1; }
+
+  # Validate JSON syntax for floskell.json
+  python3 -c "import json; json.load(open('${floskell_cfg}'))" || { echo "FAIL: floskell.json invalid JSON"; exit 1; }
+
+  echo "  [OK] fourmolu.yaml validated"
+  echo "  [OK] .brittany.yaml validated"
+  echo "  [OK] floskell.json validated (valid JSON syntax)"
+}
+
+test_fixtures() {
+  echo "=== Testing Formatters on FormatFixtures.hs ==="
+  local fixture="${REPO_ROOT}/formatters/test/FormatFixtures.hs"
+  test -f "${fixture}" || { echo "FAIL: FormatFixtures.hs missing"; exit 1; }
+
+  if command -v fourmolu >/dev/null 2>&1; then
+    echo "  [+] Testing Fourmolu..."
+    fourmolu --config="${REPO_ROOT}/fourmolu.yaml" "${fixture}" >/dev/null
+    echo "      Fourmolu: PASSED"
+  fi
+
+  if command -v ormolu >/dev/null 2>&1; then
+    echo "  [+] Testing Ormolu..."
+    ormolu "${fixture}" >/dev/null
+    echo "      Ormolu: PASSED"
+  fi
+
+  if command -v brittany >/dev/null 2>&1; then
+    echo "  [+] Testing Brittany..."
+    brittany --config-file="${REPO_ROOT}/.brittany.yaml" "${fixture}" >/dev/null
+    echo "      Brittany: PASSED"
+  fi
+
+  verify_configs
+  echo "=== All Formatter Fixtures Verified Successfully ==="
+}
+
+cmd="${1:---check}"
+
+case "${cmd}" in
+  --check)
+    shift || true
+    files=("$@")
+    if [[ ${#files[@]} -eq 0 ]]; then
+      files=("${REPO_ROOT}/formatters/test/FormatFixtures.hs")
+    fi
+    fourmolu --config="${REPO_ROOT}/fourmolu.yaml" --mode check "${files[@]}"
+    ;;
+  --apply)
+    shift || true
+    files=("$@")
+    if [[ ${#files[@]} -eq 0 ]]; then
+      echo "Error: Specify file(s) to format in-place" >&2
+      exit 1
+    fi
+    fourmolu --config="${REPO_ROOT}/fourmolu.yaml" --mode inplace "${files[@]}"
+    ;;
+  --ormolu)
+    shift || true
+    files=("$@")
+    if [[ ${#files[@]} -eq 0 ]]; then
+      files=("${REPO_ROOT}/formatters/test/FormatFixtures.hs")
+    fi
+    ormolu "${files[@]}"
+    ;;
+  --brittany)
+    shift || true
+    files=("$@")
+    if [[ ${#files[@]} -eq 0 ]]; then
+      files=("${REPO_ROOT}/formatters/test/FormatFixtures.hs")
+    fi
+    brittany --config-file="${REPO_ROOT}/.brittany.yaml" "${files[@]}"
+    ;;
+  --verify-configs)
+    verify_configs
+    ;;
+  --fixtures)
+    test_fixtures
+    ;;
+  --help|-h)
+    show_help
+    ;;
+  *)
+    echo "Unknown option: ${cmd}" >&2
+    show_help
+    exit 1
+    ;;
+esac

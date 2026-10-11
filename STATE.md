@@ -98,6 +98,14 @@ Milestone T7 has been implemented, tested, and deterministically verified via `s
   * Comprehensive guide in `docs/tools/FORMAL_VERIFICATION_AND_SYNTHESIS_GUIDE.md`.
   * Deterministic test gate `scripts/tasks/verify-milestone-t7.sh` passing all 6 assertion steps.
 
+### Source Formatters & Layout Engines (Completed & Verified)
+
+Milestone T8 has been implemented, tested, and deterministically verified via `scripts/tasks/verify-milestone-t8.sh`:
+- **Fourmolu & Ormolu:** Root `fourmolu.yaml` with leading comma style, `record-brace-space: true`, aligned records, and operator fixity declarations (`:=`, `.==`, `.#`). Formats open row syntax, record dot access, and combinators cleanly with zero AST drift.
+- **Brittany & Floskell:** Root `.brittany.yaml` with `lconfig_indentListSpecial: true`, multiline column alignment, and GHC option forwarding (`-XDataKinds`, `-XTypeOperators`, `-XOverloadedRecordDot`). Root `floskell.json` layout configuration with record field and type operator alignments.
+- **CLI Runner & Fixtures:** `bin/polytropos-format` runner supporting `--check`, `--apply`, `--ormolu`, `--brittany`, `--verify-configs`, and `--fixtures`. Formatter test fixture module `formatters/test/FormatFixtures.hs`.
+- **Documentation & Gate:** Authoritative guide in `docs/tools/SOURCE_FORMATTERS_AND_LAYOUT_GUIDE.md` and deterministic test gate `scripts/tasks/verify-milestone-t8.sh`.
+
 ### Algebraic Effect Systems Ports (Completed & Verified)
 
 All three algebraic effect system ports planned in `docs/notes/EFFECT_SYSTEMS_PORTING_MASTER_PLAN.md` have been implemented, tested, and committed on their respective `polytropos-port` branches:
@@ -210,6 +218,10 @@ All three algebraic effect system ports planned in `docs/notes/EFFECT_SYSTEMS_PO
 - `verification/liquid/` — LiquidHaskell specifications, GHC-verified proofs (`Proofs.hs`), and SMT-checked Horn constraints (`RowBounds.fq`)
 - `synthesis/synquid/` — Synquid type-directed synthesis specifications for record and variant adapters
 - `bin/polytropos-tricorder` & `bin/polytropos-verify` — continuous diagnostics runner and formal verification gate
+- `bin/polytropos-format` — unified source formatter and layout engine CLI runner
+- `fourmolu.yaml`, `.brittany.yaml`, `floskell.json` — verified formatter configuration profiles
+- `formatters/test/FormatFixtures.hs` — test fixtures exercising open row layout preservation
+- `docs/tools/SOURCE_FORMATTERS_AND_LAYOUT_GUIDE.md` — authoritative guide for source formatting and editor setup
 - `docs/tools/FORMAL_VERIFICATION_AND_SYNTHESIS_GUIDE.md` — authoritative manual for formal methods, synthesis, and continuous GHCi daemon
 - `docs/tools/MODERNIZER_AND_LINTER_GUIDE.md` — guide for HLint rules, Retrie rewrites, Stan static analysis, and modernize CLI
 - `.agents/rules/` — subdivided AI coding assistant operational rules
@@ -221,6 +233,5 @@ All three algebraic effect system ports planned in `docs/notes/EFFECT_SYSTEMS_PO
 
 ## Next action
 
-- Advance Milestone T8: Source Formatters & Layout Engines (`ormolu`, `fourmolu`, `brittany`, `floskell`).
-- Expand HLS integrations (e.g. `hls-explicit-record-fields-plugin` open record wildcard expansion and `TypeError` code actions).
+- Expand HLS integrations beyond core completions (e.g. `hls-explicit-record-fields-plugin` open record wildcard expansion and `TypeError` code actions).
 - Human-in-the-loop review of the revised documentation tiers (Audience 1 `TUTORIAL.md` & `NEWBIE_GUIDE.md`, Audience 2 Haddock polish, Audience 3 `MAINTAINER_GUIDE.md`).

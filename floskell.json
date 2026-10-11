@@ -1,0 +1,56 @@
+{
+  "extensions": [
+    "BangPatterns",
+    "DataKinds",
+    "FlexibleContexts",
+    "OverloadedRecordDot",
+    "OverloadedStrings",
+    "TypeOperators"
+  ],
+  "fixities": [
+    "infixr 5 :=",
+    "infixr 5 .=="
+  ],
+  "formatting": {
+    "align": {
+      "case": false,
+      "class": false,
+      "import-module": true,
+      "import-spec": true,
+      "let-binds": false,
+      "limits": [
+        12,
+        30
+      ],
+      "record-fields": true,
+      "where": false
+    },
+    "indent": {
+      "case": 2,
+      "class": 2,
+      "do": 2,
+      "let": 2,
+      "multi-if": 2,
+      "onside": 2,
+      "where": 2
+    },
+    "options": {
+      "align-sum-type-decl": false,
+      "flexible-oneline": false,
+      "preserve-vertical-space": true,
+      "sort-import-lists": true,
+      "sort-imports": true,
+      "sort-pragmas": true,
+      "split-language-pragmas": true
+    },
+    "penalty": {
+      "indent": 1,
+      "linebreak": 100,
+      "max-line-length": 100,
+      "overfull": 10,
+      "overfull-once": 200
+    }
+  },
+  "language": "GHC2021",
+  "style": "base"
+}

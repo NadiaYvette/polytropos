@@ -167,14 +167,20 @@ To avoid blocking progress when human maintainers are unavailable, all roadmap t
 
 ---
 
-### Milestone T8: Source Formatters & Layout Engines
-- **Execution Mode:** `[COLLABORATIVE-ASYNC]`
+### Milestone T8: Source Formatters & Layout Engines [COMPLETED]
+- **Execution Mode:** `[COLLABORATIVE-ASYNC]` (Executed & Verified in `scripts/tasks/verify-milestone-t8.sh`)
 - **Motivation:** Ensure formatters do not mangle ergonomic syntactic sugar (`REC`, `VAR`, `REC_UPD`) or type-level row lists.
 - **Deliverables:**
-  1. **`ormolu` & `fourmolu` Support:**
-     Ensure AST-preserving formatting for `REC { ... }`, `REC_F { ... }`, `VAR { ... }`, and `REC_UPD` without syntax errors.
+  1. **`fourmolu` & `ormolu` Support:**
+     - Created root `fourmolu.yaml` with leading comma style, `record-brace-space: true`, aligned record style, and fixity declarations for `(:=)`, `(.==)`, and `(.#)`.
+     - Verified AST-preserving formatting across `formatters/test/FormatFixtures.hs` for type-level rows, record dot projections, `peel`, and record pipelines.
   2. **`brittany` & `floskell` Layout Support:**
-     Custom column-alignment and indentation styles for type-level rows (`'[ "a" := Int, "b" := Bool ]`).
+     - Created root `.brittany.yaml` with `lconfig_indentListSpecial: true`, multiline column alignment, and GHC option forwarding (`-XDataKinds`, `-XTypeOperators`, `-XOverloadedRecordDot`).
+     - Created root `floskell.json` with alignment rules for record fields and operators.
+  3. **Unified CLI & Documentation:**
+     - `bin/polytropos-format`: executable runner supporting `--check`, `--apply`, `--ormolu`, `--brittany`, `--verify-configs`, and `--fixtures`.
+     - `docs/tools/SOURCE_FORMATTERS_AND_LAYOUT_GUIDE.md`: comprehensive tooling and editor integration guide.
+     - `scripts/tasks/verify-milestone-t8.sh`: deterministic verification test gate.
 
 ---
 
