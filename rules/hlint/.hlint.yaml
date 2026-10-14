@@ -1,0 +1,17 @@
+# ==============================================================================
+# Project-Level HLint Configuration for Polytropos Downstream Packages
+# https://github.com/ndmitchell/hlint
+#
+# Copy this file to your project root as `.hlint.yaml`, or import `polytropos.yaml`
+# into your existing HLint configuration using:
+#   - import: rules/hlint/polytropos.yaml
+# ==============================================================================
+
+- arguments:
+    - -XOverloadedRecordDot
+    - -XDataKinds
+    - -XTypeOperators
+    - -XTypeApplications
+
+# Import the Polytropos custom rule catalog
+- import: rules/hlint/polytropos.yaml

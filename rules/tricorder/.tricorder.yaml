@@ -1,0 +1,20 @@
+# ==============================================================================
+# Tricorder Continuous Compilation Configuration for Polytropos Projects
+# https://github.com/nycfox/tricorder
+#
+# Copy this file to your project root as `.tricorder.yaml` to enable continuous
+# background compilation and <50 token MCP diagnostic summaries.
+# ==============================================================================
+
+session:
+  command: cabal repl --enable-multi-repl
+  targets:
+    - lib:your-package-name
+  test_targets:
+    - test:your-package-test
+  watch_dirs:
+    - src
+    - test
+  repl_build_dir: dist-newstyle/tricorder
+  test_timeout: 15
+  idle_timeout_seconds: 600

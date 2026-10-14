@@ -234,11 +234,9 @@ All three algebraic effect system ports planned in `docs/notes/EFFECT_SYSTEMS_PO
 - `synthesis/synquid/` — Synquid type-directed synthesis specifications for record and variant adapters
 - `bin/polytropos-tricorder` & `bin/polytropos-verify` — continuous diagnostics runner and formal verification gate
 - `bin/polytropos-format` — unified source formatter and layout engine CLI runner
-- `fourmolu.yaml`, `.brittany.yaml`, `floskell.json` — verified formatter configuration profiles
-- `formatters/test/FormatFixtures.hs` — test fixtures exercising open row layout preservation
-- `docs/tools/SOURCE_FORMATTERS_AND_LAYOUT_GUIDE.md` — authoritative guide for source formatting and editor setup
-- `docs/tools/FORMAL_VERIFICATION_AND_SYNTHESIS_GUIDE.md` — authoritative manual for formal methods, synthesis, and continuous GHCi daemon
-- `docs/tools/MODERNIZER_AND_LINTER_GUIDE.md` — guide for HLint rules, Retrie rewrites, Stan static analysis, and modernize CLI
+- `docs/developer/LIQUIDHASKELL_AND_SYNQUID_GUIDE.md` — comprehensive developer guide for out-of-process LiquidHaskell formal verification contracts and Synquid type-directed synthesis
+- `docs/developer/UPSTREAM_REPOSITORIES_AND_INTEGRATIONS.md` — authoritative catalog of upstream repositories modified for polytropos (`haskell-language-server`, `effectful`, `polysemy`, `kernmantle`, `synquid`, `stan`, `retrie`, `tricorder`), explaining modification rationale, branches, and why formatters need no forks
+- `rules/` — downstream developer rules & tool configuration library (`rules/formatters/`, `rules/hlint/`, `rules/retrie/`, `rules/stan/`, `rules/tricorder/`, `rules/README.md`)
 - `.agents/rules/` — subdivided AI coding assistant operational rules
 
 ## What is deliberately missing

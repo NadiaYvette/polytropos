@@ -28,6 +28,9 @@ Status: LIVING DOCUMENT · v0.1 · 2026-10-05
 | `tools/MODERNIZER_AND_LINTER_GUIDE.md` | guide | live | cross-cutting | HLint rules, Retrie rewrites, Stan inspections, and modernization CLI |
 | `tools/FORMAL_VERIFICATION_AND_SYNTHESIS_GUIDE.md` | guide | live | cross-cutting | LiquidHaskell formal verification, Synquid synthesis, and Tricorder continuous diagnostics |
 | `tools/SOURCE_FORMATTERS_AND_LAYOUT_GUIDE.md` | guide | live | cross-cutting | Fourmolu, Ormolu, Brittany, and Floskell configurations, fixtures, and runner |
+| `developer/LIQUIDHASKELL_AND_SYNQUID_GUIDE.md` | guide | live | cross-cutting | Developer guide for LiquidHaskell formal verification & Synquid program synthesis |
+| `developer/UPSTREAM_REPOSITORIES_AND_INTEGRATIONS.md` | guide | live | cross-cutting | Authoritative catalog of upstream repositories modified for polytropos (HLS, effects, tools) |
+| `../rules/README.md` | guide | live | cross-cutting | Downstream developer rules, formatter configurations, linters, and rewrites library |
 | `../plans/FULL_COMPLETION_ROADMAP.md` | plan | live | cross-cutting | Roadmap resolving technical debt and 4-tier documentation overhaul |
 | `registers/PACKAGES.md` | register | live | cross-cutting | — |
 | `transcripts/gemini-large-data-hybrid-variant-records-spec.md` | transcript | archive | cross-cutting | inconsistent |
@@ -54,6 +57,12 @@ note is corrected regardless — is the one that fires most often.
 **Contributor.** Design note in full, then `packages/polytropos-core/src/Polytropos/Core.hs`
 — it is sectioned §1–§6 to match the note, and the two must be read together.
 Commit convention: `AGENTS.md` advisory 4, details in the attribution note.
+
+**Downstream Developer / Library Author.** `README.md`
+→ `developer/UPSTREAM_REPOSITORIES_AND_INTEGRATIONS.md` (authoritative map of modified repos, HLS branches, effect forks, and why formatters need no forks)
+→ `../rules/README.md` (pre-tested configuration library: Fourmolu, Brittany, Floskell, Stan, HLint, Retrie, Tricorder)
+→ `developer/LIQUIDHASKELL_AND_SYNQUID_GUIDE.md` (out-of-process formal verification contracts and type-directed adapter synthesis)
+→ `tools/SOURCE_FORMATTERS_AND_LAYOUT_GUIDE.md` & `tools/MODERNIZER_AND_LINTER_GUIDE.md`.
 
 **Reviewer.** `notes/DESIGN_REVIEW_CLAUDE-OPUS-4.6.md` provides the holistic
 architectural evaluation and ecosystem deployment assessment from the Claude Opus 4.6

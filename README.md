@@ -136,6 +136,13 @@ Package roles, directory conventions, and reuse rules are documented in
     Discussion of high-leverage Haskell abstraction patterns (effects, open ADTs, generics, profunctors).
   - [`docs/transcripts/gemini-large-data-hybrid-variant-records-spec.md`](docs/transcripts/gemini-large-data-hybrid-variant-records-spec.md):
     Early transcript exploring hybrid nominal-structural variant records.
+- **Developer & Tooling Integration**:
+  - [`docs/developer/UPSTREAM_REPOSITORIES_AND_INTEGRATIONS.md`](docs/developer/UPSTREAM_REPOSITORIES_AND_INTEGRATIONS.md):
+    Authoritative catalog of upstream repositories modified for polytropos (HLS autocompletions & hovers, effect system ports, toolchain forks, and why formatters need no forks).
+  - [`docs/developer/LIQUIDHASKELL_AND_SYNQUID_GUIDE.md`](docs/developer/LIQUIDHASKELL_AND_SYNQUID_GUIDE.md):
+    Developer guide for out-of-process LiquidHaskell formal verification contracts and Synquid type-directed program synthesis.
+  - [`rules/README.md`](rules/README.md):
+    Pre-tested downstream configuration library (Fourmolu, Brittany, Floskell, Ormolu, Stan, HLint, Retrie, Tricorder).
 - **Corpus Map**: See [`docs/INDEX.md`](docs/INDEX.md) for full document inventory and reading paths.
 
 ## Build & Test

@@ -1,0 +1,26 @@
+# ==============================================================================
+# Stan Static Analysis Configuration for Polytropos Downstream Packages
+# https://github.com/kowainik/stan
+#
+# Copy this file to your project root as `.stan.toml` to guard against
+# memory regressions, dead row fields, and non-exhaustive cascades.
+# ==============================================================================
+
+# Exclude build and generated artifacts
+[[remove]]
+directory = "dist-newstyle/"
+
+[[remove]]
+directory = ".ok/"
+
+# Standard inspections
+[[check]]
+type   = "Include"
+filter = "all"
+scope  = "all"
+
+# Suppress false positives in test suites
+[[check]]
+type = "Exclude"
+directory = "test/"
+id = "STAN-0208"
