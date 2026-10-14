@@ -17,7 +17,7 @@ When building `polytropos`, multiple external repositories across the Haskell ec
 | **`polysemy`** | Algebraic effects | `polytropos-port` | **Library fork** | $O(1)$ constructor tag `decomp` using flat `Rep` variant coproducts, eliminating `polysemy-plugin` |
 | **`kernmantle`** | Arrow / effect pipeline | `polytropos-port` | **Library fork** | Ported from `vinyl`/`large-anon` to polytropos `RecordF` HKD ropes |
 | **`synquid`** | Program synthesizer | `nadia.chambers/forward-port-to-ghc-9.14-001` | **Tooling fork** | Forward-ported to GHC 9.14 for type-directed synthesis of row adapters and eliminators |
-| **`stan`** | Static analyzer | `main` (with patches) | **HIE compat patches** | GHC 9.14 `.hie` compatibility for performance inspections (STAN-P01–P04) |
+| **`stan`** | Static analyzer | `polytropos-compat` | **HIE compat patches** | GHC 9.14 `.hie` compatibility for performance inspections (STAN-P01–P04) |
 | **`retrie`** | Equational refactoring | `xich/912` | **GHC 9.12+ exactprint** | Automated AST-preserving code rewrites (`rules/retrie/*.rules`) |
 | **`tricorder`** | Compiler diagnostics | `tasty-spec-fix` | **Daemon & MCP bridge** | Continuous background GHCi daemon with $<50$ token JSON-RPC status |
 | **`fourmolu`** / **`ormolu`** / **`brittany`** / **`floskell`** | Source code formatters | *Upstream master* | **Configuration profiles only** (in `rules/formatters/`) | AST-preserving layout without maintaining formatter forks |
@@ -105,7 +105,7 @@ Prior to this branch, HLS's completion engine in `ghcide` assumed all `Overloade
 ## 5. Developer Tools & Why Formatters/Linters Need No Forks
 
 ### 5.1 `stan` & `retrie`
-- **`stan` (`/home/nyc/src/stan`):** Patched for GHC 9.14 `.hie` compatibility to run inspections `STAN-P01` through `STAN-P04` (catching hot-loop CoW array updates and dead row fields).
+- **`stan` (`/home/nyc/src/stan`):** Committed on branch `polytropos-compat` (commit `7c4f63a`). Patched for GHC 9.14 `.hie` compatibility (routing HIE AST types through `Stan.Hie.Compat904` and `Stan.Hie.Debug908`) and bumped `stan.cabal` bounds for `base < 4.23` and `ghc < 9.15` to run inspections `STAN-P01` through `STAN-P04` (catching hot-loop CoW array updates and dead row fields).
 - **`retrie` (`/home/nyc/src/retrie` on branch `xich/912`):** Modernized for GHC 9.12+ exactprint to automate equational rewrites (e.g. converting `getField` to `OverloadedRecordDot`).
 
 ### 5.2 `fourmolu`, `ormolu`, `brittany`, and `floskell`

@@ -235,7 +235,7 @@ All three algebraic effect system ports planned in `docs/notes/EFFECT_SYSTEMS_PO
 - `bin/polytropos-tricorder` & `bin/polytropos-verify` — continuous diagnostics runner and formal verification gate
 - `bin/polytropos-format` — unified source formatter and layout engine CLI runner
 - `docs/developer/LIQUIDHASKELL_AND_SYNQUID_GUIDE.md` — comprehensive developer guide for out-of-process LiquidHaskell formal verification contracts and Synquid type-directed synthesis
-- `docs/developer/UPSTREAM_REPOSITORIES_AND_INTEGRATIONS.md` — authoritative catalog of upstream repositories modified for polytropos (`haskell-language-server`, `effectful`, `polysemy`, `kernmantle`, `synquid`, `stan`, `retrie`, `tricorder`), explaining modification rationale, branches, and why formatters need no forks
+- `docs/developer/UPSTREAM_REPOSITORIES_AND_INTEGRATIONS.md` — authoritative catalog of upstream repositories modified for polytropos (`haskell-language-server`, `effectful`, `polysemy`, `kernmantle`, `synquid`, `stan` [branch `polytropos-compat`], `retrie`, `tricorder`), explaining modification rationale, branches, and why formatters need no forks
 - `rules/` — downstream developer rules & tool configuration library (`rules/formatters/`, `rules/hlint/`, `rules/retrie/`, `rules/stan/`, `rules/tricorder/`, `rules/README.md`)
 - `.agents/rules/` — subdivided AI coding assistant operational rules
 
