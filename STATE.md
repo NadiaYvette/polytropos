@@ -158,21 +158,22 @@ All three algebraic effect system ports planned in `docs/notes/EFFECT_SYSTEMS_PO
   (`KnownHash`, `labelHash`, `hashVal`, `fnv1a64`)
 - `packages/polytropos-core/test/Main.hs` — 32 unit tests verifying representations, batch mutations,
   transients, and consumer API
-- `packages/polytropos-plugin/src/Polytropos/Plugin.hs` — TcPlugin that solves:
-  * `FieldIndex` and `ConstructorIndex` by literal Int/Word calculation
-  * `RowEq` and `RowShow` for product rows via Core AST synthesis
-  * `RowEqSum` and `RowShowSum` for sum rows via tag testing and constructor dispatch
-  * `GHC.Records.HasField` for native `OverloadedRecordDot` (`r.field`)
-  * `AllFields` generic field-class dictionary supply (solving wanteds and packing flat `SmallArray (DictAny c)`)
-  * Type-level row metadata rewriter: reduces `FieldNames`, `SimpleFieldTypes`, and `FieldTypes`
-    when the product row is fully known
-  * `SubRow` and `SubSum` evidence solver: emits literal projection slot indices `[Int]` for products,
-    and literal injection tags `[Word]` / narrowing maps `[Maybe Word]` for sums
-  * `KnownHash` compile-time label hashing: evaluates literal symbol names and synthesizes literal
-    FNV-1a 64-bit `Word` dictionaries
-  * Human-centric `TypeError` diagnostics: intercepts unsolvable wanted constraints when rows are closed,
-    synthesizing descriptive `TypeError` constraints with Levenshtein-distance fuzzy suggestions ("Did you mean ...?")
-    and full schema formatting for missing fields, missing constructors, field type mismatches, and `SubRow`/`SubSum` discrepancies.
+- `packages/polytropos-plugin/src/Polytropos/Plugin.hs` — TcPlugin structured with GHC Note architecture (`tagref`-validated, 6 comprehensive notes):
+  * Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails]: Didier Rémy row calculus & open vs closed rows
+  * Note [Literal Evidence Synthesis vs Type-Level Search]: O(1) literal index and tag evidence generation
+  * Note [SubRow and SubSum Projection and Narrowing Evidence]: literal projection index and narrowing table emission
+  * Note [Type-Level Metadata Rewriting and Defunctionalization]: O(1) compile-time reflection rewriting
+  * Note [Human-Centric TypeError Diagnostics & Fuzzy Matching]: Levenshtein edit distance suggestions and schema formatting
+  * Note [OCaml Subtype/Unify Correlation and Row Tail Algebra]: row walking and deferral semantics on unfixed tails
+  * Solves `FieldIndex` and `ConstructorIndex` by literal Int/Word calculation (`mkIntExpr` and `mkWordExpr`)
+  * Solves `RowEq` and `RowShow` for product rows via Core AST synthesis
+  * Solves `RowEqSum` and `RowShowSum` for sum rows via tag testing and constructor dispatch
+  * Solves `GHC.Records.HasField` for native `OverloadedRecordDot` (`r.field`)
+  * Solves `AllFields` generic field-class dictionary supply (solving wanteds and packing flat `SmallArray (DictAny c)`)
+  * Type-level row metadata rewriter: reduces `FieldNames`, `SimpleFieldTypes`, and `FieldTypes` when product rows are closed
+  * `SubRow` and `SubSum` evidence solver: emits literal projection slot indices `[Int]` for products, and literal injection tags `[Word]` / narrowing maps `[Maybe Word]` for sums
+  * `KnownHash` compile-time label hashing: evaluates literal symbol names and synthesizes literal FNV-1a 64-bit `Word` dictionaries
+  * Cleaned Core expression builders (`mkIntExpr` and `mkWordExpr`), abbreviated `polytroposInit` via `RecordWildCards` (`pure PluginState{..}`), and imported standard `Data.Either.partitionEithers`
 - `packages/polytropos-plugin/tests/smoke/Main.hs` — Smoke tests exercising plugin-solved dictionary synthesis,
   `AllFields` generic dictionary supply across homogeneous and heterogeneous rows, compile-time `Refl`
   equality reduction of metadata families, `SubRow`/`SubSum` widening, narrowing, and projection,

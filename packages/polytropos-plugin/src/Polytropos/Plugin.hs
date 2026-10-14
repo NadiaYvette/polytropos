@@ -1,9 +1,13 @@
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ViewPatterns #-}
 
 -- | GHC typechecker plugin for @polytropos@.
 --
@@ -20,6 +24,10 @@ module Polytropos.Plugin
   ) where
 
 import Prelude
+
+import Data.Either
+  ( partitionEithers
+  )
 
 import Data.List
   ( intercalate
@@ -61,6 +69,7 @@ import GHC.Plugins
   ( Plugin (..)
   , defaultPlugin
   , tcPlugin
+  , CoreExpr
   , Expr(..)
   , Type
   , mkTcOcc
@@ -202,6 +211,193 @@ import Polytropos.Plugin.Source
   ( sourcePlugin
   )
 
+{-
+================================================================================
+                                GHC NOTES ARCHITECTURE
+================================================================================
+
+This module follows GHC's commentary convention:
+  https://gitlab.haskell.org/ghc/ghc/-/wikis/commentary/coding-style#2-using-notes
+
+Complex design decisions, theoretical invariants, and row algebra concepts are
+explained in self-contained Notes below. Specific solver and rewrite sites in the
+code carry cross-references (e.g. "-- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]").
+
+Notes defined in this module:
+  * Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
+  * Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
+  * Note [SubRow and SubSum Projection and Narrowing Evidence] [ref:note-subrow-subsum]
+  * Note [Type-Level Metadata Rewriting and Defunctionalization] [ref:note-metadata-rewriting]
+  * Note [Human-Centric TypeError Diagnostics & Fuzzy Matching] [ref:note-typeerror-diagnostics]
+  * Note [OCaml Subtype/Unify Correlation and Row Tail Algebra] [ref:note-ocaml-row-algebra]
+
+External Canonical Design References:
+  * docs/notes/POLYTROPOS_DESIGN.md (decisions D1–D10, open questions)
+  * docs/notes/OCAML_ROW_TAIL_SUBTYPE_MECHANISM.md (Rémy row calculus & OCaml tails)
+  * docs/notes/ROW_ROLE_DEFNS_DRAFT.ott & REVIEWER_WFU_ARGUMENT.md
+  * plans/2026-10-09-plugin-gap-roadmap.md & 2026-10-09-plugin-gap-spec.md
+================================================================================
+-}
+
+{- Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [tag:note-row-anatomy]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In Didier Rémy's row calculus (and in OCaml's polymorphic variants / object types),
+a row type is not merely a static list of fields; it is a structural sequence with
+a tail:
+
+    Row ::= '[]                       -- Closed empty row (Tnil in OCaml)
+          | (label ':= ty) ': tail    -- Cons cell (Tfield in OCaml)
+          | rho                       -- Row variable (Tvar in OCaml)
+
+In Haskell's type system (via DataKinds and TypeOperators), we encode rows as
+promoted type-level lists of pairs: `'[ "x" ':= Int, "y" ':= Bool]`.
+
+1. Open vs. Closed Rows:
+   - A *closed row* is one that syntactically terminates with `'[]`. Its complete
+     field complement and exact arity N are known statically.
+   - An *open row* is one whose tail is an uninstantiated type variable `rho`
+     (e.g., `( "x" ':= Int ) ': rho`). The row is open because further type
+     inference may discover additional fields that unify with `rho`.
+
+2. Fixed vs. Unfixed Tails:
+   Following OCaml's subtype/unification algebra (see docs/notes/OCAML_ROW_TAIL_SUBTYPE_MECHANISM.md):
+   - An *unfixed tail* is a flexible unification variable (a meta-tyvar) that has
+     not yet been pinned down. It can accept fresh fields through unification.
+   - A *fixed tail* is a tail that cannot accept further fields without contradiction:
+     either it is closed (`'[]`), or it is a universally quantified skolem tyvar,
+     or it is an abstract/existential row constructor (`Tconstr`).
+
+3. Solver Implications in Polytropos.Plugin:
+   When `Polytropos.Plugin` solves evidence classes:
+   - Single-field queries (`FieldIndex "x" r a`, `HasField "x" r a`): If `"x"` occurs
+     in the known prefix of an open row, its slot offset from the head is fixed,
+     so we can solve immediately. However, if `"x"` is NOT in the prefix and the tail
+     is unfixed, we MUST NOT emit a missing-field error! We must defer (leave the wanted
+     constraint unsolved), because `"x"` might appear when the unfixed tail is later
+     instantiated.
+   - Whole-row queries (`RowEq`, `RowShow`, `AllFields`, `SubRow`): These operations
+     iterate over or project across the ENTIRE row payload. They fundamentally require
+     the row tail to be fixed and closed (`walkRowWithTypes_maybe` returning `Just fields`).
+     If the tail is unfixed (`walkRowWithTypes_maybe` returning `Nothing`), the solver
+     defers, waiting for GHC's typechecker to complete row inference.
+-}
+
+{- Note [Literal Evidence Synthesis vs Type-Level Search] [tag:note-literal-evidence]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Traditional extensible record and variant libraries in Haskell (such as `vinyl`,
+`sop-core`, or naive type-level lists) implement evidence resolution through
+recursive type-class instances. For a row of N fields:
+  * The class dictionary is a recursive chain of pairs: DictCons d1 (DictCons d2 ...)
+  * Looking up a field at index k traverses k dictionary steps at runtime (O(N) access).
+  * GHC's simplifier must unroll and optimize N nested dictionary applications,
+    leading to O(N^2) Core size and severe compilation slowdowns on records with
+    30+ fields (see benchmark/variants/README.md).
+
+Polytropos solves this by collapsing products and sums into a single generic runtime
+representation:
+    data Rep = Rep {-# UNPACK #-} !Word {-# UNPACK #-} !(SmallArray Any)
+
+`Polytropos.Plugin` is a GHC typechecker plugin that intercepts evidence constraints:
+  - `FieldIndex label row a`: Computes the 0-based integer slot offset `i`.
+  - `ConstructorIndex con row`: Computes the 0-based constructor tag `t` (Word).
+  - `RowEq` / `RowShow` / `RowEqSum` / `RowShowSum`: Directly synthesizes unrolled
+    Core expressions comparing or showing each slot in sequence, using literal `Int`
+    and `Word` constants (see `mkIntExpr` and `mkWordExpr`).
+  - `SubRow sub super`: Emits an array of literal integer slot indices mapping
+    sub-record slots directly to super-record slots in O(1) jump steps.
+  - `KnownHash label`: Emits the compile-time 64-bit FNV-1a hash of the label as
+    a literal `Word`.
+
+Zero recursive dictionaries exist in Core. Compiling a 100-field record scales in
+strictly O(N) linear time, identical to hand-written nominal Haskell data types.
+-}
+
+{- Note [SubRow and SubSum Projection and Narrowing Evidence] [tag:note-subrow-subsum]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Polytropos provides width subtyping for records and coproduct subsumption for variants:
+  * `SubRow sub super`: Evidence that every field `(n ':= a)` in `sub` is present in
+    `super` with the exact same type `a`.
+  * `SubSum sub super`: Evidence that every constructor `(c ':= fs)` in `sub` is
+    present in `super` with identical field payload types `fs`.
+
+1. SubRow Index Mapping:
+   In `solveSubRow`, for each field in `sub`, the plugin locates its 0-based slot index
+   in `super`. It synthesizes an array of literal indices:
+       projectionIndices = [idx_super_0, idx_super_1, ..., idx_super_{K-1}]
+   At runtime, `projectRecord` uses this index array to copy slots directly from
+   the super-record into the sub-record payload using block copy operations.
+
+2. SubSum Injection & Narrowing:
+   In `solveSubSum`, the plugin synthesizes two arrays:
+   - `injectIndices`: Maps each constructor tag in `sub` to its corresponding tag in `super`.
+     Used by `widenVariant` to upcast a variant in O(1).
+   - `narrowIndices`: An array indexed by `super` constructor tags, containing `Just subTag`
+     if the constructor belongs to `sub`, or `Nothing` if absent.
+     Used by `narrowVariant` to downcast a variant in O(1) tag lookup.
+
+Both operations require closed rows (see Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]).
+If either row has an unfixed tail, solving is deferred.
+-}
+
+{- Note [Type-Level Metadata Rewriting and Defunctionalization] [tag:note-metadata-rewriting]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+GHC provides type families for row reflection:
+  * `FieldNames r`: Computes `[Symbol]` of field names in row order.
+  * `SimpleFieldTypes r`: Computes `[Type]` of field values.
+  * `FieldTypes r f`: Computes `[Type]` under higher-kinded functor `f`.
+
+Normally, closed type families are evaluated via recursive axioms in GHC's constraint
+solver, taking O(N) rewrite steps and cluttering solver traces.
+
+`polytroposRewrite` intercepts type family applications during GHC's rewriting phase
+(`TcPluginRewrite`). It inspects the row type directly, verifies that the row tail is
+closed, constructs the reified promoted list `[Symbol]` or `[Type]`, and returns an
+exact `Refl` coercion (`mkPluginCoercion`). This reduces row metadata queries to
+O(1) rewrite steps without generating intermediate type family equations.
+-}
+
+{- Note [Human-Centric TypeError Diagnostics & Fuzzy Matching] [tag:note-typeerror-diagnostics]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+When a developer writes `rec.nmae` instead of `rec.name`, standard GHC type inference
+either leaves an unexplained stuck constraint `HasField "nmae" (Record r) a` or emits
+a confusing type mismatch error.
+
+In `solveHasField` and `solveFieldIndex`:
+1. When a field `n` is absent from a closed row `r`:
+   - We extract all available field names in `r`.
+   - We calculate Levenshtein edit distances between `n` and every field name in `r`.
+   - If candidates with edit distance <= 2 exist, we format a fuzzy suggestion:
+       "Did you mean: ‘name’?"
+   - We construct a multi-line formatted schema showing available fields:
+       "Available record fields:
+          • id :: Int
+          • name :: String
+          • email :: String"
+2. We synthesize a structured GHC `TypeError` constraint (`mkTypeErrorCt`), which GHC
+   displays prominently to the user.
+3. Crucially, we also emit a dummy dictionary (`mkDummyHasFieldDict`) solving the wanted
+   constraint! This prevents cascading secondary errors (e.g. "could not deduce HasField",
+   "ambiguous type variable a"), ensuring the user only sees the clean, actionable
+   typo diagnostic with fuzzy suggestion.
+-}
+
+{- Note [OCaml Subtype/Unify Correlation and Row Tail Algebra] [tag:note-ocaml-row-algebra]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In OCaml's typechecker (`typecore.ml` and `btype.ml`):
+- `subtype_row` filters fields and, upon encountering an unfixed tail (`Tvar`), does NOT
+  blindly instantiate or unify it. It emits a deferred constraint, preserving principal
+  typing until more context arrives.
+- `unify_row` takes two rows and computes the merged fields and the surviving tail.
+
+In Polytropos:
+- `walkRowWithTypes_maybe` acts as our `row_repr`: it traverses the cons cells. If the
+  tail reaches `Tnil` (`[]`), it succeeds with `Just fields`. If the tail is an
+  unfixed type variable, it aborts to `Nothing`.
+- Solvers for subtyping (`SubRow`, `SubSum`) behave like OCaml's `subtype_row`: they
+  only solve when tails are fixed, and leave wanted constraints deferred when tails
+  are unfixed.
+-}
+
 -------------------------------------------------------------------------------
 -- Plugin entry point
 -------------------------------------------------------------------------------
@@ -317,37 +513,7 @@ polytroposInit = do
   let psPromotedText = promoteDataCon textDataCon
       psPromotedVcat = promoteDataCon vcatDataCon
 
-  pure PluginState
-    { psRepTag        = psRepTag
-    , psRepArity      = psRepArity
-    , psFieldAt       = psFieldAt
-    , psUnRowRep      = psUnRowRep
-    , psNoInlineCo    = psNoInlineCo
-    , psEqClass       = psEqClass
-    , psAnd           = psAnd
-    , psComp          = psComp
-    , psShowsPrecMeth = psShowsPrecMeth
-    , psShowString    = psShowString
-    , psShowChar      = psShowChar
-    , psFEqInt        = psFEqInt
-    , psFEqBool       = psFEqBool
-    , psFEqWord       = psFEqWord
-    , psFShowInt      = psFShowInt
-    , psFShowBool     = psFShowBool
-    , psEqCls         = psEqCls
-    , psShowCls       = psShowCls
-    , psRowFlavourCls = psRowFlavourCls
-    , psHasFieldCls   = psHasFieldCls
-    , psDictAnyTyCon  = psDictAnyTyCon
-    , psMkDictAny     = psMkDictAny
-    , psEvidenceAllFields = psEvidenceAllFields
-    , psFieldTypesTyCon       = psFieldTypesTyCon
-    , psSimpleFieldTypesTyCon = psSimpleFieldTypesTyCon
-    , psFieldNamesTyCon       = psFieldNamesTyCon
-    , psTypeErrorTyCon        = psTypeErrorTyCon
-    , psPromotedText          = psPromotedText
-    , psPromotedVcat          = psPromotedVcat
-    }
+  pure PluginState{..}
 
 findModule :: String -> Maybe String -> TcPluginM 'Init Module
 findModule modName mPkg = do
@@ -371,6 +537,10 @@ lookupIdInModule modName occStr = do
 -- Type family rewriting (FieldNames, SimpleFieldTypes, FieldTypes)
 -------------------------------------------------------------------------------
 
+-- | Type family rewriter for FieldNames, SimpleFieldTypes, and FieldTypes.
+-- Evaluates closed row reflection queries in O(1) during GHC's type rewriting stage.
+-- See Note [Type-Level Metadata Rewriting and Defunctionalization] [ref:note-metadata-rewriting]
+-- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
 polytroposRewrite :: PluginState -> UniqFM TyCon TcPluginRewriter
 polytroposRewrite state = listToUFM
   [ (psFieldTypesTyCon state, rewriteFieldTypes (psFieldTypesTyCon state))
@@ -378,6 +548,9 @@ polytroposRewrite state = listToUFM
   , (psFieldNamesTyCon state, rewriteFieldNames (psFieldNamesTyCon state))
   ]
 
+-- | Extracts fields from a row type. Fails (returns Nothing) if the tail is unfixed or open.
+-- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
+-- See Note [OCaml Subtype/Unify Correlation and Row Tail Algebra] [ref:note-ocaml-row-algebra]
 walkRowFields_maybe :: Type -> Maybe [(FastString, Type)]
 walkRowFields_maybe rowTy = do
   elems <- myExtractPromotedList (unwrapSynonyms rowTy)
@@ -604,6 +777,10 @@ solveOne state ct
 -- FieldIndex solver
 -------------------------------------------------------------------------------
 
+-- | Solves the FieldIndex constraint by statically locating the field's 0-based
+-- offset in the row and returning literal Int evidence.
+-- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
+-- See Note [Human-Centric TypeError Diagnostics & Fuzzy Matching] [ref:note-typeerror-diagnostics]
 solveFieldIndex
   :: PluginState
   -> Ct
@@ -622,11 +799,11 @@ solveFieldIndex state ct cls tys
           case findFieldType fieldName rowTy of
             Just (i, actualTy)
               | actualTy `eqType` expectedATy || not (isClosedType expectedATy) -> do
-                  let iExpr = mkCoreConApps intDataCon [Lit (mkLit (fromIntegral i :: Integer))]
+                  let iExpr = mkIntExpr i
                       dictExpr = evDataConApp (classDataCon cls) tys [iExpr]
                   pure $ Left ((EvExpr dictExpr, ct), [])
               | otherwise -> do
-                  let dummyExpr = mkCoreConApps intDataCon [Lit (mkLit 0)]
+                  let dummyExpr = mkIntExpr 0
                       dummyDict = evDataConApp (classDataCon cls) tys [dummyExpr]
                       diagLines =
                         [ "Polytropos Record Error:"
@@ -640,7 +817,7 @@ solveFieldIndex state ct cls tys
             Nothing -> do
               case walkRowWithTypes_maybe rowTy of
                 Just fields -> do
-                  let dummyExpr = mkCoreConApps intDataCon [Lit (mkLit 0)]
+                  let dummyExpr = mkIntExpr 0
                       dummyDict = evDataConApp (classDataCon cls) tys [dummyExpr]
                       fNames = [ unpackFS n | (_, n, _) <- fields, not (nullFS n) ]
                       diagLines =
@@ -655,13 +832,13 @@ solveFieldIndex state ct cls tys
         Nothing -> do
           case findFieldIndexByType unwrapN rowTy of
             Just i -> do
-              let iExpr = mkCoreConApps intDataCon [Lit (mkLit (fromIntegral i :: Integer))]
+              let iExpr = mkIntExpr i
                   dictExpr = evDataConApp (classDataCon cls) tys [iExpr]
               pure $ Left ((EvExpr dictExpr, ct), [])
             Nothing -> do
               case walkRowWithTypes_maybe rowTy of
                 Just fields -> do
-                  let dummyExpr = mkCoreConApps intDataCon [Lit (mkLit 0)]
+                  let dummyExpr = mkIntExpr 0
                       dummyDict = evDataConApp (classDataCon cls) tys [dummyExpr]
                       diagLines =
                         [ "Polytropos Record Error:"
@@ -677,6 +854,10 @@ solveFieldIndex state ct cls tys
 -- ConstructorIndex solver
 -------------------------------------------------------------------------------
 
+-- | Solves the ConstructorIndex constraint by statically locating the constructor's
+-- 0-based tag in the sum row and returning literal Word evidence.
+-- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
+-- See Note [Human-Centric TypeError Diagnostics & Fuzzy Matching] [ref:note-typeerror-diagnostics]
 solveConstructorIndex
   :: PluginState
   -> Ct
@@ -693,13 +874,13 @@ solveConstructorIndex state ct cls tys
         Just conName -> do
           case findConstructorIndex conName rowTy of
             Just w -> do
-              let wExpr = mkCoreConApps wordDataCon [Lit (mkLit (fromIntegral w :: Integer))]
+              let wExpr = mkWordExpr w
                   dictExpr = evDataConApp (classDataCon cls) tys [wExpr]
               pure $ Left ((EvExpr dictExpr, ct), [])
             Nothing -> do
               case walkSumRowWithTypes_maybe rowTy of
                 Just ctors -> do
-                  let dummyExpr = mkCoreConApps wordDataCon [Lit (mkLit 0)]
+                  let dummyExpr = mkWordExpr 0
                       dummyDict = evDataConApp (classDataCon cls) tys [dummyExpr]
                       cNames = [ unpackFS n | (_, n, _) <- ctors, not (nullFS n) ]
                       diagLines =
@@ -714,13 +895,13 @@ solveConstructorIndex state ct cls tys
         Nothing -> do
           case findConstructorIndexByType unwrapN rowTy of
             Just w -> do
-              let wExpr = mkCoreConApps wordDataCon [Lit (mkLit (fromIntegral w :: Integer))]
+              let wExpr = mkWordExpr w
                   dictExpr = evDataConApp (classDataCon cls) tys [wExpr]
               pure $ Left ((EvExpr dictExpr, ct), [])
             Nothing -> do
               case walkSumRowWithTypes_maybe rowTy of
                 Just ctors -> do
-                  let dummyExpr = mkCoreConApps wordDataCon [Lit (mkLit 0)]
+                  let dummyExpr = mkWordExpr 0
                       dummyDict = evDataConApp (classDataCon cls) tys [dummyExpr]
                       diagLines =
                         [ "Polytropos Variant Error:"
@@ -736,6 +917,9 @@ solveConstructorIndex state ct cls tys
 -- RowEq solver
 -------------------------------------------------------------------------------
 
+-- | Solves the RowEq constraint by synthesizing an unrolled comparison expression over all fields.
+-- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
+-- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
 solveRowEq
   :: PluginState
   -> Ct
@@ -789,7 +973,7 @@ solveRowEq state ct cls tys = do
 
   let compareField (i, fieldTy, ev) =
         let fieldAtTypeArgs = [Type kATy, Type fTy, Type aTy, Type fieldTy]
-            idxExpr = mkCoreConApps intDataCon [Lit (mkLit (fromIntegral i))]
+            idxExpr = mkIntExpr i
             raw1 = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep1])
             raw2 = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep2])
             fFieldTy = mkAppTy fTy fieldTy
@@ -812,6 +996,9 @@ solveRowEq state ct cls tys = do
 -- RowShow solver
 -------------------------------------------------------------------------------
 
+-- | Solves the RowShow constraint by synthesizing an unrolled showsPrec expression over all fields.
+-- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
+-- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
 solveRowShow
   :: PluginState
   -> Ct
@@ -866,12 +1053,12 @@ solveRowShow state ct cls tys = do
 
   let showField (i, fieldTy, ev) =
         let fieldAtTypeArgs = [Type kATy, Type fTy, Type aTy, Type fieldTy]
-            idxExpr = mkCoreConApps intDataCon [Lit (mkLit (fromIntegral i))]
+            idxExpr = mkIntExpr i
             raw = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep])
             fFieldTy = mkAppTy fTy fieldTy
             val = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw]
             showDict = ctEvExpr ev
-            zeroPrec = mkCoreConApps intDataCon [Lit (mkLit 0)]
+            zeroPrec = mkIntExpr 0
         in mkCoreApps (Var (psShowsPrecMeth state)) [Type fieldTy, showDict, zeroPrec, val]
 
       fieldShows = map showField wanteds
@@ -891,6 +1078,9 @@ solveRowShow state ct cls tys = do
 -- RowEqSum / RowShowSum solvers
 -------------------------------------------------------------------------------
 
+-- | Solves the RowEqSum constraint by synthesizing branch comparison Core trees.
+-- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
+-- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
 solveRowEqSum
   :: PluginState
   -> Ct
@@ -951,7 +1141,7 @@ solveRowEqSum state ct cls tys = do
 
       compareField fi fieldTy ev =
         let fieldAtTypeArgs = [Type kATy, Type fTy, Type aTy, Type fieldTy]
-            idxExpr = mkCoreConApps intDataCon [Lit (mkLit (fromIntegral fi))]
+            idxExpr = mkIntExpr fi
             raw1 = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep1])
             raw2 = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep2])
             fFieldTy = mkAppTy fTy fieldTy
@@ -962,7 +1152,7 @@ solveRowEqSum state ct cls tys = do
 
       buildTree _ [] = falseExpr
       buildTree tagExpr ((i, _conName, fWanteds) : rest) =
-        let iLit = mkCoreConApps wordDataCon [Lit (mkLit (fromIntegral i :: Integer))]
+        let iLit = mkWordExpr (fromIntegral i)
             cond = mkCoreApps (Var (psEqClass state)) [Type (mkTyConTy wordTyCon), Var (psFEqWord state), tagExpr, iLit]
         in mkIfThenElse cond (compareConFields fWanteds) (buildTree tagExpr rest)
 
@@ -974,6 +1164,9 @@ solveRowEqSum state ct cls tys = do
 
   pure $ Left ((EvExpr dictExpr, ct), allNewWanteds)
 
+-- | Solves the RowShowSum constraint by synthesizing constructor branch showsPrec Core trees.
+-- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
+-- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
 solveRowShowSum
   :: PluginState
   -> Ct
@@ -1026,12 +1219,12 @@ solveRowShowSum state ct cls tys = do
 
   let showField fi fieldTy ev =
         let fieldAtTypeArgs = [Type kATy, Type fTy, Type aTy, Type fieldTy]
-            idxExpr = mkCoreConApps intDataCon [Lit (mkLit (fromIntegral fi :: Integer))]
+            idxExpr = mkIntExpr fi
             raw = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep])
             fFieldTy = mkAppTy fTy fieldTy
             val = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw]
             showDict = ctEvExpr ev
-            zeroPrec = mkCoreConApps intDataCon [Lit (mkLit 0)]
+            zeroPrec = mkIntExpr 0
         in mkCoreApps (Var (psShowsPrecMeth state)) [Type fieldTy, showDict, zeroPrec, val]
 
       showConFields conNameFS fWanteds = do
@@ -1048,7 +1241,7 @@ solveRowShowSum state ct cls tys = do
         errorPrefix <- unsafeLiftTcM $ mkStringExpr "??? "
         pure $ mkCoreApps (Var (psShowString state)) [errorPrefix]
       buildTree tagExpr ((i, conNameFS, fWanteds) : rest) = do
-        let iLit = mkCoreConApps wordDataCon [Lit (mkLit (fromIntegral i :: Integer))]
+        let iLit = mkWordExpr (fromIntegral i)
             cond = mkCoreApps (Var (psEqClass state)) [Type (mkTyConTy wordTyCon), Var (psFEqWord state), tagExpr, iLit]
         trueBranch <- showConFields conNameFS fWanteds
         falseBranch <- buildTree tagExpr rest
@@ -1066,6 +1259,10 @@ solveRowShowSum state ct cls tys = do
 -- HasField solver
 -------------------------------------------------------------------------------
 
+-- | Solves GHC's HasField class for records, returning a record selector function
+-- using literal slot indices.
+-- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
+-- See Note [Human-Centric TypeError Diagnostics & Fuzzy Matching] [ref:note-typeerror-diagnostics]
 solveHasField
   :: PluginState
   -> Ct
@@ -1111,7 +1308,7 @@ solveHasField state ct cls tys = do
                           rep = mkCoreApps (Var (psUnRowRep state)) (unRowRepTypeArgs ++ [Var rVar])
 
                           fieldAtTypeArgs = [Type kATy, Type fTy, Type aTy, Type actualFieldTy]
-                          idxExpr = mkCoreConApps intDataCon [Lit (mkLit (fromIntegral i :: Integer))]
+                          idxExpr = mkIntExpr i
                           raw = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep])
 
                           fFieldTy = mkAppTy fTy actualFieldTy
@@ -1158,6 +1355,9 @@ solveHasField state ct cls tys = do
 -- AllFields solver (generic field-class dictionary supply)
 -------------------------------------------------------------------------------
 
+-- | Solves AllFields by synthesizing an array of DictAny evidence dictionaries.
+-- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
+-- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
 solveAllFields
   :: PluginState
   -> Ct
@@ -1204,6 +1404,9 @@ solveAllFields state ct cls tys
 -- SubRow and SubSum solvers
 -------------------------------------------------------------------------------
 
+-- | Solves the SubRow constraint by synthesizing literal index projection lists.
+-- See Note [SubRow and SubSum Projection and Narrowing Evidence] [ref:note-subrow-subsum]
+-- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
 solveSubRow
   :: PluginState
   -> Ct
@@ -1219,9 +1422,8 @@ solveSubRow state ct cls tys
   , Just superFields <- walkRowWithTypes_maybe superTy
   = case matchFields subFields superFields of
       Just indices -> do
-        let intDataExpr i = mkCoreConApps intDataCon [Lit (mkLit (fromIntegral i :: Integer))]
-            indicesExpr   = mkListExpr intTy (map intDataExpr indices)
-            dictExpr      = evDataConApp (classDataCon cls) tys [indicesExpr]
+        let indicesExpr = mkListExpr intTy (map mkIntExpr indices)
+            dictExpr    = evDataConApp (classDataCon cls) tys [indicesExpr]
         pure $ Left ((EvExpr dictExpr, ct), [])
       Nothing -> do
         let dummyDict = evDataConApp (classDataCon cls) tys [mkListExpr intTy []]
@@ -1265,6 +1467,9 @@ solveSubRow state ct cls tys
               ]
           | otherwise -> findSubRowMismatch rest sFields
 
+-- | Solves the SubSum constraint by synthesizing literal injection and narrowing arrays.
+-- See Note [SubRow and SubSum Projection and Narrowing Evidence] [ref:note-subrow-subsum]
+-- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
 solveSubSum
   :: PluginState
   -> Ct
@@ -1281,8 +1486,7 @@ solveSubSum state ct cls tys
   = case matchCons subCons superCons of
       Just injectIndices -> do
         let wordTy = mkTyConTy wordTyCon
-            wordDataExpr (w :: Word) = mkCoreConApps wordDataCon [Lit (mkLit (fromIntegral w :: Integer))]
-            injectExpr = mkListExpr wordTy (map wordDataExpr injectIndices)
+            injectExpr = mkListExpr wordTy (map mkWordExpr injectIndices)
 
             narrowIndices =
               [ case [ fromIntegral i :: Word
@@ -1297,7 +1501,7 @@ solveSubSum state ct cls tys
 
             maybeWordTy = mkAppTy (mkTyConTy maybeTyCon) wordTy
             narrowDataExpr Nothing = mkCoreConApps nothingDataCon [Type wordTy]
-            narrowDataExpr (Just w) = mkCoreConApps justDataCon [Type wordTy, wordDataExpr w]
+            narrowDataExpr (Just w) = mkCoreConApps justDataCon [Type wordTy, mkWordExpr w]
             narrowExpr = mkListExpr maybeWordTy (map narrowDataExpr narrowIndices)
 
             dictExpr = evDataConApp (classDataCon cls) tys [injectExpr, narrowExpr]
@@ -1368,6 +1572,9 @@ fnv1a64FS fs = fromIntegral (foldl' step (14695981039346656037 :: Word64) (unpac
   where
     step !h !c = (h `xor` fromIntegral (ord c)) * 1099511628211
 
+-- | Solves the KnownHash constraint by computing compile-time 64-bit FNV-1a hash
+-- and emitting literal Word evidence.
+-- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
 solveKnownHash
   :: Ct
   -> Class
@@ -1382,12 +1589,15 @@ solveKnownHash ct cls tys = do
     Just sTy -> case isStrLitTy (unwrapSynonyms sTy) of
       Just fs -> do
         let h = fnv1a64FS fs
-            wExpr = mkCoreConApps wordDataCon [Lit (mkLit (fromIntegral h :: Integer))]
+            wExpr = mkWordExpr h
             dictExpr = evDataConApp (classDataCon cls) tys [wExpr]
         pure $ Left (EvExpr dictExpr, ct)
       Nothing -> pure $ Right ()
     Nothing -> pure $ Right ()
 
+-- | Walks a record row type. Fails (returns Nothing) if the row tail is unfixed or open.
+-- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
+-- See Note [OCaml Subtype/Unify Correlation and Row Tail Algebra] [ref:note-ocaml-row-algebra]
 walkRowWithTypes_maybe :: Type -> Maybe [(Int, FastString, Type)]
 walkRowWithTypes_maybe rowTy = do
   xs <- myExtractPromotedList (unwrapSynonyms rowTy)
@@ -1403,6 +1613,9 @@ walkRowWithTypes_maybe rowTy = do
           -> Just (i, n, fieldTy)
         _ -> Just (i, nilFS, elemTy)
 
+-- | Walks a variant sum row type. Fails (returns Nothing) if the row tail is unfixed or open.
+-- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
+-- See Note [OCaml Subtype/Unify Correlation and Row Tail Algebra] [ref:note-ocaml-row-algebra]
 walkSumRowWithTypes_maybe :: Type -> Maybe [(Int, FastString, Type)]
 walkSumRowWithTypes_maybe rowTy = do
   xs <- myExtractPromotedList (unwrapSynonyms rowTy)
@@ -1428,6 +1641,10 @@ unwrapSynonyms ty = case coreView ty of
   Nothing  -> ty
 
 
+-- | Extracts elements from a promoted type-level list.
+-- Returns Nothing if the list has an unfixed type variable tail (an open row).
+-- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
+-- See Note [OCaml Subtype/Unify Correlation and Row Tail Algebra] [ref:note-ocaml-row-algebra]
 myExtractPromotedList :: Type -> Maybe [Type]
 myExtractPromotedList ty = case splitTyConApp_maybe (unwrapSynonyms ty) of
   Just (tc, [_, x, xs]) | occNameString (getOccName tc) == ":" -> do
@@ -1493,10 +1710,12 @@ findFieldType fieldName rowTy =
 -- Utilities
 -------------------------------------------------------------------------------
 
-partitionEithers :: [Either a b] -> ([a], [b])
-partitionEithers [] = ([], [])
-partitionEithers (Left x : xs) = let (ls, rs) = partitionEithers xs in (x : ls, rs)
-partitionEithers (Right y : xs) = let (ls, rs) = partitionEithers xs in (ls, y : rs)
+-- | Construct a boxed Int Core expression from an Int value.
+-- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
+mkIntExpr :: Int -> CoreExpr
+mkIntExpr i = mkCoreConApps intDataCon [Lit (LitNumber LitNumInt (toInteger i))]
 
-mkLit :: Integer -> Literal
-mkLit i = LitNumber LitNumInt i
+-- | Construct a boxed Word Core expression from a Word value.
+-- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
+mkWordExpr :: Word -> CoreExpr
+mkWordExpr w = mkCoreConApps wordDataCon [Lit (LitNumber LitNumWord (toInteger w))]
