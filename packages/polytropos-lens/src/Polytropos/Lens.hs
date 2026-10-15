@@ -13,7 +13,7 @@
 -- Module      : Polytropos.Lens
 -- Description : lens-suite integration for polytropos open records and variants
 -- Copyright   : (c) 2026 The Polytropos Authors
--- License     : BSD-3-Clause
+-- License     : EUPL-1.2 OR Apache-2.0
 --
 -- Complete integration with Edward Kmett's @lens@ library while keeping the
 -- core packages free of the heavyweight transitive dependency tree.

@@ -17,7 +17,7 @@
 -- Module      : Polytropos.Rel8
 -- Description : rel8 Rel8able instances over polytropos open rows
 -- Copyright   : (c) 2026 The Polytropos Authors
--- License     : BSD-3-Clause
+-- License     : EUPL-1.2 OR Apache-2.0
 --
 -- Integration of @polytropos@ open rows with Oliver Charles' @rel8@ PostgreSQL
 -- framework. @t'PolyRow' r@ is rel8's 'Rel8able' for the product row @r@; its

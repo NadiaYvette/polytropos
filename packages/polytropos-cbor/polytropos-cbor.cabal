@@ -9,7 +9,7 @@ description:
   length header plus flat payload field encodings for records, and a
   constructor Word tag plus selected payload fields for variants — no
   intermediate tree boxing anywhere.
-license: BSD-3-Clause
+license: EUPL-1.2 OR Apache-2.0
 
 library
   default-language: GHC2021

@@ -13,7 +13,7 @@
 -- Module      : Polytropos.CBOR
 -- Description : binary CBOR serialization for polytropos records and variants
 -- Copyright   : (c) 2026 The Polytropos Authors
--- License     : BSD-3-Clause
+-- License     : EUPL-1.2 OR Apache-2.0
 --
 -- High-performance binary CBOR serialization of @polytropos@ open records
 -- and variants via @cborg@/@serialise@, without intermediate tree boxing.

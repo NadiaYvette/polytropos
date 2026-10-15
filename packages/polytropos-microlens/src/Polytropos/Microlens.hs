@@ -13,7 +13,7 @@
 -- Module      : Polytropos.Microlens
 -- Description : microlens integration for polytropos open records
 -- Copyright   : (c) 2026 The Polytropos Authors
--- License     : BSD-3-Clause
+-- License     : EUPL-1.2 OR Apache-2.0
 --
 -- Class-based optics integration for developers who use @microlens@
 -- specifically to avoid transitive dependency bloat: this package depends

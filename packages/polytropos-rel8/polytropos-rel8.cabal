@@ -13,7 +13,7 @@ description:
   by slot — one slot per column, in row order — so conversion to and
   from rel8's columnar representation never materialises an intermediate
   tuple and is unbounded in arity.
-license: BSD-3-Clause
+license: EUPL-1.2 OR Apache-2.0
 
 library
   default-language: GHC2021

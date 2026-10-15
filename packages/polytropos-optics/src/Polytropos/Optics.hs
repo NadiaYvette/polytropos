@@ -15,7 +15,7 @@
 -- Module      : Polytropos.Optics
 -- Description : optics-core integration for polytropos open records and variants
 -- Copyright   : (c) 2026 The Polytropos Authors
--- License     : BSD-3-Clause
+-- License     : EUPL-1.2 OR Apache-2.0
 --
 -- Integration between @polytropos@ and the @optics@ \/ @optics-core@ library.
 -- Provides Van Laarhoven lenses for fields, prisms for variant constructors,

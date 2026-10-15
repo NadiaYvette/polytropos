@@ -1,5 +1,5 @@
 <!--
-SPDX-License-Identifier: BSD-3-Clause
+SPDX-License-Identifier: EUPL-1.2 OR Apache-2.0
 -->
 # Build Systems Matrix: Cabal, Stack & Nix
 

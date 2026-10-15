@@ -13,7 +13,7 @@ description:
   instance lets a whole record travel through persistent's value machinery
   as a 'PersistList', and 'PolyRowEntity' is a key-value wrapper in the
   shape of persistent's 'Entity'.
-license: BSD-3-Clause
+license: EUPL-1.2 OR Apache-2.0
 
 library
   default-language: GHC2021

@@ -10,7 +10,7 @@ description:
   @Field1@..@Field9@ lenses, @At@/@Ixed@ keyed by field name, an @Each@
   traversal over homogeneous records, and profunctor prisms over sum
   variants.
-license: BSD-3-Clause
+license: EUPL-1.2 OR Apache-2.0
 
 library
   default-language: GHC2021

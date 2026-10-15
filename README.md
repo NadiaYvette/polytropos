@@ -162,3 +162,12 @@ the `sarutahiko` project but maintains its own naming range, roadmap, and design
 `large-data` (the `large-records` fork) is a co-development reference checkout;
 no code is copied from it, and third-party derivations and licenses are tracked
 in [`THIRD_PARTY.md`](THIRD_PARTY.md) and [`docs/notes/PROVENANCE.md`](docs/notes/PROVENANCE.md).
+
+## License
+
+This project is dual-licensed under:
+
+- **European Union Public Licence (EUPL) version 1.2** ([`LICENSES/EUPL-1.2.txt`](LICENSES/EUPL-1.2.txt))
+- **Apache License, Version 2.0** ([`LICENSES/Apache-2.0.txt`](LICENSES/Apache-2.0.txt))
+
+You may choose to use this work under the terms of either license. See [`LICENSE`](LICENSE) for details.

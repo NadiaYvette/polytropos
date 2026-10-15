@@ -17,7 +17,7 @@
 -- Module      : Polytropos.Beam
 -- Description : beam schema integration for polytropos open records
 -- Copyright   : (c) 2026 The Polytropos Authors
--- License     : BSD-3-Clause
+-- License     : EUPL-1.2 OR Apache-2.0
 --
 -- Enables @polytropos@ open records to act as @beam@ database schema tables
 -- without GHC out-of-memory compilation crashes on 50+ columns.

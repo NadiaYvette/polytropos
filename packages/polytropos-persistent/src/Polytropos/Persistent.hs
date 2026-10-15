@@ -16,7 +16,7 @@
 -- Module      : Polytropos.Persistent
 -- Description : persistent PersistValue marshalling for polytropos records
 -- Copyright   : (c) 2026 The Polytropos Authors
--- License     : BSD-3-Clause
+-- License     : EUPL-1.2 OR Apache-2.0
 --
 -- Bridges @polytropos@ open records with the Yesod ecosystem's
 -- @persistent@ relational database framework.

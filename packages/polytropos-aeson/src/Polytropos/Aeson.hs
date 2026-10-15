@@ -18,7 +18,7 @@
 -- Module      : Polytropos.Aeson
 -- Description : aeson JSON codecs for polytropos open records and variants
 -- Copyright   : (c) 2026 The Polytropos Authors
--- License     : BSD-3-Clause
+-- License     : EUPL-1.2 OR Apache-2.0
 --
 -- Linear @O(N)@ 'A.ToJSON' and 'A.FromJSON' instances for 'Record' and t'Variant'
 -- without standard GHC.Generics compile slowdowns: the codecs unroll the

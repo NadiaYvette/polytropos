@@ -16,7 +16,7 @@
 -- Module      : Polytropos.QuickCheck
 -- Description : QuickCheck generators and slot-indexed shrinkers for polytropos
 -- Copyright   : (c) 2026 The Polytropos Authors
--- License     : BSD-3-Clause
+-- License     : EUPL-1.2 OR Apache-2.0
 --
 -- Integrates @polytropos@ open records and variants with QuickCheck
 -- property-based testing.

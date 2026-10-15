@@ -1,9 +1,9 @@
 <!--
-SPDX-License-Identifier: BSD-3-Clause
+SPDX-License-Identifier: EUPL-1.2 OR Apache-2.0
 -->
 # THIRD-PARTY.md
 
-Attribution index. Every package in this repository is BSD-3-Clause; this file
+Attribution index. Every package in this repository is dual-licensed under EUPL-1.2 OR Apache-2.0; this file
 records what was taken from elsewhere and under what notice.
 
 **Empty is the correct state today.** No code has been copied into this

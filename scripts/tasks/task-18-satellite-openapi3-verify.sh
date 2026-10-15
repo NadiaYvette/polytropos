@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: BSD-3-Clause
+# SPDX-License-Identifier: EUPL-1.2 OR Apache-2.0
 set -euo pipefail
 
 echo "=== [task-18-verify] Verifying polytropos-openapi3 ==="

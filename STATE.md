@@ -53,6 +53,17 @@ All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
   * Qualified external symbols and fixed doc markdown code blocks (`SmallArray`, `ToJSON`/`FromJSON`, `ToField`/`FromField`, `ToNamedRecord`/`FromNamedRecord`, `Entity`, `Traversal`).
   * Added complete module and function documentation across `Polytropos.Plugin` (`plugin`), `Polytropos.Generics`, and `Polytropos.Optics`.
   * Verified 100% coverage across all 17 library modules with zero doc errors or unlinked symbols.
+- **Dual Licensing (EUPL-1.2 OR Apache-2.0):**
+  * Transitioned repository from BSD-3-Clause to the dual `EUPL-1.2 OR Apache-2.0` model.
+  * Root `LICENSE` declares dual-license disjunction and provides official full texts of both licenses.
+  * REUSE/SPDX directory `LICENSES/` created with `LICENSES/EUPL-1.2.txt` and `LICENSES/Apache-2.0.txt`.
+  * All 16 `.cabal` files across `packages/` and `examples/` specify `license: EUPL-1.2 OR Apache-2.0` and validate under `cabal check`.
+  * All source files, test suites, scripts, and documentation updated with `SPDX-License-Identifier: EUPL-1.2 OR Apache-2.0` headers and Haddock `-- License : EUPL-1.2 OR Apache-2.0` tags.
+  * Registers and provenance notes updated (`THIRD_PARTY.md`, `docs/notes/PROVENANCE.md`, `docs/registers/PACKAGES.md`, `README.md`).
+- **GHC 9.6–9.14 Backward Compatibility & Build Matrix:**
+  * Architectural strategy and implementation blueprint established in `docs/developer/BUILD_SYSTEMS_MATRIX.md`.
+  * Covers multi-version GHC baseline (9.6, 9.8, 9.10, 9.12, 9.14) with SIMD fallback shims for < 9.14.
+  * Multi-tool build support defined across Cabal (multi-project configs), Stack (LTS 22.x/23.x/nightly resolvers), and Nix (Flakes + `haskellPackages` overrides).
 
 ### Tooling Integration: Haskell Language Server (Completed & Verified)
 

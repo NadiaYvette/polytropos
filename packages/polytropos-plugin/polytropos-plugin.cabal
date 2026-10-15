@@ -14,7 +14,7 @@ description:
 
   Load with @ghc-options: -fplugin=Polytropos.Plugin@ in the consuming
   package's .cabal file.
-license:            BSD-3-Clause
+license: EUPL-1.2 OR Apache-2.0
 author:             Nadia Yvette Chambers
 maintainer:         nadia.yvette.chambers@ik.me
 category:           Compiler Plugin

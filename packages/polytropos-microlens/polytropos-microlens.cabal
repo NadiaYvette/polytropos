@@ -7,7 +7,7 @@ description:
   Satellite package integrating @polytropos@ row-typed open records with
   @microlens@: class-based optics with zero transitive dependency bloat
   beyond @base@ and @microlens@ itself.
-license: BSD-3-Clause
+license: EUPL-1.2 OR Apache-2.0
 
 library
   default-language: GHC2021

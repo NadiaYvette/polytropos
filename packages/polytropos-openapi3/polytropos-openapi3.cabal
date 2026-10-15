@@ -8,7 +8,7 @@ description:
   from @polytropos@ open records and variants: object schemas from record
   rows and @oneOf@ tagged-union schemas from sum rows, without GHC.Generics
   tree explosion on large schema objects (50+ fields).
-license: BSD-3-Clause
+license: EUPL-1.2 OR Apache-2.0
 
 library
   default-language: GHC2021

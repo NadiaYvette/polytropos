@@ -11,7 +11,7 @@ description:
   flat 'Polytropos.Core.Rep' payload. Unlike the aeson satellite, the codecs
   here are genuinely heterogeneous: each field's own 'FromField'/'ToField'
   instance is used, per the @AllFields@ constraint walk.
-license: BSD-3-Clause
+license: EUPL-1.2 OR Apache-2.0
 
 library
   default-language: GHC2021

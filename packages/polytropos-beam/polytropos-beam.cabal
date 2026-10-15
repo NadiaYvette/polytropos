@@ -9,7 +9,7 @@ description:
   50+ columns: the 'Database.Beam.Schema.Tables.Beamable' instance works
   directly over the flat 'SmallArray' payload, so column count costs one
   array element, not one node of a generic-representation tree.
-license: BSD-3-Clause
+license: EUPL-1.2 OR Apache-2.0
 
 library
   default-language: GHC2021

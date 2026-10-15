@@ -16,7 +16,7 @@
 -- Module      : Polytropos
 -- Description : High-level consumer-facing API for Polytropos
 -- Copyright   : (c) 2026 The Polytropos Authors
--- License     : BSD-3-Clause
+-- License     : EUPL-1.2 OR Apache-2.0
 -- Maintainer  : nadia.yvette.chambers@ik.me
 --
 -- This module provides the high-level, human-friendly API exports and pattern

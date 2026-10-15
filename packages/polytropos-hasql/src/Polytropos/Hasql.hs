@@ -15,7 +15,7 @@
 -- Module      : Polytropos.Hasql
 -- Description : hasql row decoders for polytropos open records
 -- Copyright   : (c) 2026 The Polytropos Authors
--- License     : BSD-3-Clause
+-- License     : EUPL-1.2 OR Apache-2.0
 --
 -- Integrates @polytropos@ open records with the high-performance
 -- PostgreSQL driver @hasql@.

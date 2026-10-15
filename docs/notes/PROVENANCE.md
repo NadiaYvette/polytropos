@@ -1,5 +1,5 @@
 <!--
-SPDX-License-Identifier: BSD-3-Clause
+SPDX-License-Identifier: EUPL-1.2 OR Apache-2.0
 -->
 Status: POLICY · v1.0 · 2026-10-05 — blessed; see `DOC_STRATEGY.md` §3 for what
 blessing certifies and §8 for the authority it transfers.
@@ -39,9 +39,10 @@ yours, cite it.** That covers copying without lifting verbatim.
 
 ## Attribution when a port does copy
 
-Every `large-data` package is BSD-3-Clause, the same licence as this
-repository, so there is no incompatibility to negotiate — only a notice to
-keep. The holder lines differ per package and are *not* uniform:
+Every `large-data` package is BSD-3-Clause, compatible with this
+repository's dual `EUPL-1.2 OR Apache-2.0` license, so there is no
+incompatibility to negotiate — only a notice to keep. The holder lines differ
+per package and are *not* uniform:
 
 ```
 large-records        Copyright (c) 2022, Well-Typed LLP, Juspay Technologies
@@ -117,6 +118,6 @@ Before a port lands, three questions:
 
 - `docs/registers/PACKAGES.md` — the per-package register.
 - `THIRD_PARTY.md` — the attribution index.
-- `LICENSE` — this repository's own BSD-3-Clause.
+- `LICENSE` — this repository's own dual EUPL-1.2 OR Apache-2.0 license.
 - `docs/notes/POLYTROPOS_DESIGN.md` §7 Q5 — how polytropos and `large-anon`
   coexist, which is a design question this note does not prejudge.

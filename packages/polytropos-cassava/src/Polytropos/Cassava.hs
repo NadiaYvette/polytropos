@@ -17,7 +17,7 @@
 -- Module      : Polytropos.Cassava
 -- Description : cassava CSV codecs for polytropos open records
 -- Copyright   : (c) 2026 The Polytropos Authors
--- License     : BSD-3-Clause
+-- License     : EUPL-1.2 OR Apache-2.0
 --
 -- Connects @polytropos@ open records to the standard Haskell CSV library
 -- @cassava@ without intermediate nominal conversions: 'Csv.ToNamedRecord'

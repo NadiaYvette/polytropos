@@ -12,7 +12,7 @@
 -- Module      : Polytropos.OpenApi
 -- Description : OpenAPI 3.0 schema generation for polytropos records and variants
 -- Copyright   : (c) 2026 The Polytropos Authors
--- License     : BSD-3-Clause
+-- License     : EUPL-1.2 OR Apache-2.0
 --
 -- Generates OpenAPI 3.0 schema specifications directly from @polytropos@
 -- open records and variants.

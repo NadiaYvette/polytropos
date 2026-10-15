@@ -12,7 +12,7 @@ description:
   blowup. 'Arbitrary (Variant s)' uniformly selects a constructor tag index
   and generates that constructor's payload, and shrinks strictly within the
   active constructor branch.
-license: BSD-3-Clause
+license: EUPL-1.2 OR Apache-2.0
 
 library
   default-language: GHC2021

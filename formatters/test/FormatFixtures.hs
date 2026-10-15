@@ -8,7 +8,7 @@
 Module      : FormatFixtures
 Description : Formatter test fixtures asserting AST-preserving row formatting
 Copyright   : (c) Nadia Yvette Chambers, 2026
-License     : BSD-3-Clause
+License     : EUPL-1.2 OR Apache-2.0
 
 This module exercises row type declarations, record dot access, variant
 dispatch, and constructor peeling to assert idempotence and syntax preservation

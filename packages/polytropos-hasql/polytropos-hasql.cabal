@@ -11,7 +11,7 @@ description:
   'SmallArray' payload of the record — no intermediate tuples and no GHC's
   62-column tuple limit, because the column decoders are combined by a
   constraint walk rather than a tuple constructor.
-license: BSD-3-Clause
+license: EUPL-1.2 OR Apache-2.0
 
 library
   default-language: GHC2021

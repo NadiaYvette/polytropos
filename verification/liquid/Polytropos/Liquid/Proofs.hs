@@ -8,7 +8,7 @@
 Module      : Polytropos.Liquid.Proofs
 Description : LiquidHaskell refinement type verification & proofs for Polytropos rows
 Copyright   : (c) Nadia Yvette Chambers, 2026
-License     : BSD-3-Clause
+License     : EUPL-1.2 OR Apache-2.0
 
 This module provides formal verification specifications and proof combinators
 for row memory safety, slot indexing bounds, subrow projection validity, and

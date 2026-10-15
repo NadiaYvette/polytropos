@@ -8,7 +8,7 @@ description:
   @polytropos@ open records and variants: unrolls the flat 'SmallArray'
   payload directly into a JSON object and back without a GHC.Generics tree,
   and encodes variants as tagged objects.
-license: BSD-3-Clause
+license: EUPL-1.2 OR Apache-2.0
 
 library
   default-language: GHC2021
