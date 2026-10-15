@@ -1,7 +1,8 @@
 # polytropos
 
 Row-polymorphic / open algebraic data types (ADTs) and high-performance
-matching generics for Haskell.
+matching generics for Haskell, bringing the open row typing discipline and
+polymorphic variant semantics of OCaml to modern GHC.
 
 `polytropos` collapses the four quadrants of nominal vs. structural products
 and sums into **one** generic runtime representation (`Rep`: an unpacked tag
@@ -65,6 +66,45 @@ data Rep (f :: Type -> Type) a = Rep
 
 Because the runtime layout is identical, hybrid nominal-structural conversions
 are zero-cost coercions.
+
+### The OCaml Heritage: Polymorphic Variants & Row Typing in GHC
+
+Mainstream Haskell historically lacked a native counterpart to OCaml's battle-tested
+row typing system. In OCaml (grounded in the foundational type-theoretic work of Jacques
+Garrigue, Didier Rémy, and Jérôme Vouillon), **polymorphic variants** (`[> `Tag of a ]`
+and `[< `Tag of a ]`) and object rows demonstrate that extensible data structures do
+not require runtime conversion gymnastics, nested `Either` trees, or global constructor
+registrations.
+
+`polytropos` deliberately borrows and adapts OCaml's row typing discipline to Haskell:
+
+1. **Unified Open and Closed Row Algebra**:
+   In OCaml, open and closed variants share the identical internal type shape
+   (`Tvariant { row_fields; row_more; closed; fixed }`). Closedness is simply a property
+   of the row tail (`Tnil` vs. an open type variable `Tvar`), rather than an ad-hoc
+   phantom flag. In `polytropos`, nominal data types and open structural rows inhabit the
+   same row algebra: closed types are the closed boundary of the same algebra open rows
+   use, ensuring seamless backward compatibility without artificial wrapper types.
+
+2. **Structural Subtyping via Constraint Synthesis (`subtype_row`)**:
+   OCaml's structural subtyping does not perform expensive runtime repackaging; its
+   `subtype_row` and `merge_row_fields` algorithms check field/constructor inclusion and
+   emit deferred unification constraints. In `polytropos`, the GHC typechecker plugin
+   (`Polytropos.Plugin`) performs the equivalent role: it solves `SubRow` (record width
+   subtyping) and `SubSum` (variant widening/injection) at compile time, synthesizing
+   literal array slices and jump-table mappings with zero runtime search overhead.
+
+3. **Compile-Time Tag Hashing & $O(1)$ Dispatch**:
+   OCaml polymorphic variant tags (e.g. `` `Tag ``) are hashed integer tags computed at
+   compile time, allowing open pattern matching and dynamic dispatch without a central
+   registry. `polytropos` pairs `KnownHash` (compile-time 64-bit FNV-1a hash synthesis)
+   with the core `Rep` unpacked `Word` tag to achieve $O(1)$ constructor dispatch and
+   jump-table eliminators (`eliminate`, `matchVariant`).
+
+4. **Advancing the Memory Physics**:
+   While OCaml maintains separate heap block encodings for variant tags and record objects,
+   `polytropos` advances the state of the art by collapsing both products and sums into
+   a **single** unboxed `Word` tag + contiguous flat `SmallArray (f Any)` payload layout.
 
 ### Techniques from `large-records`, `large-anon`, and `large-generics`
 
@@ -136,6 +176,13 @@ Package roles, directory conventions, and reuse rules are documented in
     Discussion of high-leverage Haskell abstraction patterns (effects, open ADTs, generics, profunctors).
   - [`docs/transcripts/gemini-large-data-hybrid-variant-records-spec.md`](docs/transcripts/gemini-large-data-hybrid-variant-records-spec.md):
     Early transcript exploring hybrid nominal-structural variant records.
+- **Theoretical Foundations & Row Algebra**:
+  - [`docs/notes/OCAML_BACKWARD_COMPAT_ROW_ALGEBRA.md`](docs/notes/OCAML_BACKWARD_COMPAT_ROW_ALGEBRA.md):
+    Deep-dive into OCaml's `ctype.ml` row representation and how backward compatibility is maintained without ad-hoc flags.
+  - [`docs/notes/OCAML_ROW_TAIL_SUBTYPE_MECHANISM.md`](docs/notes/OCAML_ROW_TAIL_SUBTYPE_MECHANISM.md):
+    Detailed analysis of OCaml's `subtype_row` and `unify_row` tail-merging algorithms.
+  - [`docs/notes/ROW_ROLE_JUDGEMENT_SKETCH.md`](docs/notes/ROW_ROLE_JUDGEMENT_SKETCH.md) & [`docs/notes/ROW_ROLE_DEFNS_DRAFT.ott`](docs/notes/ROW_ROLE_DEFNS_DRAFT.ott):
+    Formal typing judgements bridging OCaml row algebra with GHC Core role semantics.
 - **Developer & Tooling Integration**:
   - [`docs/developer/UPSTREAM_REPOSITORIES_AND_INTEGRATIONS.md`](docs/developer/UPSTREAM_REPOSITORIES_AND_INTEGRATIONS.md):
     Authoritative catalog of upstream repositories modified for polytropos (HLS autocompletions & hovers, effect system ports, toolchain forks, and why formatters need no forks).
@@ -154,10 +201,20 @@ cabal build all
 cabal test all
 ```
 
-## Relationship to Other Work
+## Relationship to Other Work & Theoretical Precedents
 
-`polytropos` is an independent project. It shares a documentation framework with
-the `sarutahiko` project but maintains its own naming range, roadmap, and design.
+`polytropos` is an independent project. It synthesizes two distinct PL traditions:
+
+1. **OCaml's Row Typing & Polymorphic Variants**: The row algebra, open/closed tail
+   mechanics, and structural subtyping discipline are directly informed by Jacques
+   Garrigue's polymorphic variants and the OCaml typechecker's `ctype.ml` row unification
+   architecture.
+2. **Well-Typed's Flat Array Representation**: The runtime memory model, type-erased
+   `SmallArray (f Any)` storage, and GHC `TcPlugin` literal synthesis build upon techniques
+   pioneered in Well-Typed's `large-records`, `large-anon`, and `large-generics` suites.
+
+It shares a documentation framework with the `sarutahiko` project but maintains its own
+naming range, roadmap, and design.
 
 `large-data` (the `large-records` fork) is a co-development reference checkout;
 no code is copied from it, and third-party derivations and licenses are tracked
