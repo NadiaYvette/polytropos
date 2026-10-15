@@ -30,6 +30,7 @@ Status: LIVING DOCUMENT · v0.1 · 2026-10-05
 | `tools/SOURCE_FORMATTERS_AND_LAYOUT_GUIDE.md` | guide | live | cross-cutting | Fourmolu, Ormolu, Brittany, and Floskell configurations, fixtures, and runner |
 | `developer/LIQUIDHASKELL_AND_SYNQUID_GUIDE.md` | guide | live | cross-cutting | Developer guide for LiquidHaskell formal verification & Synquid program synthesis |
 | `developer/UPSTREAM_REPOSITORIES_AND_INTEGRATIONS.md` | guide | live | cross-cutting | Authoritative catalog of upstream repositories modified for polytropos (HLS, effects, tools) |
+| `developer/BUILD_SYSTEMS_MATRIX.md` | guide | live | cross-cutting | Cross-compiler build guide and verification matrix for Cabal, Stack, and Nix |
 | `../rules/README.md` | guide | live | cross-cutting | Downstream developer rules, formatter configurations, linters, and rewrites library |
 | `../plans/FULL_COMPLETION_ROADMAP.md` | plan | live | cross-cutting | Roadmap resolving technical debt and 4-tier documentation overhaul |
 | `registers/PACKAGES.md` | register | live | cross-cutting | — |

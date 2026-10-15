@@ -1,0 +1,12 @@
+# Stack configuration for GHC 9.6 (LTS 22.44 baseline)
+resolver: lts-22.44
+
+system-ghc: true
+
+packages:
+  - packages/polytropos-core
+  - packages/polytropos-plugin
+
+extra-deps:
+  - primitive-0.9.1.0
+  - ghc-tcplugin-api-0.20.1.0

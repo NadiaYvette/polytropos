@@ -1,0 +1,11 @@
+# Stack configuration for GHC 9.8 (LTS 23.12 / Hackage baseline)
+resolver: lts-23.12
+
+system-ghc: true
+
+packages:
+  - packages/polytropos-core
+  - packages/polytropos-plugin
+
+extra-deps:
+  - ghc-tcplugin-api-0.20.1.0

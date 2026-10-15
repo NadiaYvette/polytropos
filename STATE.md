@@ -157,6 +157,12 @@ Milestone T9 has been implemented, tested, and deterministically verified across
   * Runtime module unit resolution: `modBase` (`GHC.Base` vs `GHC.Internal.Base`), `modShow` (`GHC.Show` vs `GHC.Internal.Show`), and `modRecords` dynamically using `moduleUnit modBase` (`base:GHC.Records` on GHC 9.6-9.8 vs `ghc-internal:GHC.Internal.Records` on GHC 9.10-9.14).
 - **Universal SIMD Fallback:** `primitive >= 0.9`'s `copySmallArray` primitive provides autovectorized SIMD block copy on GHC 9.14 while falling back cleanly to libc `memcpy` on older GHC releases, with zero linked-list churn and zero code divergence.
 - **Multi-Compiler Overlays:** Dedicated cabal project files (`cabal.project.ghc-9.6`, `cabal.project.ghc-9.8`, `cabal.project.ghc-9.10`, `cabal.project.ghc-9.12`) allowing isolated regression verification.
+- **Stack Multi-Compiler Support:** Verified clean test builds across all 5 versions via dedicated configurations (`stack-ghc-9.6.yaml` on LTS 22.44, `stack-ghc-9.8.yaml` on LTS 23.12, `stack-ghc-9.10.yaml`, `stack-ghc-9.12.yaml`, and `stack-ghc-9.14.yaml` / root `stack.yaml` on GHC 9.14.1), passing 100% of core and plugin smoke tests (99/99 per compiler).
+- **Nix Native & Flake Support:** Pure native Nixpkgs builds and test suites implemented via `flake.nix`, `default.nix`, and `shell.nix`:
+  * Direct package builds (`ghc96-polytropos-core`, `ghc96-polytropos-plugin`, `ghc98-*`, `ghc910-*`).
+  * Isolated test environment interop via `POLYTROPOS_TEST_GHC_FLAGS` injecting `-package-db` parameters to child GHC subprocesses during `checkPhase`.
+  * Reproducible multi-GHC dev shells (`nix develop .#ghc96`, `.#ghc98`, `.#ghc910`, and `.#default`).
+- **Developer Guide:** Authoritative matrix guide and quick reference cataloged in `docs/developer/BUILD_SYSTEMS_MATRIX.md`.
 
 ## What exists
 

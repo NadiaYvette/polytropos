@@ -27,6 +27,7 @@ import Data.Type.Equality ((:~:)(Refl))
 import GHC.Exts (Any)
 import GHC.TypeLits (Symbol)
 import System.Directory (getTemporaryDirectory, removeFile)
+import System.Environment (lookupEnv)
 import System.Exit (ExitCode(..))
 import System.FilePath ((</>))
 import System.Process (readProcessWithExitCode)
@@ -422,12 +423,13 @@ checkGhcDiag snippet expectedSubstrings = do
   tmpDir <- getTemporaryDirectory
   let tmpFile = tmpDir </> "PolytroposDiagTest.hs"
   writeFile tmpFile snippet
+  extraFlags <- maybe [] words <$> lookupEnv "POLYTROPOS_TEST_GHC_FLAGS"
   (exitCode, _stdout, stderr) <- readProcessWithExitCode
     "ghc"
-    [ "-fno-code"
-    , tmpFile
-    , "-fplugin=Polytropos.Plugin"
-    ]
+    ([ "-fno-code"
+     , tmpFile
+     , "-fplugin=Polytropos.Plugin"
+     ] ++ extraFlags)
     ""
   removeFile tmpFile
   exitCode @?= ExitFailure 1
