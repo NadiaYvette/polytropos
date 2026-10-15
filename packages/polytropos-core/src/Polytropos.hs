@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE PatternSynonyms #-}
@@ -51,8 +52,13 @@ module Polytropos
   , type RecordF
   , type Variant
   , type VariantF
+#if __GLASGOW_HASKELL__ >= 914
   , data Variant
   , data VariantF
+#else
+  , pattern Variant
+  , pattern VariantF
+#endif
     -- * Construction
   , emptyRecord
   , emptyRecordF
@@ -107,7 +113,11 @@ module Polytropos
   , REC_F(..)
   , VAR(..)
   , type VARIANT
+#if __GLASGOW_HASKELL__ >= 914
   , data VARIANT
+#else
+  , pattern VARIANT
+#endif
   , REC_UPD(..)
   , REC_UPD_F(..)
   , OpenRecord

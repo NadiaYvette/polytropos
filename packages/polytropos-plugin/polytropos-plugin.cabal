@@ -34,11 +34,12 @@ library
   import:           warnings
   exposed-modules:  Polytropos.Plugin
                   , Polytropos.Plugin.Source
+  other-modules:    Polytropos.Plugin.Compat
   hs-source-dirs:   src
   default-language: GHC2021
   build-depends:
-      base       >= 4.19 && < 4.23
-    , ghc         >= 9.14 && < 9.15
+      base       >= 4.18 && < 4.23
+    , ghc         >= 9.6  && < 9.15
     , ghc-tcplugin-api >= 0.1 && < 0.21
 
 test-suite polytropos-plugin-smoke
@@ -48,7 +49,7 @@ test-suite polytropos-plugin-smoke
   main-is:          Main.hs
   default-language: GHC2021
   build-depends:
-      base       >= 4.19 && < 4.23
+      base       >= 4.18 && < 4.23
     , polytropos-core
     , primitive
     , tasty         >= 1.4  && < 1.6

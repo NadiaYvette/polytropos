@@ -14,7 +14,7 @@ description:
 license: BSD-3-Clause
 
 library
-  default-language: GHC2024
+  default-language: GHC2021
   hs-source-dirs: src
   exposed-modules: Polytropos.Cassava
   ghc-options: -Wall -Werror
@@ -27,7 +27,7 @@ library
 
 test-suite polytropos-cassava-test
   type: exitcode-stdio-1.0
-  default-language: GHC2024
+  default-language: GHC2021
   hs-source-dirs: test
   main-is: Main.hs
   ghc-options: -Wall -Werror -fplugin=Polytropos.Plugin

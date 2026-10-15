@@ -6,7 +6,7 @@ license: BSD-3-Clause
 build-type: Simple
 
 executable example-nanopass
-  default-language: GHC2024
+  default-language: GHC2021
   hs-source-dirs: src
   main-is: Main.hs
   ghc-options: -Wall -Werror -fplugin=Polytropos.Plugin

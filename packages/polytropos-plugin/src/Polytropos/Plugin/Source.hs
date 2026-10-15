@@ -1,8 +1,13 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
+
+#if __GLASGOW_HASKELL__ >= 914
+{-# OPTIONS_GHC -Wno-pattern-namespace-specifier #-}
+#endif
 
 -- | Source plugin for @polytropos@.
 --
@@ -58,7 +63,6 @@ import GHC.Plugins
   , occNameString
   , occNameFS
   , moduleNameString
-  , RawPkgQual(..)
   )
 
 import GHC.Hs.Extension
@@ -75,17 +79,12 @@ import GHC.Hs
   , FieldOcc(..)
   , LHsExpr
   , LHsRecField
-  , LHsRecUpdField
   , LPat
   , LHsDecl
   , noLocA
-  , LHsRecUpdFields(..)
   , HsConDetails(..)
   , LImportDecl
   , ImportDecl(..)
-  , ImportDeclQualifiedStyle(..)
-  , IsBootInterface(..)
-  , ImportDeclLevelStyle(..)
   , noAnn
   , noExtField
   , HsDecl(..)
@@ -97,27 +96,27 @@ import GHC.Hs
   , DerivClauseTys(..)
   , HsSigType(..)
   , HsType(..)
-  , mkHsLam
   )
 
 import Language.Haskell.Syntax.Basic
   ( Boxity(..)
   )
 
-import Language.Haskell.Syntax.Expr
-  ( HsTupArg(..)
-  )
-
-import GHC.Hs.ImpExp
-  ( XImportDeclPass(..)
-  )
-
-import GHC.Types.SourceText
-  ( SourceText(..)
-  )
-
 import GHC.Driver.Plugins
   ( ParsedResult(..)
+  )
+
+import Polytropos.Plugin.Compat
+  ( CompatRecUpdField
+  , matchRecordUpd
+  , extractRecUpdField
+  , pattern PrefixConPat
+  , stripHsPar
+  , polyLabel
+  , mkPolytroposImportDecl
+  , mkHsApp
+  , mkTupArg
+  , mkLambda
   )
 
 {-------------------------------------------------------------------------------
@@ -238,12 +237,12 @@ transformExpr knownRecs knownVars expr = case expr of
     -> desugarVariantCon flds
 
   -- 4. Record Update: (REC_UPD r) { x = 42 } or REC_UPD (r { x = 42 }) or REC_UPD_F
-  RecordUpd _ext (stripHsPar -> L _ (HsApp _ (stripHsPar -> L _ (HsVar _ (L _ nm))) r)) (RegularRecUpdFields _ flds)
+  (matchRecordUpd -> Just (stripHsPar -> L _ (HsApp _ (stripHsPar -> L _ (HsVar _ (L _ nm))) r), flds))
     | let nmStr = occNameString (rdrNameOcc nm)
     , nmStr == "REC_UPD" || nmStr == "REC_UPD_F"
     -> desugarRecordUpd (nmStr == "REC_UPD_F") r flds
 
-  HsApp _ (stripHsPar -> L _ (HsVar _ (L _ nm))) (stripHsPar -> L _ (RecordUpd _ r (RegularRecUpdFields _ flds)))
+  HsApp _ (stripHsPar -> L _ (HsVar _ (L _ nm))) (stripHsPar -> L _ (matchRecordUpd -> Just (r, flds)))
     | let nmStr = occNameString (rdrNameOcc nm)
     , nmStr == "REC_UPD" || nmStr == "REC_UPD_F"
     -> desugarRecordUpd (nmStr == "REC_UPD_F") r flds
@@ -256,7 +255,7 @@ transformExpr knownRecs knownVars expr = case expr of
     -> let injFn = polyVar "injectVariant"
            lblExpr = polyLabel (fsLit conStr)
            recPayload = noLocA (desugarRecordCon False flds)
-       in HsApp noExtField (noLocA (HsApp noExtField injFn lblExpr)) recPayload
+       in unLoc (mkHsApp (mkHsApp injFn lblExpr) recPayload)
 
   -- 5b. Prefix application: Success r
   HsApp appExt (L _ (HsVar _ (L _ nm))) arg
@@ -264,7 +263,7 @@ transformExpr knownRecs knownVars expr = case expr of
     , conStr `elem` knownVars
     -> let injFn = polyVar "injectVariant"
            lblExpr = polyLabel (fsLit conStr)
-       in HsApp appExt (noLocA (HsApp noExtField injFn lblExpr)) arg
+       in HsApp appExt (mkHsApp injFn lblExpr) arg
 
   -- 5c. Nullary constructor: Loading
   HsVar _ (L _ nm)
@@ -273,14 +272,9 @@ transformExpr knownRecs knownVars expr = case expr of
     -> let injFn = polyVar "injectVariant"
            lblExpr = polyLabel (fsLit conStr)
            emptyFn = polyVar "emptyRecord"
-       in HsApp noExtField (noLocA (HsApp noExtField injFn lblExpr)) emptyFn
+       in unLoc (mkHsApp (mkHsApp injFn lblExpr) emptyFn)
 
   other -> other
-
--- | Strip enclosing parenthesis expressions.
-stripHsPar :: LHsExpr GhcPs -> LHsExpr GhcPs
-stripHsPar (L _ (HsPar _ e)) = stripHsPar e
-stripHsPar e = e
 
 -- | Desugar record construction into emptyRecord + insertField chain.
 desugarRecordCon :: Bool -> [LHsRecField GhcPs (LHsExpr GhcPs)] -> HsExpr GhcPs
@@ -292,7 +286,7 @@ desugarRecordCon isHKD flds =
         let (lbl, arg) = extractRecField fld
             insFn = polyVar insertFnName
             lblExpr = polyLabel lbl
-        in noLocA $ HsApp noExtField (noLocA (HsApp noExtField (noLocA (HsApp noExtField insFn lblExpr)) arg)) acc
+        in mkHsApp (mkHsApp (mkHsApp insFn lblExpr) arg) acc
   in unLoc $ foldr foldStep emptyFn flds
 
 -- | Desugar variant injection into injectVariant #Tag val.
@@ -303,18 +297,18 @@ desugarVariantCon (fld : _) =
   let (lbl, arg) = extractRecField fld
       injFn = polyVar "injectVariant"
       lblExpr = polyLabel lbl
-  in HsApp noExtField (noLocA (HsApp noExtField injFn lblExpr)) arg
+  in unLoc (mkHsApp (mkHsApp injFn lblExpr) arg)
 
 -- | Desugar record updates into chained setField calls.
-desugarRecordUpd :: Bool -> LHsExpr GhcPs -> [LHsRecUpdField GhcPs GhcPs] -> HsExpr GhcPs
+desugarRecordUpd :: Bool -> LHsExpr GhcPs -> [CompatRecUpdField] -> HsExpr GhcPs
 desugarRecordUpd isHKD r flds =
   let setFnName = if isHKD then "setFieldF" else "setField"
-      foldStep :: LHsRecUpdField GhcPs GhcPs -> LHsExpr GhcPs -> LHsExpr GhcPs
-      foldStep (L _ (HsFieldBind _ (L _ (FieldOcc _ (L _ lbl))) arg _)) acc =
-        let fs = occNameFS (rdrNameOcc lbl)
+      foldStep :: CompatRecUpdField -> LHsExpr GhcPs -> LHsExpr GhcPs
+      foldStep fld acc =
+        let (fs, arg) = extractRecUpdField fld
             setFn = polyVar setFnName
             lblExpr = polyLabel fs
-        in noLocA $ HsApp noExtField (noLocA (HsApp noExtField (noLocA (HsApp noExtField setFn lblExpr)) arg)) acc
+        in mkHsApp (mkHsApp (mkHsApp setFn lblExpr) arg) acc
   in unLoc $ foldr foldStep r flds
 
 -- | Extract label and argument from record field with punning support.
@@ -347,29 +341,29 @@ transformPat knownRecs knownVars pat = case pat of
   ConPat _ext (L _ nm) (RecCon HsRecFields{ rec_flds = flds })
     | let conStr = occNameString (rdrNameOcc nm)
     , conStr `elem` knownVars
-    -> let viewExpr = noLocA $ HsApp noExtField (polyVar "projectVariant") (polyLabel (fsLit conStr))
+    -> let viewExpr = mkHsApp (polyVar "projectVariant") (polyLabel (fsLit conStr))
            justCon  = noLocA (mkRdrUnqual (mkDataOcc "Just"))
            innerPat = noLocA (desugarRecordPat flds)
-           justPat  = noLocA $ ConPat noAnn justCon (PrefixCon [innerPat])
+           justPat  = noLocA $ ConPat noAnn justCon (PrefixConPat [innerPat])
        in ViewPat noAnn viewExpr justPat
 
   -- 3b. 1-arg prefix pattern: Success r
-  ConPat _ext (L _ nm) (PrefixCon [argPat])
+  ConPat _ext (L _ nm) (PrefixConPat [argPat])
     | let conStr = occNameString (rdrNameOcc nm)
     , conStr `elem` knownVars
-    -> let viewExpr = noLocA $ HsApp noExtField (polyVar "projectVariant") (polyLabel (fsLit conStr))
+    -> let viewExpr = mkHsApp (polyVar "projectVariant") (polyLabel (fsLit conStr))
            justCon  = noLocA (mkRdrUnqual (mkDataOcc "Just"))
-           justPat  = noLocA $ ConPat noAnn justCon (PrefixCon [argPat])
+           justPat  = noLocA $ ConPat noAnn justCon (PrefixConPat [argPat])
        in ViewPat noAnn viewExpr justPat
 
   -- 3c. Nullary prefix pattern: Loading
-  ConPat _ext (L _ nm) (PrefixCon [])
+  ConPat _ext (L _ nm) (PrefixConPat [])
     | let conStr = occNameString (rdrNameOcc nm)
     , conStr `elem` knownVars
-    -> let viewExpr = noLocA $ HsApp noExtField (polyVar "projectVariant") (polyLabel (fsLit conStr))
+    -> let viewExpr = mkHsApp (polyVar "projectVariant") (polyLabel (fsLit conStr))
            justCon  = noLocA (mkRdrUnqual (mkDataOcc "Just"))
            wildPat  = noLocA (WildPat noExtField)
-           justPat  = noLocA $ ConPat noAnn justCon (PrefixCon [wildPat])
+           justPat  = noLocA $ ConPat noAnn justCon (PrefixConPat [wildPat])
        in ViewPat noAnn viewExpr justPat
 
   other -> other
@@ -380,16 +374,16 @@ desugarRecordPat [] =
   WildPat noExtField
 desugarRecordPat [fld] =
   let (lbl, p) = extractRecPatField fld
-      viewExpr = noLocA $ HsApp noExtField (polyVar "recordField") (polyLabel lbl)
+      viewExpr = mkHsApp (polyVar "recordField") (polyLabel lbl)
   in ViewPat noAnn viewExpr p
 desugarRecordPat flds =
   let (lbls, pats) = unzip (map extractRecPatField flds)
       rVar         = mkRdrUnqual (mkVarOcc "_r")
       rExpr        = noLocA (HsVar noExtField (noLocA rVar))
-      mkProj lbl   = noLocA $ HsApp noExtField (noLocA (HsApp noExtField (polyVar "recordField") (polyLabel lbl))) rExpr
-      tupExpr      = noLocA $ ExplicitTuple noAnn (map (Present noExtField . mkProj) lbls) Boxed
+      mkProj lbl   = mkHsApp (mkHsApp (polyVar "recordField") (polyLabel lbl)) rExpr
+      tupExpr      = noLocA $ ExplicitTuple noAnn (map (mkTupArg . mkProj) lbls) Boxed
       rPat         = noLocA (VarPat noExtField (noLocA rVar))
-      lamExpr      = mkHsLam (noLocA [rPat]) tupExpr
+      lamExpr      = mkLambda [rPat] tupExpr
       tupPat       = noLocA $ TuplePat noAnn pats Boxed
   in ViewPat noAnn lamExpr tupPat
 
@@ -399,9 +393,9 @@ desugarVariantPat [] =
   error "Polytropos.Plugin.Source: VAR {} pattern requires a constructor tag"
 desugarVariantPat (fld : _) =
   let (lbl, p)   = extractRecPatField fld
-      viewExpr   = noLocA $ HsApp noExtField (polyVar "projectVariant") (polyLabel lbl)
+      viewExpr   = mkHsApp (polyVar "projectVariant") (polyLabel lbl)
       justCon    = noLocA (mkRdrUnqual (mkDataOcc "Just"))
-      justPat    = noLocA $ ConPat noAnn justCon (PrefixCon [p])
+      justPat    = noLocA $ ConPat noAnn justCon (PrefixConPat [p])
   in ViewPat noAnn viewExpr justPat
 
 -- | Extract label and sub-pattern from record pattern field.
@@ -418,29 +412,13 @@ extractRecPatField (L _ (HsFieldBind _ (L _ (FieldOcc _ (L _ lbl))) p pun)) =
 polyVar :: String -> LHsExpr GhcPs
 polyVar occ = noLocA (HsVar noExtField (noLocA (mkRdrQual (mkModuleName "Polytropos") (mkVarOcc occ))))
 
-polyLabel :: FastString -> LHsExpr GhcPs
-polyLabel fs = noLocA (HsOverLabel noAnn fs)
-
 -- | Ensure 'import qualified Polytropos as Polytropos' is present in imports.
 ensurePolytroposImport :: [LImportDecl GhcPs] -> [LImportDecl GhcPs]
 ensurePolytroposImport imps =
   if any isPolytroposImport imps
     then imps
-    else polytroposImportDecl : imps
+    else mkPolytroposImportDecl : imps
   where
     isPolytroposImport (L _ ImportDecl{ ideclName = L _ modNm }) =
       moduleNameString modNm == "Polytropos"
     isPolytroposImport _ = False
-
-    polytroposImportDecl :: LImportDecl GhcPs
-    polytroposImportDecl = noLocA $ ImportDecl
-      { ideclExt       = XImportDeclPass noAnn NoSourceText False
-      , ideclName      = noLocA (mkModuleName "Polytropos")
-      , ideclPkgQual   = NoRawPkgQual
-      , ideclSource    = NotBoot
-      , ideclLevelSpec = NotLevelled
-      , ideclSafe      = False
-      , ideclQualified = QualifiedPre
-      , ideclAs        = Just (noLocA (mkModuleName "Polytropos"))
-      , ideclImportList = Nothing
-      }

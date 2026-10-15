@@ -1,5 +1,6 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
@@ -121,6 +122,9 @@ import Data.Char                   (ord)
 import Data.Foldable               (toList)
 import Data.Kind                   (Constraint, Type)
 import Data.List                   (sortOn)
+#if !MIN_VERSION_base(4,20,0)
+import Data.List                   (foldl')
+#endif
 import Data.Primitive.SmallArray
 import Data.Word                   (Word64)
 -- import Data.Tagged                 (Tagged(..))

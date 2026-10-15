@@ -34,7 +34,7 @@ library
                   , Polytropos.Core
   hs-source-dirs:   src
   default-language: GHC2021
-  build-depends:    base       >= 4.19 && < 4.23
+  build-depends:    base       >= 4.18 && < 4.23
                   , primitive  >= 0.9  && < 0.10
 
 test-suite polytropos-core-test

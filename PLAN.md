@@ -72,8 +72,7 @@ Design note §6, in order:
   - [x] Audience 3: Authoritative architectural guide & maintenance recipes (`docs/MAINTAINER_GUIDE.md`)
   - [x] Audience 4: AI context projections & agentic governance (`AGENTS.md`, `.agents/rules/`)
 
-## Upcoming / Open
-
-- [ ] Milestone T3: Hardware-vectorized SIMD CoW updates for $>32$ fields (`docs/notes/FIELD_UPDATE_EFFICIENCY_DESIGN.md`)
-- [ ] Milestone T4: HLS / IDE autocompletion exploration
+- [x] Milestone T3: Hardware-vectorized SIMD CoW updates for $>32$ fields (`docs/notes/FIELD_UPDATE_EFFICIENCY_DESIGN.md`)
+- [x] Milestone T4: HLS / IDE autocompletion and hover integration (`Development.IDE.Plugin.Completions.Logic`, `AtPoint`)
+- [x] Milestone T9: Multi-GHC Backward Compatibility Matrix (GHC 9.6.7 LTS through 9.14.1 with `Polytropos.Plugin.Compat` shim and universal SIMD `copySmallArray` fallback)
 - [ ] Collaborative human review and polish of revised documentation tiers

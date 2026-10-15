@@ -1,4 +1,5 @@
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
@@ -32,6 +33,9 @@ import Data.Either
 import Data.List
   ( intercalate
   , sortOn
+#if !MIN_VERSION_base(4,20,0)
+  , foldl'
+#endif
   )
 
 import Data.Bits
@@ -113,11 +117,6 @@ import GHC.Plugins
   , tyCoVarsOfType
   )
 
-import GHC.Unit.Types
-  ( mkModule
-  , moduleUnit
-  )
-
 import GHC.Core.Class
   ( classMethods
   , classTyCon
@@ -154,13 +153,17 @@ import Language.Haskell.Syntax.Basic
 
 import GHC.Builtin.Names
   ( gHC_CLASSES
-  , gHC_INTERNAL_BASE
-  , gHC_INTERNAL_SHOW
   , eqClassName
   , showClassName
   , errorMessageTypeErrorFamName
   , typeErrorTextDataConName
   , typeErrorVAppendDataConName
+  )
+
+import Polytropos.Plugin.Compat
+  ( modBase
+  , modShow
+  , modRecords
   )
 
 import GHC.TcPlugin.API
@@ -473,22 +476,21 @@ polytroposInit = do
   psFEqBool    <- lookupIdInModule gHC_CLASSES "$fEqBool"
   psFEqWord    <- lookupIdInModule gHC_CLASSES "$fEqWord"
 
-  psShowsPrecMeth <- lookupIdInModule gHC_INTERNAL_SHOW "showsPrec"
-  psShowString    <- lookupIdInModule gHC_INTERNAL_SHOW "showString"
-  psShowChar      <- lookupIdInModule gHC_INTERNAL_SHOW "showChar"
-  psFShowInt      <- lookupIdInModule gHC_INTERNAL_SHOW "$fShowInt"
-  psFShowBool     <- lookupIdInModule gHC_INTERNAL_SHOW "$fShowBool"
+  psShowsPrecMeth <- lookupIdInModule modShow "showsPrec"
+  psShowString    <- lookupIdInModule modShow "showString"
+  psShowChar      <- lookupIdInModule modShow "showChar"
+  psFShowInt      <- lookupIdInModule modShow "$fShowInt"
+  psFShowBool     <- lookupIdInModule modShow "$fShowBool"
 
   psEqCls   <- tcLookupClass eqClassName
   psShowCls <- tcLookupClass showClassName
 
-  psComp <- lookupIdInModule gHC_INTERNAL_BASE "."
+  psComp <- lookupIdInModule modBase "."
 
   rowFlavourName <- lookupOrig coreMod (mkTcOcc "RowFlavour")
   psRowFlavourCls <- tcLookupClass rowFlavourName
 
-  let ghcRecordsMod = mkModule (moduleUnit gHC_CLASSES) (mkModuleName "GHC.Internal.Records")
-  hasFieldOcc <- lookupOrig ghcRecordsMod (mkTcOcc "HasField")
+  hasFieldOcc <- lookupOrig modRecords (mkTcOcc "HasField")
   psHasFieldCls <- tcLookupClass hasFieldOcc
 
   dictAnyOcc <- lookupOrig coreMod (mkTcOcc "DictAny")
