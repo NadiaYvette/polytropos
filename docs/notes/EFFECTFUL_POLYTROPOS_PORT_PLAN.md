@@ -150,13 +150,18 @@ Furthermore, `OverloadedRecordDot` (`env.user`, `env.order`) allows inspectable 
 2. Update `cabal.project` in `~/src/effectful/`:
    ```cabal
    packages:
-     effectful
-     effectful-core
-     effectful-th
-     -- effectful-plugin is replaced by polytropos-plugin
-   extra-packages:
-     polytropos-core,
-     polytropos-plugin
+     effectful-core/*.cabal
+     effectful-plugin/*.cabal
+     effectful-th/*.cabal
+     effectful/*.cabal
+
+   source-repository-package
+     type: git
+     location: https://github.com/NadiaYvette/polytropos.git
+     tag: b24592f41cf5bc243df020db35af0b9e3c39487f
+     subdir:
+       packages/polytropos-core
+       packages/polytropos-plugin
    ```
 3. Update `effectful-core/effectful-core.cabal`:
    - Add dependencies: `polytropos-core >= 0.1`, `polytropos-plugin >= 0.1`.

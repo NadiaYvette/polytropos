@@ -155,6 +155,20 @@ This enables first-class arrow choice branching across dynamic effect pipelines 
    - Drop `vinyl`.
    - Add `polytropos-core >= 0.1`, `polytropos-plugin >= 0.1`.
    - Add default GHC option: `-fplugin=Polytropos.Plugin`.
+4. In `cabal.project`:
+   ```cabal
+   packages:
+     kernmantle
+     batteries
+
+   source-repository-package
+     type: git
+     location: https://github.com/NadiaYvette/polytropos.git
+     tag: b24592f41cf5bc243df020db35af0b9e3c39487f
+     subdir:
+       packages/polytropos-core
+       packages/polytropos-plugin
+   ```
 
 ### Phase 2: Refactoring `Control.Kernmantle.Rope.Internal`
 1. Redefine `Strand` as `Pair Symbol BinEff`:

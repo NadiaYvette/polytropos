@@ -148,10 +148,15 @@ subsume :: SubSum sub super => Sem sub a -> Sem super a
 2. Update `cabal.project` in `~/src/polysemy/`:
    ```cabal
    packages:
-     polysemy
-   extra-packages:
-     polytropos-core,
-     polytropos-plugin
+     .
+
+   source-repository-package
+     type: git
+     location: https://github.com/NadiaYvette/polytropos.git
+     tag: b24592f41cf5bc243df020db35af0b9e3c39487f
+     subdir:
+       packages/polytropos-core
+       packages/polytropos-plugin
    ```
 3. In `polysemy.cabal`:
    - Add `build-depends: polytropos-core, polytropos-plugin`.

@@ -127,7 +127,13 @@ Writing these functions by hand is tedious and error-prone. **Synquid** is a typ
 
 Upstream Synquid was originally developed against older GHC versions (GHC 7.10 / 8.x) and older Z3 APIs.
 
-To support `polytropos` on modern Haskell toolchains, the clone at `/home/nyc/src/synquid` was forward-ported on branch:
+To support `polytropos` on modern Haskell toolchains, Synquid was forward-ported on branch `nadia.chambers/forward-port-to-ghc-9.14-001` (local checkout at `/home/nyc/src/synquid`), mirrored publicly across:
+- **GitHub:** [`https://github.com/NadiaYvette/synquid`](https://github.com/NadiaYvette/synquid)
+- **GitCode:** [`https://gitcode.com/NadiaYvette/synquid`](https://gitcode.com/NadiaYvette/synquid)
+- **Disroot:** [`https://git.disroot.org/NadiaYvette/synquid`](https://git.disroot.org/NadiaYvette/synquid)
+- **Framagit:** [`https://framagit.org/NadiaYvette/synquid`](https://framagit.org/NadiaYvette/synquid)
+- **Radicle:** `rad://z2dDE1PWWqtZNEoEWbCx8vSDLAnRd`
+
 ```
 branch: nadia.chambers/forward-port-to-ghc-9.14-001
 ```

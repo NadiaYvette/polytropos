@@ -250,10 +250,11 @@ dead documents leave via §3's tombstone. The index's flags column is the archiv
 `D1`–`D10`, the design note's `Q1`–`Q5`) are the stable layer and survive renames.
 Relative hyperlinks are the convenience layer. **Local divergence from the source
 document, recorded deliberately:** sibling checkouts are referenced as `~/src/…`
-in house style, not by URL and not by `../..` traversal. These are local
-co-development checkouts, not published artifacts, and relative paths break the
-moment a document is read from anywhere but one directory. Published things get
-URLs; unpublished local checkouts get `~/src/…`.
+in house style for local co-development paths, not by `../..` traversal. For published
+artifacts and public forks (such as the ecosystem repositories modified for polytropos),
+their canonical public mirror URLs (across GitHub, GitCode, Disroot, Framagit) and Radicle URNs
+are authoritatively cataloged in `docs/developer/UPSTREAM_REPOSITORIES_AND_INTEGRATIONS.md`.
+Published things get URLs; unpublished local checkouts get `~/src/…`.
 
 ## 6. Rendering and build infrastructure
 
@@ -382,3 +383,4 @@ change; that is §4's precedence rule applied to evidence rather than to code.
 | 2026-10-05 | §9 keeps the source's "credit by choice, not obligation" position, and points at `THIRD_PARTY.md` and `COMMIT_ATTRIBUTION.md` rather than introducing `CREDITS.md`/`LICENSES/`, which this repository had already replaced. |
 | 2026-10-05 | §1 retains the scaled-textbook tutorial ambition as deferred rather than dropped, with a revisit trigger (a tutorial track appearing). |
 | 2026-10-05 | §3 extended with two stages for the non-note genres: `live` (living register, append-only) and `archive` (preserved record, not canonical). Found by applying the document to the corpus it governs: the index was already using both, and the Gemini transcript was marked `superseded in part`, which was neither a defined flag nor the right claim -- nothing replaced the transcript, so `inconsistent` on the claims is what the vocabulary actually expresses. `docs/INDEX.md` corrected to the defined vocabulary, and `COMMIT_ATTRIBUTION.md` / `PROVENANCE.md` given the Status headers their new `blessed` stage requires. |
+| 2026-10-15 | §5 updated: while local co-development paths remain referenced as `~/src/…`, all modified ecosystem repositories, forks, and polytropos are now rooted in 4 public git mirrors and Radicle, cataloged in `docs/developer/UPSTREAM_REPOSITORIES_AND_INTEGRATIONS.md`. |

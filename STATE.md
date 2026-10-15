@@ -134,23 +134,27 @@ Milestone T8 has been implemented, tested, and deterministically verified via `s
 
 ### Algebraic Effect Systems Ports (Completed & Verified)
 
-All three algebraic effect system ports planned in `docs/notes/EFFECT_SYSTEMS_PORTING_MASTER_PLAN.md` have been implemented, tested, and committed on their respective `polytropos-port` branches:
-- **`effectful`** (`/home/nyc/src/effectful`, branch `polytropos-port`, commit `470e6d7`):
-  * Local linkage to `polytropos-core` and `polytropos-plugin` with `-fplugin=Polytropos.Plugin`.
+All three algebraic effect system ports planned in `docs/notes/EFFECT_SYSTEMS_PORTING_MASTER_PLAN.md` have been implemented, tested, committed on their respective `polytropos-port` branches, and published across 4 public git mirrors (GitHub, GitCode, Disroot, Framagit) and Radicle:
+- **`effectful`** (`/home/nyc/src/effectful`, branch `polytropos-port`, commit `0c62fab`):
+  * Linkage to `polytropos-core` and `polytropos-plugin` via `source-repository-package` with `-fplugin=Polytropos.Plugin`.
   * Open row representation with polykinded `(:::)` and `HasEffect` aliases.
   * Overlappable `FieldIndex` fallback instance for `(:>)` providing compile-time literal integer index resolution.
   * 89/89 tests passing in `effectful:test:test` under GHC 9.14.1.
-- **`polysemy`** (`/home/nyc/src/polysemy`, branch `polytropos-port`, commit `6247540`):
-  * Local linkage to `polytropos-core` and `polytropos-plugin` with `-fplugin=Polytropos.Plugin`.
+  * Synchronized to GitHub, GitCode, Disroot, Framagit, and Radicle (`rad:z2xXG4qgbVQfsjaXak39VD9HPjcgW`).
+- **`polysemy`** (`/home/nyc/src/polysemy`, branch `polytropos-port`, commit `4d62036`):
+  * Linkage to `polytropos-core` and `polytropos-plugin` via `source-repository-package` with `-fplugin=Polytropos.Plugin`.
   * Wired `Member t r` directly to `ConstructorIndex t r`, eliminating linked-list Peano search stalls and the need for `polysemy-plugin`.
   * Implemented $O(1)$ integer operations for `decomp`, `extract`, `weaken`, and `decompCoerce`.
   * 43/43 tests passing in `polysemy:test:polysemy-test` under GHC 9.14.1.
-- **`kernmantle`** (`/home/nyc/src/kernmantle`, branch `polytropos-port`, commit `60b2ddc`):
+  * Synchronized to GitHub, GitCode, Disroot, Framagit, and Radicle (`rad:z2CJzaBZPriPHfmzzBQLjeSShnr7z`).
+- **`kernmantle`** (`/home/nyc/src/kernmantle`, branch `polytropos-port`, commit `0f2ec2a`):
   * Clean fork off upstream `master` (`11431c0`), leaving behind incomplete `large-anon` changes and completely removing `vinyl`.
+  * Linkage to `polytropos-core` and `polytropos-plugin` via `source-repository-package` with `-fplugin=Polytropos.Plugin`.
   * Flat `Rec` backed by `SmallArray Any` with $O(1)$ `rgetf` via `FieldIndex` and $O(1)$ bulk-copy `rcast` via `SubRow`.
   * Collapsed `TightRope` and `LooseRope` into the identical flat array representation (`tighten = loosen = id`).
   * Provided GADT-backed `RecView` pattern synonyms `RNil` and `(:&)`, and `Label`/`IsLabel` support.
   * All 4 executables (`exCli`, `ex1`, `exBypass`, `exLenses`) compile, link, and run cleanly, and `kernmantle-batteries` compiles cleanly under GHC 9.14.1.
+  * Synchronized to GitHub, GitCode, Disroot, Framagit, and Radicle (`rad:z3KgUX2HXHeu8VysLhN5EVtePWc5q`).
 
 ### Multi-GHC Backward Compatibility Matrix (Completed & Verified)
 

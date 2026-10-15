@@ -52,9 +52,9 @@ Design note §6, in order:
 
 ## Milestone 6 — algebraic effect systems ports
 
-- [x] `effectful-polytropos` (`/home/nyc/src/effectful`, branch `polytropos-port`): flat open product rows with compile-time literal index solving
-- [x] `polysemy-polytropos` (`/home/nyc/src/polysemy`, branch `polytropos-port`): $O(1)$ tag `decomp` and `weaken` without Peano search
-- [x] `kernmantle-polytropos` (`/home/nyc/src/kernmantle`, branch `polytropos-port`): forked from master, replacing `vinyl` with `polytropos` Higher-Kinded Data ropes
+- [x] `effectful-polytropos` (`/home/nyc/src/effectful`, branch `polytropos-port`): flat open product rows with compile-time literal index solving; synchronized to GitHub, GitCode, Disroot, Framagit, and Radicle (`rad:z2xXG4qgbVQfsjaXak39VD9HPjcgW`); configured with `source-repository-package`
+- [x] `polysemy-polytropos` (`/home/nyc/src/polysemy`, branch `polytropos-port`): $O(1)$ tag `decomp` and `weaken` without Peano search; synchronized to GitHub, GitCode, Disroot, Framagit, and Radicle (`rad:z2CJzaBZPriPHfmzzBQLjeSShnr7z`); configured with `source-repository-package`
+- [x] `kernmantle-polytropos` (`/home/nyc/src/kernmantle`, branch `polytropos-port`): forked from master, replacing `vinyl` with `polytropos` Higher-Kinded Data ropes; synchronized to GitHub, GitCode, Disroot, Framagit, and Radicle (`rad:z3KgUX2HXHeu8VysLhN5EVtePWc5q`); configured with `source-repository-package`
 
 ## Milestone 7 — engine diagnostics, syntax & eliminators
 
