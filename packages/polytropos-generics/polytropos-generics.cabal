@@ -1,20 +1,39 @@
 cabal-version: 3.14
 name: polytropos-generics
 version: 0.1.0.0
-synopsis: Structural datatype generics via polytropos
+synopsis: Structural datatype generics, representation bridging, and whole-data traversal
+description:
+  Generic deriving, representation bridging, and structural traversal engine for @polytropos@.
+
+  This package bridges nominal Haskell algebraic data types (ADTs) to and from the
+  unified flat representation @Rep@, and provides zero-overhead structural operations
+  (@geq@, @gcompare@, @gshowsPrec@, @gmap@, @gfoldMap@) across open rows (@Record@, @Variant@)
+  and nominal types.
+
+  Unlike @large-generics@ (which is strictly record-only and models 1D SOP products),
+  @polytropos-generics@ unifies sums and products into one tagged representation backed
+  by a 2D dictionary matrix (@SmallArray (SmallArray (DictAny c))@) for O(1) constructor dispatch.
+  Unlike standard @GHC.Generics@, it executes as tight unrolled loops over flat contiguous
+  memory rather than traversing nested binary trees.
+
+  Start at the front door module @Polytropos.Generics@ for architectural rationales,
+  usage guidance, and worked examples for both open rows and nominal ADTs.
 license: EUPL-1.2 OR Apache-2.0
+author: Nadia Yvette Chambers
+maintainer: nadia.yvette.chambers@ik.me
+category: Generics, Data
 build-type: Simple
 
 library
   exposed-modules:
     Polytropos.Generics
   build-depends:
-    base,
-    polytropos-core,
-    primitive
+    base >= 4.14 && < 5,
+    polytropos-core >= 0.1 && < 0.2,
+    primitive >= 0.7 && < 0.10
   hs-source-dirs: src
   default-language: GHC2021
-  ghc-options: -Wall -Werror
+  ghc-options: -Wall
 
 test-suite polytropos-generics-test
   type: exitcode-stdio-1.0
@@ -29,4 +48,4 @@ test-suite polytropos-generics-test
     tasty-hunit
   hs-source-dirs: test
   default-language: GHC2021
-  ghc-options: -Wall -Werror -fplugin=Polytropos.Plugin
+  ghc-options: -Wall -fplugin=Polytropos.Plugin

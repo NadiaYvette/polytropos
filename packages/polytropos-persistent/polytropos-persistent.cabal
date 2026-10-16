@@ -1,38 +1,42 @@
 cabal-version: 3.14
 name: polytropos-persistent
 version: 0.1.0.0
-build-type: Simple
-synopsis: persistent PersistValue marshalling for polytropos open records
+synopsis: persistent database marshalling and entity wrappers for polytropos
 description:
-  Satellite package bridging @polytropos@ open records with the Yesod
-  ecosystem's @persistent@ relational database framework. 'PersistRow'
-  provides fast marshalling of records to and from @['PersistValue']@ rows:
-  'toPersistFieldsRecord' serializes the flat 'SmallArray' payload in row
-  order, and 'fromPersistValuesRecord' reconstructs the record by filling
-  the payload slots directly — no intermediate tuples. A 'PersistField'
-  instance lets a whole record travel through persistent's value machinery
-  as a 'PersistList', and 'PolyRowEntity' is a key-value wrapper in the
-  shape of persistent's 'Entity'.
+  Integration bridging @polytropos@ open records with the Yesod ecosystem's
+  @persistent@ relational database library.
+
+  Provides fast zero-tuple marshalling of records to and from @[PersistValue]@ rows
+  via @PersistRow@ (@toPersistFieldsRecord@, @fromPersistValuesRecord@), whole-record
+  column storage as @PersistList@ via @PersistField@ and @PersistFieldSql@, and
+  entity wrappers via @PolyRowEntity@.
+
+  Start at the front door module @Polytropos.Persistent@ for complete documentation,
+  schema mappings, and worked examples.
 license: EUPL-1.2 OR Apache-2.0
+author: Nadia Yvette Chambers
+maintainer: nadia.yvette.chambers@ik.me
+category: Database
+build-type: Simple
 
 library
   default-language: GHC2021
   hs-source-dirs: src
   exposed-modules: Polytropos.Persistent
-  ghc-options: -Wall -Werror
+  ghc-options: -Wall
   build-depends:
     base >= 4.14 && < 5,
-    persistent >= 2.14,
-    text,
-    polytropos-core,
-    polytropos-plugin
+    persistent >= 2.14 && < 2.19,
+    text >= 1.2 && < 2.2,
+    polytropos-core >= 0.1 && < 0.2,
+    polytropos-plugin >= 0.1 && < 0.2
 
 test-suite polytropos-persistent-test
   type: exitcode-stdio-1.0
   default-language: GHC2021
   hs-source-dirs: test
   main-is: Main.hs
-  ghc-options: -Wall -Werror -fplugin=Polytropos.Plugin
+  ghc-options: -Wall -fplugin=Polytropos.Plugin
   build-depends:
     base,
     persistent,

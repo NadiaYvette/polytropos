@@ -1,25 +1,38 @@
 cabal-version: 3.14
 name: polytropos-optics
 version: 0.1.0.0
-build-type: Simple
+synopsis: optics-core integration for polytropos open records and variants
+description:
+  Integration between @polytropos@ and the @optics@ \/ @optics-core@ ecosystem.
+
+  Provides Van Laarhoven lenses for record fields via @fieldLens@, first-class
+  prisms for variant constructors via @ctorOptic@, and @LabelOptic@ instances
+  allowing @#fieldName@ lens syntax with @OverloadedLabels@.
+
+  Start at the front door module @Polytropos.Optics@ for complete documentation,
+  usage guidelines, and worked examples.
 license: EUPL-1.2 OR Apache-2.0
+author: Nadia Yvette Chambers
+maintainer: nadia.yvette.chambers@ik.me
+category: Optics, Data
+build-type: Simple
 
 library
   default-language: GHC2021
   hs-source-dirs: src
   exposed-modules: Polytropos.Optics
-  ghc-options: -Wall -Werror
+  ghc-options: -Wall
   build-depends:
     base >= 4.14 && < 5,
-    polytropos-core,
-    optics-core >= 0.4
+    polytropos-core >= 0.1 && < 0.2,
+    optics-core >= 0.4 && < 0.5
 
 test-suite polytropos-optics-test
   type: exitcode-stdio-1.0
   default-language: GHC2021
   hs-source-dirs: test
   main-is: Main.hs
-  ghc-options: -Wall -Werror -fplugin=Polytropos.Plugin
+  ghc-options: -Wall -fplugin=Polytropos.Plugin
   build-depends:
     base,
     polytropos-core,

@@ -3,14 +3,21 @@ name:               polytropos-core
 version:            0.1.0.0
 synopsis:           Row-polymorphic / open ADTs: rows, generic representation, evidence
 description:
-  The substrate layer of @polytropos@: a row vocabulary for both products and
-  sums, a generic representation (@Rep@) that carries a runtime tag plus a flat
-  @SmallArray@ of payload slots, and the evidence classes whose instance bodies
-  are to be synthesised as literals by the forthcoming TcPlugin.
+  Core engine and consumer surface of @polytropos@: row-polymorphic extensible records
+  and variants for Haskell.
 
-  This package is deliberately incomplete: the evidence classes have @undefined@
-  defaults pending the plugin, and the elimination story is unsettled. See
-  @docs\/notes\/POLYTROPOS_DESIGN.md@.
+  The package collapses the four quadrants of the design space (nominal products,
+  structural products, nominal sums, and structural sums) into one uniform generic
+  representation (@Rep@): a runtime integer tag plus a contiguous, flat @SmallArray@
+  of payload slots.
+
+  For application development and daily usage, start at the front door module
+  @Polytropos@, which exposes ergonomic constructors, pattern synonyms, and
+  worked examples. For compiler plugins and low-level substrate primitives, see
+  @Polytropos.Core@.
+
+  For design decisions, memory physics, and background on the OCaml polymorphic variant
+  heritage, see @docs\/notes\/POLYTROPOS_DESIGN.md@.
 
 license: EUPL-1.2 OR Apache-2.0
 author:             Nadia Yvette Chambers
