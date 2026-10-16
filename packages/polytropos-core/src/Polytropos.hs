@@ -31,6 +31,30 @@ human-friendly type aliases, constructors, and pattern synonyms.
 
 = Architectural Overview & Rationale
 
+== Conceptual Primer: What Are Row-Polymorphic Open ADTs?
+
+For developers without a background in type theory, the terminology can seem daunting.
+In practice, it directly solves the rigidity of traditional data types:
+
+1. __Algebraic Data Types (ADTs):__ The two universal building blocks of typed data—/Product types/
+   (structs/records where data has field A /and/ field B) and /Sum types/ (enums/variants where data is
+   constructor A /or/ constructor B).
+2. __Closed vs. Open:__ Traditional Haskell data types are /closed/—declared once with a fixed set
+   of fields or constructors. Adding a field (like an authentication token to a @User@) or adding
+   a variant branch (like a new AST error node) requires defining a brand-new type and writing
+   tedious conversion boilerplate. /Open/ types can be constructed, extended, and narrowed on the fly
+   without intermediate wrapper types.
+3. __Row Polymorphism:__ A "row" is an unordered collection of named fields (like database columns).
+   /Row polymorphism/ allows writing functions that operate on /any/ record containing at least
+   certain fields (or any variant handling at least certain cases), while the compiler statically tracks
+   and preserves all the /other/ remaining fields (@r@). Unlike OOP inheritance, no fields are sliced or
+   erased, and no runtime downcasts are needed.
+4. __The Polytropos Difference:__ Historically, row polymorphism in Haskell was either painfully slow
+   to compile (quadratic \(O(N^{2.8})\) typeclass search) or memory-inefficient (nested @Either@ pointer
+   trees). @polytropos@ solves this by collapsing products and sums into a __single flat runtime representation__
+   (a tag plus a contiguous 'Data.Primitive.SmallArray.SmallArray') and using a GHC typechecker plugin
+   (@polytropos-plugin@) to resolve field indices into literal numbers at compile time in \(O(1)\).
+
 == The Four-Quadrant Design Space Collapse
 
 Traditional Haskell architectures treat records (products) and variants (sums)

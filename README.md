@@ -29,6 +29,15 @@ structural rows without runtime repackaging.
 
 ## Motivation & Architecture
 
+### What Is a Row-Polymorphic Open ADT? (In Plain English)
+
+For developers without a background in type theory, the terminology can seem daunting. In practice, it directly solves the rigidity of traditional data types:
+
+1. **Algebraic Data Types (ADTs):** The two universal building blocks of typed data—**Product types** (structs/records where data has field A *and* field B) and **Sum types** (enums/variants where data is constructor A *or* constructor B).
+2. **Closed vs. Open:** Traditional Haskell data types are **closed**: declared once with a fixed set of fields or constructors. Adding a field (like an authentication token to a `User`) or adding a variant branch (like a new AST error node) requires defining a brand-new type and writing tedious conversion boilerplate. **Open** types can be constructed, extended, and narrowed on the fly without intermediate wrapper types.
+3. **Row Polymorphism:** A "row" is an unordered collection of named fields (like database columns). **Row polymorphism** allows writing functions that operate on *any* record containing at least certain fields (or any variant handling at least certain cases), while the compiler statically tracks and preserves all the *other* remaining fields (`r`). Unlike OOP inheritance, no fields are sliced or erased, and no runtime downcasts are needed.
+4. **The Polytropos Difference:** Historically, row polymorphism in Haskell was either painfully slow to compile (quadratic $O(N^{2.8})$ typeclass search) or memory-inefficient (nested `Either` pointer trees). `polytropos` solves this by collapsing products and sums into a **single flat runtime representation** (a tag plus a contiguous array) and using a GHC typechecker plugin to resolve field indices into literal numbers at compile time in $\mathcal{O}(1)$.
+
 In mainstream Haskell, data types are divided into two orthogonal axes:
 - **Products vs. Sums**: records and tuples vs. algebraic variants and coproducts.
 - **Nominal vs. Structural**: closed, named declarations (`data Person = ...`) vs.

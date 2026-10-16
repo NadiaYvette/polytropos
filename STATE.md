@@ -277,7 +277,7 @@ Milestone T9 has been implemented, tested, and deterministically verified across
   (Arm PR, $O(N)$ exponent 1.03, beating nominal Haskell records at 5,602 lines Core vs 6,070)
 - `examples/nanopass/` — worked live tutorial executable (`example-nanopass`), building and running cleanly via `cabal run example-nanopass`
 - `examples/resilient/` — worked live tutorial executable (`example-resilient`), demonstrating fault-tolerant parsing ("Stope and Winze"), localized error AST holes, IDE symbol/diagnostic harvesting, and zero-boilerplate compilation gate validation via `peel @"hole"` (runs cleanly via `cabal run example-resilient`)
-- `docs/TUTORIAL.md` — interactive tutorial with foundational 5-lesson curriculum + Nanopass (Addendum A) & Resilient Parsing (Addendum B) case studies + future addenda anchors
+- `docs/TUTORIAL.md` — interactive tutorial with conceptual primer on row-polymorphic open ADTs + foundational 5-lesson curriculum + Nanopass (Addendum A) & Resilient Parsing (Addendum B) case studies + future addenda anchors
 - `docs/NEWBIE_GUIDE.md` — refreshed newcomer quickstart connecting directly to the 5-lesson tutorial and Addenda A & B, updating quality gates
 - `docs/MAINTAINER_GUIDE.md` — authoritative maintainer guide covering Core memory layouts, TcPlugin solving pipeline, and maintenance recipes
 - `docs/notes/TUTORIAL_EXAMPLES_EVALUATION.md` — pedagogical evaluation matrix and staging roadmap for tutorial chapters
