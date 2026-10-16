@@ -16,7 +16,7 @@
 --
 -- This module is deliberately small and self-contained. It fixes three things
 -- and defers everything else to the design note
--- (@docs/notes/POLYTROPOS_DESIGN.md@):
+-- (@docs\/notes\/POLYTROPOS_DESIGN.md@):
 --
 -- 1. The /row vocabulary/: how products and sums are spelled at the type level
 --    (§1 of the note).

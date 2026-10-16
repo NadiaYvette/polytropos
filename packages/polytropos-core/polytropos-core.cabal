@@ -10,7 +10,7 @@ description:
 
   This package is deliberately incomplete: the evidence classes have @undefined@
   defaults pending the plugin, and the elimination story is unsettled. See
-  @docs/notes/POLYTROPOS_DESIGN.md@.
+  @docs\/notes\/POLYTROPOS_DESIGN.md@.
 
 license: EUPL-1.2 OR Apache-2.0
 author:             Nadia Yvette Chambers
