@@ -76,6 +76,24 @@ data Rep (f :: Type -> Type) a = Rep
 Because the runtime layout is identical, hybrid nominal-structural conversions
 are zero-cost coercions.
 
+## Relationship to Other Work & Theoretical Precedents
+
+`polytropos` builds upon extensive prior art across two decades of typed functional programming research. It acknowledges earlier Haskell libraries as foundational efforts toward similar ends, while resolving the specific performance and ergonomic bottlenecks that historically limited their adoption.
+
+### Classic Haskell Extensible Records & Open Variants
+
+Prior efforts to bring structural rows and extensible variants to Haskell explored several distinct design points:
+
+- **`vinyl`**: A pioneering library establishing type-level list indexing and higher-kinded data (HKD) universes. However, its reliance on recursive typeclass induction induces superlinear compile-time scaling ($O(N^{2.8})$ in Core) and deep category-theoretic abstractions (`RecElemFCtx`, `ElField`) with high cognitive overhead.
+- **`superrecord`**: Introduced compile-time field offset computation by sorting symbol lists via type families, demonstrating the performance benefits of flat arrays, but putting severe pressure on GHC's constraint solver at scale.
+- **`row-types`**: Formalized Daan Leijen's row calculus in Haskell with first-class row equality, though encountering stuck type families during type inference failures.
+- **`extensible`**: An ambitious multi-paradigm framework unifying records, variants, and effects under custom type-level combinators, with steep syntactic complexity.
+- **`open-adt` & `world-peace`**: Popularized lightweight open coproducts and tagged variant unions (`OpenUnion`), though relying on linear Peano tag traversals or disjoint record/variant representations.
+
+`polytropos` recognizes these libraries as valuable predecessors striving toward the same ideal. It advances beyond them by: (1) collapsing products and sums into **one uniform flat runtime representation** (`Rep`: tag + flat array of payload slots), and (2) delegating all symbol-to-slot and subrow/subsum resolution to a native **`TcPlugin`** that emits $O(1)$ literal index evidence with custom human-readable diagnostics.
+
+*(For a comprehensive comparative matrix and detailed analysis across all categories, see [`docs/notes/RELATED_WORK_AND_PRIOR_ART.md`](docs/notes/RELATED_WORK_AND_PRIOR_ART.md).)*
+
 ### The OCaml Heritage: Polymorphic Variants & Row Typing in GHC
 
 Mainstream Haskell historically lacked a native counterpart to OCaml's battle-tested

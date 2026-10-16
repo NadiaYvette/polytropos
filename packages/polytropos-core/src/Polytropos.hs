@@ -103,66 +103,83 @@ indexing with zero runtime overhead.
 * Do not use this module if you are developing custom typechecker plugins, primitive
   runtime memory layouts, or low-level Core synthesizers; import "Polytropos.Core" instead.
 
+= Relationship to Ecosystem Prior Art
+
+@polytropos@ builds upon extensive historical explorations of extensible records,
+anonymous products, and open variants in Haskell:
+
+* __@vinyl@__: Pioneered type-level list indexing for extensible records and universes,
+  proving the value of structural data while wrestling with superlinear compile-time
+  scaling (\(O(N^{2.8})\)) and deeply abstract type machinery.
+* __@superrecord@__: Introduced compile-time field offset computation and compact array
+  representations, demonstrating the performance benefits of avoiding nested pointer trees.
+* __@row-types@__: Established a formal row calculus based on Leijen's work with first-class
+  type equality, though encountering stuck type families during type inference failure.
+* __@extensible@__: Offered a comprehensive framework unifying records, variants, and effects
+  under custom type-level combinators.
+* __@open-adt@ & @world-peace@__: Explored open coproducts and tagged variant unions (@OpenUnion@),
+  aiming to avoid nested @Either@ trees.
+
+@polytropos@ acknowledges these libraries as valuable predecessors striving toward similar goals.
+It advances their work by collapsing products and sums into a single flat representation
+('Data.Primitive.SmallArray.SmallArray' with an unboxed tag) and delegating all symbol-to-slot
+resolution to a dedicated GHC typechecker plugin (@polytropos-plugin@), achieving \(O(1)\) runtime
+indexing, linear \(O(N)\) compile times, and human-readable compiler error diagnostics.
+
 = Worked Examples
 
 == 1. Open Records (Structural Products)
 
-@
-import Polytropos
-
--- Define an open record with fields @"x"@ and @"y"@:
-myRec :: Record '["x" ':= Int, "y" ':= Bool]
-myRec = insertField (Field \@"x") (10 :: Int)
-      $ insertField (Field \@"y") True
-      $ emptyRecord
-
--- Reading fields:
-valX :: Int
-valX = getField (Field \@"x") myRec  -- 10
-
--- Updating fields:
-myRec' :: Record '["x" ':= Int, "y" ':= Bool]
-myRec' = setField (Field \@"x") 42 myRec
-@
+> import Polytropos
+>
+> -- Define an open record with fields "x" and "y":
+> myRec :: Record '["x" ':= Int, "y" ':= Bool]
+> myRec = insertField (Field @"x") (10 :: Int)
+>       $ insertField (Field @"y") True
+>       $ emptyRecord
+>
+> -- Reading fields:
+> valX :: Int
+> valX = getField (Field @"x") myRec  -- 10
+>
+> -- Updating fields:
+> myRec' :: Record '["x" ':= Int, "y" ':= Bool]
+> myRec' = setField (Field @"x") 42 myRec
 
 == 2. Open Variants (Structural Sums)
 
-@
-import Polytropos
-
-type Event = Variant '["Click" ':= '["x" ':= Int, "y" ':= Int], "Quit" ':= '[]]
-
--- Injecting into a variant:
-clickEvent :: Event
-clickEvent = Variant (Field \@"Click")
-           $ insertField (Field \@"x") 100
-           $ insertField (Field \@"y") 200
-           $ emptyRecord
-
-quitEvent :: Event
-quitEvent = Variant (Field \@"Quit") emptyRecord
-
--- Pattern matching on a variant:
-handleEvent :: Event -> String
-handleEvent (Variant (Field \@"Click") r) =
-  "Clicked at: " ++ show (getField (Field \@"x") r) ++ "," ++ show (getField (Field \@"y") r)
-handleEvent (Variant (Field \@"Quit") _) =
-  "Exiting application"
-@
+> import Polytropos
+>
+> type Event = Variant '["Click" ':= '["x" ':= Int, "y" ':= Int], "Quit" ':= '[]]
+>
+> -- Injecting into a variant:
+> clickEvent :: Event
+> clickEvent = Variant (Field @"Click")
+>            $ insertField (Field @"x") 100
+>            $ insertField (Field @"y") 200
+>            $ emptyRecord
+>
+> quitEvent :: Event
+> quitEvent = Variant (Field @"Quit") emptyRecord
+>
+> -- Pattern matching on a variant:
+> handleEvent :: Event -> String
+> handleEvent (Variant (Field @"Click") r) =
+>   "Clicked at: " ++ show (getField (Field @"x") r) ++ "," ++ show (getField (Field @"y") r)
+> handleEvent (Variant (Field @"Quit") _) =
+>   "Exiting application"
 
 == 3. Higher-Kinded Records (HKD)
 
-@
-import Polytropos
-
--- A partial record where every field is wrapped in 'Maybe':
-type PartialConfig = RecordF Maybe '["host" ':= String, "port" ':= Int]
-
-configTemplate :: PartialConfig
-configTemplate = insertFieldF (Field \@"host") (Just "localhost")
-               $ insertFieldF (Field \@"port") Nothing
-               $ emptyRecordF
-@
+> import Polytropos
+>
+> -- A partial record where every field is wrapped in 'Maybe':
+> type PartialConfig = RecordF Maybe '["host" ':= String, "port" ':= Int]
+>
+> configTemplate :: PartialConfig
+> configTemplate = insertFieldF (Field @"host") (Just "localhost")
+>                $ insertFieldF (Field @"port") Nothing
+>                $ emptyRecordF
 -}
 module Polytropos
   ( -- * Ergonomic Types & Patterns

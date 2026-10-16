@@ -257,6 +257,11 @@ Milestone T9 has been implemented, tested, and deterministically verified across
   with execution modalities (`[AUTONOMOUS-MACHINE]`, `[COLLABORATIVE-ASYNC]`, `[HUMAN-GATED]`).
 - `docs/notes/ADOPTION_BARRIERS_AND_MITIGATIONS.md` — Architectural mitigations directly addressing
   the 8 community adoption barriers from the Discord feedback.
+- `docs/notes/RELATED_WORK_AND_PRIOR_ART.md` — Comprehensive architectural survey and comparative matrix
+  evaluating polytropos against prior Haskell row/variant libraries (`vinyl`, `superrecord`, `row-types`, `extensible`, `open-adt`, `world-peace`),
+  large-data generics (`GHC.Generics`, `large-records`, `large-anon`, `large-generics`, `generics-sop`),
+  algebraic effect systems (`effectful`, `polysemy`, `kernmantle`), and foundational language precedents
+  (OCaml polymorphic variants, PureScript, Elm).
 - `docs/transcripts/discord-adoption-barriers-row-types.md` — Verbatim Discord transcript from #fp-general.
 - `docs/NEWBIE_GUIDE.md` — quickstart and token-conservation workflow guide
 - `docs/MAINTAINER_GUIDE.md` — engineering governance and zero-contamination doctrine

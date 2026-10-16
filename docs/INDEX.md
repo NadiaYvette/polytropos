@@ -24,6 +24,7 @@ Status: LIVING DOCUMENT · v0.1 · 2026-10-05
 | `notes/POLYSEMY_POLYTROPOS_PORT_PLAN.md` | plan | draft | cross-cutting | — |
 | `notes/KERNMANTLE_POLYTROPOS_PORT_PLAN.md` | plan | draft | cross-cutting | — |
 | `notes/ADOPTION_BARRIERS_AND_MITIGATIONS.md` | design | draft | cross-cutting | — |
+| `notes/RELATED_WORK_AND_PRIOR_ART.md` | design | draft | cross-cutting | Comprehensive landscape survey of Haskell row/variant libraries, generics, and effect systems |
 | `notes/TUTORIAL_EXAMPLES_EVALUATION.md` | strategy | live | cross-cutting | — |
 | `tools/MODERNIZER_AND_LINTER_GUIDE.md` | guide | live | cross-cutting | HLint rules, Retrie rewrites, Stan inspections, and modernization CLI |
 | `tools/FORMAL_VERIFICATION_AND_SYNTHESIS_GUIDE.md` | guide | live | cross-cutting | LiquidHaskell formal verification, Synquid synthesis, and Tricorder continuous diagnostics |
@@ -99,6 +100,11 @@ measured corrections).
 **Roadmap & Adoption Feedback.**
 `notes/ADOPTION_BARRIERS_AND_MITIGATIONS.md` (direct synthesis of community adoption feedback)
 → `../plans/FULL_COMPLETION_ROADMAP.md` (unresolved engine capabilities, TypeError diagnostics, SIMD, and 4-tier documentation overhaul).
+
+**Comparative Analysis & Prior Art.**
+`notes/RELATED_WORK_AND_PRIOR_ART.md` (comprehensive landscape survey across classic row libraries, large-records, effect systems, and OCaml foundations)
+→ `notes/ADOPTION_BARRIERS_AND_MITIGATIONS.md` (8-point barrier matrix)
+→ `benchmark/variants/README.md` (empirical compile-time measurements).
 
 ## Conventions
 
