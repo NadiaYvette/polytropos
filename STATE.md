@@ -48,10 +48,15 @@ All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
   `hfield`, `hfieldAt`, `htabulate`, `hmap`, `htraverse`, `hzipWith`).
 - `polytropos-quickcheck-test` passes 9 tests (record and variant arbitrary generation and convergence shrinking).
 - **Haddock documentation:** All workspace packages build with 100% Haddock coverage and zero warnings under `cabal --jobs=20 haddock --haddock-for-hackage all`:
+  * Adopted Kowainik and MMHaskell front-page documentation conventions across all 15 native packages:
+    - Standardized module headers (`Module`, `Description`, `Copyright`, `License`, `Maintainer`, `Stability`, `Portability`).
+    - Architectural overviews and design context: quadrant collapse, unified tagged `Rep` flat memory physics, and compile-time TcPlugin evidence synthesis.
+    - Comprehensive comparative analysis in `Polytropos.Generics`: contrasting with `GHC.Generics` (flat arrays vs binary type-tree explosion) and `large-generics` (unified sum/product tagged `Rep` with 2D dictionary matrices vs records-only 1D SOP).
+    - Clear delineation of usage modes: Mode A (open row whole-data operations via plugin `AllFields`) and Mode B (bridging nominal Haskell ADTs).
+    - Copy-pasteable worked examples, guidance on when (and when not) to use each package, and structured export lists with section headers.
   * Resolved missing link destinations (`KnownSymbol`, boot libraries) via `cabal.project` haddock options.
   * Disambiguated type/value namespace collisions (`t'Rep'`, `t'RowRep'`, `t'MRep'`, `t'DictAny'`, `t'Field'`, `t'PolyRow'`, `t'Variant'`, `v'VAR'`, `pattern VARIANT`, `t'BeamTable'`, `t'PolyRowEntity'`).
   * Qualified external symbols and fixed doc markdown code blocks (`SmallArray`, `ToJSON`/`FromJSON`, `ToField`/`FromField`, `ToNamedRecord`/`FromNamedRecord`, `Entity`, `Traversal`).
-  * Added complete module and function documentation across `Polytropos.Plugin` (`plugin`), `Polytropos.Generics`, and `Polytropos.Optics`.
   * Verified 100% coverage across all 17 library modules with zero doc errors or unlinked symbols.
 - **Dual Licensing (EUPL-1.2 OR Apache-2.0):**
   * Transitioned repository from BSD-3-Clause to the dual `EUPL-1.2 OR Apache-2.0` model.
