@@ -8,35 +8,60 @@
 {-# LANGUAGE TypeOperators #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
--- |
--- Module      : Polytropos.OpenApi
--- Description : OpenAPI 3.0 schema generation for polytropos records and variants
--- Copyright   : (c) 2026 The Polytropos Authors
--- License     : EUPL-1.2 OR Apache-2.0
---
--- Generates OpenAPI 3.0 schema specifications directly from @polytropos@
--- open records and variants.
---
--- = Shape
---
--- A record declares an anonymous object schema whose @properties@ carry one
--- entry per field (reified from the row symbols) and whose @required@ list
--- contains every field: a row-typed record is total, so all fields are
--- required. A variant declares an anonymous @oneOf@ schema with one entry
--- per constructor, each a single-member tagged object @{"ctor": fields}@ —
--- the same wire shape the 'Polytropos.Aeson' satellite uses, so a REST API
--- documented by these schemas round-trips through those codecs.
---
--- = Why not Generic
---
--- The standard @ToSchema@ deriving walks a GHC.Generics tree; on large
--- schema objects (50+ fields) that tree is what explodes compile times.
--- Here the schema is assembled by walking the row type — one 'Declare'
--- step per field — with no generic representation anywhere. Field types
--- may differ across the row ('AllToSchema' collects a schema per field);
--- constructors may differ across the sum ('AllCtorsToSchema').
+{-|
+Module      : Polytropos.OpenApi
+Description : OpenAPI 3.0 schema generation for Polytropos records and variants
+Copyright   : (c) 2026 The Polytropos Authors
+License     : EUPL-1.2 OR Apache-2.0
+Maintainer  : nadia.yvette.chambers@ik.me
+Stability   : experimental
+Portability : non-portable (GHC extensions)
+
+Generates OpenAPI 3.0 schema specifications directly from @polytropos@
+open records and variants.
+
+= Architectural Overview & Rationale
+
+== Schema Shape
+
+* A record declares an anonymous object schema whose @properties@ carry one
+  entry per field (reified from the row symbols) and whose @required@ list
+  contains every field: a row-typed record is total, so all fields are required.
+* A variant declares an anonymous @oneOf@ schema with one entry per constructor,
+  each a single-member tagged object @{"ctor": fields}@ — the same wire shape
+  "Polytropos.Aeson" uses, so REST APIs documented by these schemas round-trip seamlessly.
+
+== Eliminating Generic Schema Blow-up
+
+Standard @ToSchema@ deriving walks a "GHC.Generics" tree, which causes severe
+slowdowns on large schema models (50+ fields). @polytropos-openapi3@ synthesizes
+the schema by directly traversing the row type—one 'Declare' step per field—with
+zero generic overhead.
+
+= When to Use This Module
+
+* When documenting REST APIs, Swagger / OpenAPI endpoints that produce or consume
+  @polytropos@ records and variants.
+
+= Worked Example
+
+@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeApplications #-}
+
+import Data.OpenApi (toSchema, Schema)
+import Data.Proxy (Proxy (..))
+import Polytropos
+import Polytropos.OpenApi
+
+type User = Record '["id" ':= Int, "name" ':= String]
+
+userSchema :: Schema
+userSchema = toSchema (Proxy \@User)
+@
+-}
 module Polytropos.OpenApi
-  ( -- * Row schema walkers
+  ( -- * Row Schema Walkers
     AllToSchema (..)
   , AllCtorsToSchema (..)
   ) where

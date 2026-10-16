@@ -12,36 +12,63 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
--- |
--- Module      : Polytropos.QuickCheck
--- Description : QuickCheck generators and slot-indexed shrinkers for polytropos
--- Copyright   : (c) 2026 The Polytropos Authors
--- License     : EUPL-1.2 OR Apache-2.0
---
--- Integrates @polytropos@ open records and variants with QuickCheck
--- property-based testing.
---
--- = Records
---
--- 'Arbitrary (Record r)' generates each field value via that field's own
--- 'Arbitrary' instance (the walk is heterogeneous: rows may mix field
--- types) and packs the results straight into the contiguous 'Data.Primitive.SmallArray.SmallArray'
--- payload — no intermediate tuples or generic-representation trees.
---
--- Shrinking is slot-indexed: each field slot is shrunk independently, one
--- field at a time, so shrinking a @k@-field record yields O(k) candidates
--- per level instead of the full Cartesian product over per-field shrink
--- lists.
---
--- = Variants
---
--- 'Arbitrary (Variant s)' uniformly selects a constructor tag index and
--- generates that constructor's payload fields. Shrinking is
--- branch-preserving: only the payload of the currently active constructor
--- is shrunk; the tag never changes, so a counterexample stays on the
--- constructor branch that exposed the property failure.
+{-|
+Module      : Polytropos.QuickCheck
+Description : QuickCheck generators and slot-indexed shrinkers for Polytropos records and variants
+Copyright   : (c) 2026 The Polytropos Authors
+License     : EUPL-1.2 OR Apache-2.0
+Maintainer  : nadia.yvette.chambers@ik.me
+Stability   : experimental
+Portability : non-portable (GHC extensions)
+
+Integrates @polytropos@ open records and variants with QuickCheck
+property-based testing.
+
+= Architectural Overview & Rationale
+
+== Records
+
+'Arbitrary (Record r)' generates each field value via that field's own
+'Arbitrary' instance (the walk is heterogeneous: rows may freely mix field
+types) and packs the results straight into the contiguous 'Data.Primitive.SmallArray.SmallArray'
+payload — with no intermediate tuples or generic-representation trees.
+
+Shrinking is slot-indexed: each field slot is shrunk independently, one
+field at a time, so shrinking a \(k\)-field record yields \(O(k)\) candidates
+per level instead of the full Cartesian product over per-field shrink lists.
+
+== Variants
+
+'Arbitrary (Variant s)' uniformly selects a constructor tag index and
+generates that constructor's payload fields. Shrinking is
+branch-preserving: only the payload of the currently active constructor
+is shrunk; the tag never changes, so a counterexample stays on the
+constructor branch that triggered the property failure.
+
+= When to Use This Module
+
+* When property-testing systems that use @polytropos@ open records and variants.
+
+= Worked Example
+
+@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeApplications #-}
+
+import Test.QuickCheck
+import Polytropos
+import Polytropos.QuickCheck
+
+type User = Record '["id" ':= Int, "active" ':= Bool]
+
+prop_userPositiveId :: Property
+prop_userPositiveId = forAll (arbitrary \@User) $ \u ->
+  let uid = getField (Field \@"id") u
+  in uid == uid
+@
+-}
 module Polytropos.QuickCheck
-  ( -- * Row and sum constraint walks
+  ( -- * Row and Sum Constraint Walks
     AllArbitrary (..)
   , AllCtorsArbitrary (..)
   ) where

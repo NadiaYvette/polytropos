@@ -9,32 +9,66 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
--- |
--- Module      : Polytropos.CBOR
--- Description : binary CBOR serialization for polytropos records and variants
--- Copyright   : (c) 2026 The Polytropos Authors
--- License     : EUPL-1.2 OR Apache-2.0
---
--- High-performance binary CBOR serialization of @polytropos@ open records
--- and variants via @cborg@/@serialise@, without intermediate tree boxing.
---
--- = Binary format
---
--- A record encodes as a CBOR array: one length header (the row's arity)
--- followed by the flat payload field encodings in row order. A variant
--- encodes as a CBOR array of the constructor's Word tag followed by that
--- constructor's payload field encodings — mirroring the runtime t'Polytropos.Core.Rep'
--- layout itself, so encoding is a single pass over the slot array with no
--- intermediate structure. This is the binary counterpart of the
--- single-member tagged object shape the aeson satellite uses on the wire.
---
--- The encoders are /positional/: field names are not written, matching the
--- erased array representation (names exist only at the type level, and a
--- row's identity is its ordered field list). All fields must share one type
--- for now ('AllFieldsAre' / 'AllCtorsHom'), with the shared type pinned to
--- the row by 'RowField' / 'SumField' so the instance heads stay unambiguous.
+{-|
+Module      : Polytropos.CBOR
+Description : High-performance binary CBOR serialization for Polytropos records and variants
+Copyright   : (c) 2026 The Polytropos Authors
+License     : EUPL-1.2 OR Apache-2.0
+Maintainer  : nadia.yvette.chambers@ik.me
+Stability   : experimental
+Portability : non-portable (GHC extensions)
+
+High-performance binary CBOR serialization of @polytropos@ open records
+and variants via @cborg@ \/ @serialise@, without intermediate tree boxing.
+
+= Architectural Overview & Rationale
+
+== Binary Wire Format
+
+* A record encodes as a standard CBOR array: one length header (the row's arity)
+  followed by the flat payload field encodings in row order.
+* A variant encodes as a CBOR array consisting of the constructor's 'Word' tag followed
+  by that constructor's payload field encodings.
+
+== Positional & Allocation-Free
+
+Because field names exist only at the type level in row polymorphism, the binary
+encoder is purely /positional/: no string keys are written to the wire. Encoding
+and decoding are executed as single unrolled passes directly over the flat
+@t'Polytropos.Core.Rep'@ payload array with no intermediate allocations.
+
+= When to Use This Module
+
+* When network bandwidth, binary storage size, and serialization speed are critical.
+* For inter-service RPC, binary logs, and compact caching.
+
+= Worked Example
+
+@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeApplications #-}
+
+import Codec.Serialise (serialise, deserialise)
+import Polytropos
+import Polytropos.CBOR
+
+type Packet = Record '["id" ':= Int, "payload" ':= Int]
+
+pkt :: Packet
+pkt = insertField (Field \@"id") (101 :: Int)
+    $ insertField (Field \@"payload") (202 :: Int)
+    $ emptyRecord
+
+-- Serializes to compact CBOR binary:
+bytes = serialise pkt
+
+-- Deserializes back to Packet:
+pkt' :: Packet
+pkt' = deserialise bytes
+@
+-}
 module Polytropos.CBOR
-  ( -- * Homogeneity evidence
+  ( -- * Homogeneity Evidence
     AllFieldsAre
   , AllCtorsHom (..)
   , RowField

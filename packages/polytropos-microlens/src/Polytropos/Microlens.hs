@@ -9,37 +9,72 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
--- |
--- Module      : Polytropos.Microlens
--- Description : microlens integration for polytropos open records
--- Copyright   : (c) 2026 The Polytropos Authors
--- License     : EUPL-1.2 OR Apache-2.0
---
--- Class-based optics integration for developers who use @microlens@
--- specifically to avoid transitive dependency bloat: this package depends
--- strictly on @base@, @polytropos-core@, and @microlens@.
---
--- = Worked Example
---
--- @
--- type Rec = Record '["x" ':= Int, "y" ':= Int]
---
--- bumpAll :: Rec -> Rec
--- bumpAll rec = rec & 'each' %~ (+ 1)
---
--- bumpX :: FieldIndex "x" r a => Record r -> Record r
--- bumpX rec = rec & 'fieldLens' #x %~ (+ 1)
--- @
---
--- The 'each' instance covers every field of a /homogeneous/ record (all
--- fields of the same type; see 'AllFieldsAre'). Name-based access goes
--- through 'fieldLens', whose 'FieldIndex' constraint is solved to a literal
--- slot index by the @polytropos-plugin@ — no type-level search at the use
--- site.
+{-|
+Module      : Polytropos.Microlens
+Description : Lightweight microlens optics integration for Polytropos open records
+Copyright   : (c) 2026 The Polytropos Authors
+License     : EUPL-1.2 OR Apache-2.0
+Maintainer  : nadia.yvette.chambers@ik.me
+Stability   : experimental
+Portability : non-portable (GHC extensions)
+
+Class-based optics integration for developers who use @microlens@
+specifically to avoid transitive dependency bloat: this package depends
+strictly on @base@, @polytropos-core@, and @microlens@.
+
+= Architectural Overview & Rationale
+
+Unlike full @lens@, which brings in a large dependency graph, @microlens@
+provides the core lens combinators in a lightweight package.
+
+In @polytropos-microlens@:
+* Name-based field access goes through 'fieldLens', whose 'FieldIndex'
+  constraint is solved to a literal slot index by @polytropos-plugin@.
+* The 'each' instance traverses every field of a homogeneous record (where
+  all fields have the same type, witnessed by 'AllFieldsAre') in a single
+  pass over the flat 'Data.Primitive.SmallArray.SmallArray'.
+
+= When to Use This Module
+
+* When your project prioritizes fast build times and minimal transitive
+  dependencies, and requires basic lens access to @polytropos@ records.
+
+= When Not to Use This Module
+
+* When you need prisms over sum variants or advanced indexed optics; use
+  "Polytropos.Optics" or "Polytropos.Lens" instead.
+
+= Worked Example
+
+@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeApplications #-}
+
+import Lens.Micro ((^.), (%~), (&))
+import Polytropos
+import Polytropos.Microlens
+
+type Point = Record '["x" ':= Int, "y" ':= Int]
+
+pt :: Point
+pt = insertField (Field \@"x") 10
+   $ insertField (Field \@"y") 20
+   $ emptyRecord
+
+-- Accessing a field:
+ptX :: Int
+ptX = pt ^. fieldLens (Field \@"x")  -- 10
+
+-- Modifying a field:
+pt' :: Point
+pt' = pt & fieldLens (Field \@"y") %~ (+ 5)  -- y = 25
+@
+-}
 module Polytropos.Microlens
-  ( -- * Field lenses
+  ( -- * Field Lenses
     fieldLens
-    -- * Homogeneity evidence
+
+    -- * Homogeneity Evidence
   , AllFieldsAre
   ) where
 

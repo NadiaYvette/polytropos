@@ -13,31 +13,65 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
--- |
--- Module      : Polytropos.Cassava
--- Description : cassava CSV codecs for polytropos open records
--- Copyright   : (c) 2026 The Polytropos Authors
--- License     : EUPL-1.2 OR Apache-2.0
---
--- Connects @polytropos@ open records to the standard Haskell CSV library
--- @cassava@ without intermediate nominal conversions: 'Csv.ToNamedRecord'
--- serializes field names and values straight from the flat
--- t'Polytropos.Core.Rep' payload, and 'Csv.FromNamedRecord' looks up each field
--- label in the CSV header map in O(1).
---
--- Unlike the aeson satellite, the codecs here are genuinely heterogeneous:
--- the @AllFields c r@ constraint walks the row and requires the CSV field
--- class @c@ ('Csv.ToField' / 'Csv.FromField') at /each field's own type/, so a row
--- mixing @Int@ and @Bool@ columns encodes and decodes correctly. No
--- homogeneity evidence is needed.
---
--- Decoding is strict about field presence (a missing header column fails),
--- but ignores extra columns, matching cassava's own generic behaviour.
+{-|
+Module      : Polytropos.Cassava
+Description : cassava CSV codecs for Polytropos open records
+Copyright   : (c) 2026 The Polytropos Authors
+License     : EUPL-1.2 OR Apache-2.0
+Maintainer  : nadia.yvette.chambers@ik.me
+Stability   : experimental
+Portability : non-portable (GHC extensions)
+
+Connects @polytropos@ open records to the standard Haskell CSV library
+@cassava@ without intermediate nominal conversions: 'Csv.ToNamedRecord'
+serializes field names and values straight from the flat
+@t'Polytropos.Core.Rep'@ payload, and 'Csv.FromNamedRecord' looks up each field
+label in the CSV header map in \(O(1)\).
+
+= Architectural Overview & Rationale
+
+== Heterogeneous Row Support
+
+Unlike satellites that require homogeneous rows, @polytropos-cassava@ is
+genuinely heterogeneous: the 'AllToField' and 'AllFromField' row constraint walks
+require the CSV field classes ('Csv.ToField' \/ 'Csv.FromField') at /each field's own type/,
+so a row mixing @String@, @Int@, and @Double@ columns encodes and decodes directly.
+
+Decoding is strict about field presence (a missing header column fails),
+but ignores extra columns in the CSV input, matching cassava's own generic behaviour.
+
+= When to Use This Module
+
+* When reading or writing CSV files, spreadsheets, or tabular datasets using open records.
+
+= Worked Example
+
+@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
+
+import qualified Data.Csv as Csv
+import Polytropos
+import Polytropos.Cassava
+
+type UserRow = Record '["username" ':= String, "score" ':= Int]
+
+row :: UserRow
+row = insertField (Field \@"username") "Alice"
+    $ insertField (Field \@"score") (95 :: Int)
+    $ emptyRecord
+
+-- Encodes to CSV named record:
+namedRec = Csv.toNamedRecord row
+@
+-}
 module Polytropos.Cassava
-  ( -- * Row constraint walks
+  ( -- * Row Constraint Walks
     AllToField (..)
   , AllFromField (..)
-    -- * Row introspection
+
+    -- * Row Introspection
   , FieldNames (..)
   ) where
 

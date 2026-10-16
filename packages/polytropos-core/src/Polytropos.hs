@@ -12,40 +12,134 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE Trustworthy #-}
 
--- |
--- Module      : Polytropos
--- Description : High-level consumer-facing API for Polytropos
--- Copyright   : (c) 2026 The Polytropos Authors
--- License     : EUPL-1.2 OR Apache-2.0
--- Maintainer  : nadia.yvette.chambers@ik.me
---
--- This module provides the high-level, human-friendly API exports and pattern
--- synonyms for @polytropos@. It encapsulates the underlying representations
--- (like 'Data.Primitive.SmallArray.SmallArray' and t'Polytropos.Core.Rep') and presents a clean, ergonomic surface for
--- working with row-polymorphic records and variants.
---
--- = Worked Example
---
--- Creating a simple record with fields @"x"@ and @"y"@:
---
--- @
--- myRec :: Record '["x" ':= Int, "y" ':= Bool]
--- myRec = insertField (Field \@"x") (10 :: Int)
---       $ insertField (Field \@"y") True
---       $ emptyRecord
--- @
---
--- Working with variants:
---
--- @
--- myVar :: Variant '["A" ':= '[], "B" ':= '["x" ':= Int]]
--- myVar = Variant (Field \@"B") (insertField (Field \@"x") (42 :: Int) emptyRecord)
---
--- -- Pattern matching
--- printVar :: Variant '["A" ':= '[], "B" ':= '["x" ':= Int]] -> String
--- printVar (Variant (Field \@"A") _) = "A"
--- printVar (Variant (Field \@"B") r) = "B with " ++ show r
--- @
+{-|
+Module      : Polytropos
+Description : High-level consumer-facing API for Polytropos open records and variants
+Copyright   : (c) 2026 The Polytropos Authors
+License     : EUPL-1.2 OR Apache-2.0
+Maintainer  : nadia.yvette.chambers@ik.me
+Stability   : experimental
+Portability : non-portable (GHC extensions)
+
+High-level, consumer-facing API for @polytropos@: row-polymorphic open records
+and open variants for Haskell.
+
+This module is the primary entry point for application developers and library
+authors. It encapsulates low-level representation primitives (such as
+'Data.Primitive.SmallArray.SmallArray' and @t'Polytropos.Core.Rep'@) behind ergonomic,
+human-friendly type aliases, constructors, and pattern synonyms.
+
+= Architectural Overview & Rationale
+
+== The Four-Quadrant Design Space Collapse
+
+Traditional Haskell architectures treat records (products) and variants (sums)
+as entirely distinct mechanisms, further bifurcated into nominal and structural
+approaches:
+
+1. Nominal Products: Standard Haskell @data@ records (e.g. @data Person = Person { name :: String, age :: Int }@)
+2. Structural Products: Anonymous extensible records (e.g. @Record '["name" ':= String, "age" ':= Int]@)
+3. Nominal Sums: Multi-constructor ADTs (e.g. @data Shape = Circle Double | Rectangle Double Double@)
+4. Structural Sums: Extensible variants (e.g. @Variant '["Circle" ':= '["radius" ':= Double], ...]@)
+
+@polytropos@ collapses all four quadrants into __one uniform generic representation__:
+a runtime integer tag plus a contiguous, flat 'Data.Primitive.SmallArray.SmallArray' of
+payload slots (@t'Polytropos.Core.Rep'@). For a product, the tag is always @0@ and known
+statically. For a sum, the tag is the constructor index.
+
+== Heritage & Precedent
+
+The row typing discipline in @polytropos@ draws inspiration from OCaml's polymorphic
+variants and extensible rows (Garrigue 1998), adapted to modern GHC with first-class
+type-level symbol labels (@":="@).
+
+== The Typechecker Plugin
+
+Rather than paying for \(O(N)\) or \(O(N^2)\) type-level search at compile time or
+traversing binary trees at runtime, @polytropos@ delegates evidence resolution to
+@polytropos-plugin@. The plugin computes literal zero-based slot indices, tags, and
+dictionary vectors directly in Core AST during compilation, giving \(O(1)\) runtime
+indexing with zero runtime overhead.
+
+= When to Use This Module
+
+* Use this module (@Polytropos@) for almost all daily programming with extensible
+  records, open sums, effect carrier types, and dynamic configuration schemas.
+* Use satellite packages for domain-specific integrations:
+  * "Polytropos.Generics": whole-data structural equality, comparisons, and generic map/fold
+  * "Polytropos.Optics", "Polytropos.Lens", or "Polytropos.Microlens": optics and labels
+  * "Polytropos.Aeson": JSON serialization
+  * "Polytropos.CBOR": binary CBOR serialization
+  * "Polytropos.Cassava": CSV serialization
+  * "Polytropos.QuickCheck": property test generators and shrinkers
+  * "Polytropos.Hasql", "Polytropos.Rel8", "Polytropos.Beam", "Polytropos.Persistent": database storage
+
+= When Not to Use This Module
+
+* Do not use this module if you are developing custom typechecker plugins, primitive
+  runtime memory layouts, or low-level Core synthesizers; import "Polytropos.Core" instead.
+
+= Worked Examples
+
+== 1. Open Records (Structural Products)
+
+@
+import Polytropos
+
+-- Define an open record with fields @"x"@ and @"y"@:
+myRec :: Record '["x" ':= Int, "y" ':= Bool]
+myRec = insertField (Field \@"x") (10 :: Int)
+      $ insertField (Field \@"y") True
+      $ emptyRecord
+
+-- Reading fields:
+valX :: Int
+valX = getField (Field \@"x") myRec  -- 10
+
+-- Updating fields:
+myRec' :: Record '["x" ':= Int, "y" ':= Bool]
+myRec' = setField (Field \@"x") 42 myRec
+@
+
+== 2. Open Variants (Structural Sums)
+
+@
+import Polytropos
+
+type Event = Variant '["Click" ':= '["x" ':= Int, "y" ':= Int], "Quit" ':= '[]]
+
+-- Injecting into a variant:
+clickEvent :: Event
+clickEvent = Variant (Field \@"Click")
+           $ insertField (Field \@"x") 100
+           $ insertField (Field \@"y") 200
+           $ emptyRecord
+
+quitEvent :: Event
+quitEvent = Variant (Field \@"Quit") emptyRecord
+
+-- Pattern matching on a variant:
+handleEvent :: Event -> String
+handleEvent (Variant (Field \@"Click") r) =
+  "Clicked at: " ++ show (getField (Field \@"x") r) ++ "," ++ show (getField (Field \@"y") r)
+handleEvent (Variant (Field \@"Quit") _) =
+  "Exiting application"
+@
+
+== 3. Higher-Kinded Records (HKD)
+
+@
+import Polytropos
+
+-- A partial record where every field is wrapped in 'Maybe':
+type PartialConfig = RecordF Maybe '["host" ':= String, "port" ':= Int]
+
+configTemplate :: PartialConfig
+configTemplate = insertFieldF (Field \@"host") (Just "localhost")
+               $ insertFieldF (Field \@"port") Nothing
+               $ emptyRecordF
+@
+-}
 module Polytropos
   ( -- * Ergonomic Types & Patterns
     type Record

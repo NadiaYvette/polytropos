@@ -13,23 +13,59 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE UndecidableSuperClasses #-}
 
--- |
--- Module      : Polytropos.Rel8
--- Description : rel8 Rel8able instances over polytropos open rows
--- Copyright   : (c) 2026 The Polytropos Authors
--- License     : EUPL-1.2 OR Apache-2.0
---
--- Integration of @polytropos@ open rows with Oliver Charles' @rel8@ PostgreSQL
--- framework. @t'PolyRow' r@ is rel8's 'Rel8able' for the product row @r@; its
--- column schema is a right-nested 'H.HProduct' tree of 'H.HLabel'ed 'H.HIdentity'
--- columns built directly from the row's type-level field list.
---
--- The flat 'SmallArray' payload of the underlying t'Rep' is read and written
--- slot by slot — one slot per column, in row order — so conversion to and from
--- rel8's columnar representation never materialises an intermediate tuple and
--- is unbounded in arity.
+{-|
+Module      : Polytropos.Rel8
+Description : rel8 Rel8able instances and columnar schemas over Polytropos open rows
+Copyright   : (c) 2026 The Polytropos Authors
+License     : EUPL-1.2 OR Apache-2.0
+Maintainer  : nadia.yvette.chambers@ik.me
+Stability   : experimental
+Portability : non-portable (GHC extensions)
+
+Integration of @polytropos@ open rows with Oliver Charles' @rel8@ PostgreSQL
+framework.
+
+= Architectural Overview & Rationale
+
+@t'PolyRow'@ provides rel8's 'Rel8able' for the product row @r@:
+* Its column schema is a right-nested 'H.HProduct' tree of 'H.HLabel'ed 'H.HIdentity'
+  columns built directly from the row's type-level field list.
+* The flat 'Data.Primitive.SmallArray.SmallArray' payload of the underlying @t'Polytropos.Core.Rep'@
+  is read and written slot by slot — one slot per column, in row order.
+* Conversion to and from rel8's columnar representation never materialises an
+  intermediate tuple and is unbounded in arity, completely avoiding GHC's 62-column
+  tuple limit.
+
+= When to Use This Module
+
+* When defining database schemas and type-safe SQL queries with @rel8@ where rows
+  are modelled as open @polytropos@ records.
+
+= Worked Example
+
+@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeApplications #-}
+
+import Rel8
+import Polytropos
+import Polytropos.Rel8
+
+type AccountRow = '["id" ':= Int64, "balance" ':= Double]
+type AccountTable = PolyRow AccountRow
+
+-- Lift a record to a Rel8 SQL expression row:
+rec :: Record AccountRow
+rec = insertField (Field \@"id") (42 :: Int64)
+    $ insertField (Field \@"balance") (1000.50 :: Double)
+    $ emptyRecord
+
+sqlExpr :: AccountTable Expr
+sqlExpr = litRecord rec
+@
+-}
 module Polytropos.Rel8
-  ( -- * A rel8 table from an open row
+  ( -- * A rel8 Table from an Open Row
     PolyRow (..)
   , toRecord
   , fromRecord

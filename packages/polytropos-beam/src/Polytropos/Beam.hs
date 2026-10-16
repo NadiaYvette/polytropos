@@ -13,39 +13,67 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
--- |
--- Module      : Polytropos.Beam
--- Description : beam schema integration for polytropos open records
--- Copyright   : (c) 2026 The Polytropos Authors
--- License     : EUPL-1.2 OR Apache-2.0
---
--- Enables @polytropos@ open records to act as @beam@ database schema tables
--- without GHC out-of-memory compilation crashes on 50+ columns.
---
--- = Why this is cheap
---
--- A beam table is normally a Haskell record whose 'Beamable' instance is
--- derived through GHC.Generics; the generic tree is what blows up compile
--- time on 50+ column tables. A @polytropos@ table is one flat 'Data.Primitive.SmallArray.SmallArray'
--- of payload slots, so 'zipBeamFieldsM' is a lockstep walk of two arrays —
--- column count costs one array element, not one node of a generic tree —
--- and 'tblSkeleton' is a spine built once per row arity.
---
--- = Shape
---
--- t'BeamTable' is a zero-cost newtype around @RowRep f ProductRowT r ()@
--- with the column functor @f@ as its second parameter, so
--- a table's columns are @Columnar f <field-i>@. The 'Beamable' instance is
--- completely erased — it never names field types — so heterogeneous rows
--- work exactly like homogeneous ones. Default column names come from the
--- row symbols via 'fieldNames'.
+{-|
+Module      : Polytropos.Beam
+Description : beam schema integration for Polytropos open records
+Copyright   : (c) 2026 The Polytropos Authors
+License     : EUPL-1.2 OR Apache-2.0
+Maintainer  : nadia.yvette.chambers@ik.me
+Stability   : experimental
+Portability : non-portable (GHC extensions)
+
+Enables @polytropos@ open records to act as @beam@ database schema tables
+without GHC out-of-memory compilation crashes on 50+ columns.
+
+= Architectural Overview & Rationale
+
+== Eliminating Generic Tree Explosion in Beam
+
+A standard beam table is a nominal Haskell record whose 'Beamable' instance is
+derived through "GHC.Generics". The resulting binary metadata tree is what causes
+quadratic compile times and memory blow-up on tables with 50+ columns.
+
+In @polytropos-beam@, a table is backed by a single flat 'Data.Primitive.SmallArray.SmallArray':
+* 'zipBeamFieldsM' executes as a linear lockstep walk over flat array slots.
+* 'tblSkeleton' builds the table spine once per row arity.
+* @t'BeamTable'@ is a zero-cost newtype wrapper around @RowRep f ProductRowT r ()@.
+
+= When to Use This Module
+
+* When defining large database tables (dozens or hundreds of columns) with the @beam@
+  framework while maintaining predictable, instantaneous compilation.
+
+= Worked Example
+
+@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeApplications #-}
+
+import Database.Beam
+import Polytropos
+import Polytropos.Beam
+
+type UserRow = '["id" ':= Int, "username" ':= String]
+type UserTable f = BeamTable UserRow f
+
+-- Convert an open record into a Beam table:
+rec :: Record UserRow
+rec = insertField (Field \@"id") (1 :: Int)
+    $ insertField (Field \@"username") "Alice"
+    $ emptyRecord
+
+tbl :: UserTable Identity
+tbl = toBeamTable rec
+@
+-}
 module Polytropos.Beam
-  ( -- * Beam tables over polytropos rows
+  ( -- * Beam Tables over Polytropos Rows
     BeamTable (..)
   , toBeamTable
   , fromBeamTable
   , beamTableOfSlots
-    -- * Row introspection
+
+    -- * Row Introspection
   , FieldNames (..)
   ) where
 

@@ -11,17 +11,81 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
--- |
--- Module      : Polytropos.Optics
--- Description : optics-core integration for polytropos open records and variants
--- Copyright   : (c) 2026 The Polytropos Authors
--- License     : EUPL-1.2 OR Apache-2.0
---
--- Integration between @polytropos@ and the @optics@ \/ @optics-core@ library.
--- Provides Van Laarhoven lenses for fields, prisms for variant constructors,
--- and 'LabelOptic' instances for overloaded label integration.
+{-|
+Module      : Polytropos.Optics
+Description : optics-core integration for polytropos open records and variants
+Copyright   : (c) 2026 The Polytropos Authors
+License     : EUPL-1.2 OR Apache-2.0
+Maintainer  : nadia.yvette.chambers@ik.me
+Stability   : experimental
+Portability : non-portable (GHC extensions)
+
+Integration between @polytropos@ and the @optics@ \/ @optics-core@ ecosystem.
+
+This module provides first-class optics for open records and variants:
+* Van Laarhoven lenses for record fields via 'fieldLens'.
+* First-class prisms for variant constructors via 'ctorOptic'.
+* Overloaded labels ('LabelOptic') allowing @#fieldname@ lens syntax with @OverloadedLabels@.
+
+= Architectural Overview & Rationale
+
+Rather than treating record fields as string lookups in runtime maps, @polytropos-optics@
+relies on the literal zero-based slot indices synthesized by @polytropos-plugin@.
+Each lens focuses directly on an array slot in the underlying contiguous 'Data.Primitive.SmallArray.SmallArray'.
+Prisms inspect the unboxed constructor tag in \(O(1)\) and extract the constructor's payload.
+
+= When to Use This Module
+
+* When your application uses the @optics@ library and you want idiomatic lens and prism
+  operations over @polytropos@ records and variants.
+* When you want @#fieldName@ syntax for record field access and update.
+
+= When Not to Use This Module
+
+* If your project is built around Edward Kmett's @lens@ library, use "Polytropos.Lens" instead.
+* If your project aims for minimal dependencies and uses @microlens@, use "Polytropos.Microlens" instead.
+
+= Worked Example
+
+@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE OverloadedLabels #-}
+{-# LANGUAGE TypeApplications #-}
+
+import Optics.Core
+import Polytropos
+import Polytropos.Optics
+
+type Person = Record '["name" ':= String, "age" ':= Int]
+
+alice :: Person
+alice = insertField (Field \@"name") "Alice"
+      $ insertField (Field \@"age") (30 :: Int)
+      $ emptyRecord
+
+-- Reading via overloaded label:
+aliceAge :: Int
+aliceAge = alice ^. #age  -- 30
+
+-- Updating via overloaded label:
+olderAlice :: Person
+olderAlice = alice & #age %~ (+ 1)  -- age = 31
+
+-- Working with variant prisms:
+type Shape = Variant '["Circle" ':= '["radius" ':= Double]]
+
+myCircle :: Shape
+myCircle = Variant (Field \@"Circle") (insertField (Field \@"radius") 5.0 emptyRecord)
+
+circleRadius :: Maybe Double
+circleRadius = preview (ctorOptic (Field \@"Circle") % #radius) myCircle  -- Just 5.0
+@
+-}
 module Polytropos.Optics (
+    -- * Record Field Lenses
     fieldLens
+
+    -- * Variant Constructor Prisms
   , ctorOptic
   ) where
 

@@ -12,29 +12,57 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
--- | Core vocabulary and generic representation for @polytropos@.
---
--- This module is deliberately small and self-contained. It fixes three things
--- and defers everything else to the design note
--- (@docs\/notes\/POLYTROPOS_DESIGN.md@):
---
--- 1. The /row vocabulary/: how products and sums are spelled at the type level
---    (§1 of the note).
--- 2. The /generic representation/: @t'Rep'@, a runtime tag plus a flat array of
---    payload slots (§2).
--- 3. The /evidence classes/: @'RowEq'@ and @'RowShow'@, whose instance bodies
---    are meant to be synthesised as literals by the TcPlugin (§5). They are
---    declared here with @undefined@ defaults so the class /structure/ is fixed
---    before the plugin exists.
---
--- == Why one @Rep@ for both products and sums
---
--- A product is a sum with exactly one constructor. Making that literal rather
--- than a special case buys one uniform representation, so the four quadrants of
--- the design space (nominal product, structural product, structural sum of
--- nominal products, nominal sum of structural products) differ only in what the
--- /type/ says, never in what the /value/ is. For a product the tag is always
--- @0@ and is known statically, so it folds away.
+{-|
+Module      : Polytropos.Core
+Description : Low-level substrate, row vocabulary, and generic representation for Polytropos
+Copyright   : (c) 2026 The Polytropos Authors
+License     : EUPL-1.2 OR Apache-2.0
+Maintainer  : nadia.yvette.chambers@ik.me
+Stability   : experimental
+Portability : non-portable (GHC extensions)
+
+Core vocabulary and generic representation for @polytropos@.
+
+This module is the foundational substrate of the library. It fixes three
+essential architectural components and defers higher-level ergonomics to
+"Polytropos" and the canonical design note (@docs\/notes\/POLYTROPOS_DESIGN.md@):
+
+1. The /row vocabulary/: how products and sums are spelled at the type level
+   (@'Pair'@ \/ @':='@, @'Row'@, @'ProductRow'@, @'SumRow'@).
+2. The /generic representation/: @t'Rep'@, a runtime tag plus a flat array of
+   payload slots.
+3. The /evidence classes/: @'RowEq'@, @'RowShow'@, @'FieldIndex'@,
+   @'ConstructorIndex'@, and @'AllFields'@, whose instance bodies are synthesised
+   as literals by the TcPlugin.
+
+= Architectural Overview & Rationale
+
+== Why one @Rep@ for both products and sums
+
+A product is a sum with exactly one constructor. Making that literal rather
+than a special case buys one uniform representation, so the four quadrants of
+the design space (nominal product, structural product, structural sum of
+nominal products, nominal sum of structural products) differ only in what the
+/type/ says, never in what the /value/ is:
+
+@
+data Rep (f :: Type -> Type) a = Rep {-# UNPACK #-} !Word !(SmallArray (f Any))
+@
+
+For a product the tag is always @0@ and is known statically, so tag comparisons
+fold away completely in GHC Core. For a sum, the tag is the constructor index.
+
+= When to Use This Module
+
+* When implementing compilers, typechecker plugins, or low-level primitives.
+* When writing custom backend adapters (e.g. database decoders or wire encoders)
+  that need direct, unboxed access to the underlying 'Data.Primitive.SmallArray.SmallArray' slots.
+
+= When Not to Use This Module
+
+* In ordinary application code or domain modeling; prefer the user-friendly
+  primitives and pattern synonyms in "Polytropos".
+-}
 module Polytropos.Core (
     -- * Rows
     Pair(..)

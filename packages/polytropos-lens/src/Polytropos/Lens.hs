@@ -9,39 +9,82 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
--- |
--- Module      : Polytropos.Lens
--- Description : lens-suite integration for polytropos open records and variants
--- Copyright   : (c) 2026 The Polytropos Authors
--- License     : EUPL-1.2 OR Apache-2.0
---
--- Complete integration with Edward Kmett's @lens@ library while keeping the
--- core packages free of the heavyweight transitive dependency tree.
---
--- = What this module provides
---
---  * Positional lenses: 'Field1' through 'Field9' instances on product
---    records, so @rec ^. _1@ and @rec ^. _2@ read the first and second
---    slots by position (from @"Control.Lens"@).
---  * Container classes: 'Ixed' and 'At' instances keyed by field name, so
---    @rec ^? ix "x"@ and @rec ^. at "x"@ address fields by symbol name
---    (homogeneous records only; see 'AllFieldsAre').
---  * A homogeneous traversal: the 'Each' instance over records whose fields
---    all have the same type.
---  * Profunctor prisms on sum variants: 'prismVariant' builds a
---    @Prism' (Variant s) (Record fs)@ for one constructor.
---  * 'fieldLens': a lens to one field by name, with the slot index supplied
---    as a literal by the @polytropos-plugin@.
---
--- The positional and name-based instances are all @O(1)@ reads and @O(N)@
--- copy-on-write updates over the flat t'Polytropos.Core.Rep' payload; there is
--- no generic-representation tree anywhere.
+{-|
+Module      : Polytropos.Lens
+Description : Comprehensive lens-suite integration for Polytropos open records and variants
+Copyright   : (c) 2026 The Polytropos Authors
+License     : EUPL-1.2 OR Apache-2.0
+Maintainer  : nadia.yvette.chambers@ik.me
+Stability   : experimental
+Portability : non-portable (GHC extensions)
+
+Complete integration with Edward Kmett's @lens@ library while keeping the
+core @polytropos@ packages free of the heavyweight transitive dependency tree.
+
+= Architectural Overview & Rationale
+
+This module bridges @polytropos@ flat runtime representations to standard @lens@
+abstractions:
+* __Positional lenses__: 'Field1' through 'Field9' instances on product records,
+  so @rec ^. _1@ and @rec ^. _2@ read the first and second slots by position in \(O(1)\).
+* __Name-based lenses__: 'fieldLens' focuses on a field by label symbol with literal
+  index calculation via @polytropos-plugin@.
+* __Container classes__: 'Ixed' and 'At' instances keyed by field name for dynamic
+  or symbol-indexed access.
+* __Homogeneous traversals__: 'Each' instances over records whose fields share one
+  type ('AllFieldsAre').
+* __Variant prisms__: 'prismVariant' constructs first-class 'Prism'' optics for
+  open variant constructors with \(O(1)\) tag matching.
+
+= When to Use This Module
+
+* When your codebase heavily utilizes the full @lens@ hierarchy (profunctor optics,
+  indexed traversals, 'Field1'..'Field9').
+
+= When Not to Use This Module
+
+* If you only need lightweight lenses and want to minimize dependencies, use
+  "Polytropos.Microlens" instead.
+* If your codebase uses the newer @optics@ hierarchy, use "Polytropos.Optics" instead.
+
+= Worked Example
+
+@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeApplications #-}
+
+import Control.Lens
+import Polytropos
+import Polytropos.Lens
+
+type Person = Record '["name" ':= String, "age" ':= Int]
+
+person :: Person
+person = insertField (Field \@"name") "Bob"
+       $ insertField (Field \@"age") (25 :: Int)
+       $ emptyRecord
+
+-- Positional access:
+firstField :: String
+firstField = person ^. _1  -- "Bob"
+
+-- Name-based access:
+ageVal :: Int
+ageVal = person ^. fieldLens (Field \@"age")  -- 25
+
+-- Positional modification:
+olderPerson :: Person
+olderPerson = person & _2 .~ 26
+@
+-}
 module Polytropos.Lens
-  ( -- * Field lenses by name
+  ( -- * Field Lenses by Name
     fieldLens
-    -- * Variant prisms
+
+    -- * Variant Prisms
   , prismVariant
-    -- * Homogeneity evidence and row introspection
+
+    -- * Homogeneity Evidence and Row Introspection
   , AllFieldsAre
   , RowField
   , FieldNames (..)

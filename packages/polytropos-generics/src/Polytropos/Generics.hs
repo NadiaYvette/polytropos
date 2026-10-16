@@ -10,16 +10,170 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 
--- | Generic deriving and conversion for polytropos.
---
--- Bridges nominal Haskell ADTs to and from polytropos t'Polytropos.Core.Rep'.
+{-|
+Module      : Polytropos.Generics
+Description : Generic deriving, representation bridging, and whole-data traversal for Polytropos
+Copyright   : (c) 2026 The Polytropos Authors
+License     : EUPL-1.2 OR Apache-2.0
+Maintainer  : nadia.yvette.chambers@ik.me
+Stability   : experimental
+Portability : non-portable (GHC extensions)
+
+Generic deriving, representation bridging, and structural traversal engine for
+@polytropos@.
+
+This module bridges nominal Haskell algebraic data types (ADTs) to and from the
+unified flat representation @t'Polytropos.Core.Rep'@, and provides zero-overhead
+structural operations (@'geq'@, @'gcompare'@, @'gshowsPrec'@, @'gmap'@, @'gfoldMap'@)
+across both open rows (@t'RowRep'@, @Record@, @Variant@) and nominal types.
+
+= Architectural Overview & Rationale
+
+== Why does @polytropos-generics@ resemble built-in "GHC.Generics" rather than @large-generics@?
+
+=== 1. Unified Sums and Products vs. Records-Only
+
+Libraries such as @large-generics@ (@Data.Record.Generic@) are strictly
+single-constructor /record/ (product) libraries. Their representation
+@Rep f a = Rep (SmallArray (f Any))@ lacks a constructor tag entirely,
+preventing them from representing sum types, variants, or multi-constructor ADTs.
+Furthermore, their dictionary abstraction @dict :: Proxy c -> Rep (Dict c) a@
+is a 1D vector corresponding only to the fields of that single constructor.
+
+In contrast, @polytropos@ collapses products and sums into a single uniform mechanism:
+
+@
+data Rep (f :: Type -> Type) a = Rep {-# UNPACK #-} !Word !(SmallArray (f Any))
+@
+
+* In a product (record), the constructor tag is @0@, and the array carries all fields.
+* In a sum (variant), the constructor tag corresponds to the constructor index, and the
+  array carries that constructor's payloads.
+
+Because types may have multiple constructors, dictionary resolution in @polytropos-generics@
+is organized as a __2D dictionary matrix__:
+
+@
+class GInstances (c :: Type -> Constraint) a where
+  gdicts :: SmallArray (SmallArray (DictAny c))
+@
+
+The outer array is indexed in \(O(1)\) by the constructor tag @tx :: Word@; the inner array
+supplies the field dictionaries for that specific constructor.
+
+=== 2. Flat Runtime Arrays vs. Binary Type-Tree Overhead
+
+While standard "GHC.Generics" provides a simple @Generic(from, to)@ mental model,
+it compiles down to deeply nested binary type trees (@(:*:)@, @(:+:)@, @M1@, @K1@).
+For types with many fields or constructors, this causes \(O(2^N)\) compile-time metadata
+blow-up and substantial runtime pointer-chasing and heap allocation.
+
+@polytropos-generics@ adopts the intuitive @Generic(from, to)@ interface, but
+maps directly to flat contiguous memory. Generic operations run as tight unrolled loops
+over 'Data.Primitive.SmallArray.SmallArray' with literal dictionary dispatch.
+
+= When to Use This Module
+
+* __Whole-Data Operations on Open Rows__: When you need structural equality (@'geq'@),
+  ordering (@'gcompare'@), rendering (@'gshowsPrec'@), or uniform mapping (@'gmap'@,
+  @'gfoldMap'@) over open @Record@ or @Variant@ types without writing manual boilerplate.
+* __Bridging Nominal ADTs__: When translating nominal Haskell data types into flat
+  polytropos arrays for serialization (e.g. CBOR, Aeson), database marshalling (Hasql,
+  Rel8, Beam), or open effect payload carrier systems.
+
+= When Not to Use This Module
+
+* When working purely with individual field access and modification on open rows; use
+  the optics satellites (@polytropos-optics@, @polytropos-lens@, or @polytropos-microlens@)
+  or the core field projection functions instead.
+* When working with records that require SOP n-ary product combinators (@NP@, @czipWith@)
+  over heterogeneous functors without sum representations; in those cases, specialized
+  product generics may be preferred.
+
+= Worked Examples
+
+== Mode A: Whole-Data Operations over Open Rows
+
+Open records and variants already provide built-in instances of 'Generic' and
+'GInstances' via the typechecker plugin's 'AllFields' evidence synthesis:
+
+@
+import Polytropos
+import Polytropos.Generics
+
+-- Create an open record
+person :: Record '["name" ':= String, "age" ':= Int]
+person = insertField (Field \@"name") "Alice"
+       $ insertField (Field \@"age")  (30 :: Int)
+       $ emptyRecord
+
+-- 1. Structural equality:
+isEqual :: Bool
+isEqual = geq person person  -- True
+
+-- 2. Uniform type-directed mapping:
+-- Double every numeric field in a record:
+doubled :: Record '["x" ':= Int, "y" ':= Int]
+doubled = gmap \@Num (* 2)
+        $ insertField (Field \@"x") (10 :: Int)
+        $ insertField (Field \@"y") (20 :: Int)
+        $ emptyRecord
+
+-- 3. Folding across heterogeneous fields:
+summary :: String
+summary = gfoldMap \@Show (\\x -> show x ++ "; ") person
+-- Evaluates to: "\"Alice\"; 30; "
+@
+
+== Mode B: Bridging Nominal ADTs
+
+Nominal Haskell types can implement 'Generic' and 'GInstances' to participate in
+flat array-based generic routines:
+
+@
+import Polytropos.Core
+import Polytropos.Generics
+import Data.Primitive.SmallArray
+import Unsafe.Coerce (unsafeCoerce)
+
+data Shape = Circle Double | Rectangle Double Double
+  deriving (Show, Eq)
+
+instance Generic Shape where
+  type RepOf Shape = Rep I Shape
+  from (Circle r)        = Rep 0 (smallArrayFromList [I (unsafeCoerce r)])
+  from (Rectangle w h)   = Rep 1 (smallArrayFromList [I (unsafeCoerce w), I (unsafeCoerce h)])
+  to (Rep 0 arr)         = let I r = indexSmallArray arr 0 in Circle (unsafeCoerce r)
+  to (Rep 1 arr)         = let I w = indexSmallArray arr 0; I h = indexSmallArray arr 1 in Rectangle (unsafeCoerce w) (unsafeCoerce h)
+  to _                   = error "invalid constructor tag"
+
+instance GInstances Eq Shape where
+  gdicts = smallArrayFromList
+    [ smallArrayFromList [mkDictAny \@Eq \@Double]
+    , smallArrayFromList [mkDictAny \@Eq \@Double, mkDictAny \@Eq \@Double]
+    ]
+
+-- Usage:
+-- geq (Circle 5.0) (Circle 5.0) == True
+@
+-}
 module Polytropos.Generics (
+    -- * Generic Conversion Class
     Generic(..)
   , I(..)
+
+    -- * Dictionary Supply Matrix
   , GInstances(..)
+
+    -- * Generic Structural Operations
+    -- ** Equality and Ordering
   , geq
   , gcompare
+
+    -- ** Pretty Printing
   , gshowsPrec
+
+    -- ** Functorial Mapping and Folding
   , gmap
   , gfoldMap
   ) where

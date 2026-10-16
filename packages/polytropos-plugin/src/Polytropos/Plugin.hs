@@ -10,18 +10,81 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 
--- | GHC typechecker plugin for @polytropos@.
---
--- Solves the evidence-class constraints (@FieldIndex@, @ConstructorIndex@,
--- @RowEq@, @RowShow@, @RowEqSum@, @RowShowSum@) by inspecting the row
--- carried in a @RowRep@'s type and emitting literal slot indices, tags, and
--- comparison bodies — the same technique @large-anon@ uses for
--- @DictRowHasField@.
---
--- Load with @ghc-options: -fplugin=Polytropos.Plugin@ in the consuming
--- package's .cabal file.
+{-|
+Module      : Polytropos.Plugin
+Description : GHC typechecker plugin synthesizing literal row evidence for Polytropos
+Copyright   : (c) 2026 The Polytropos Authors
+License     : EUPL-1.2 OR Apache-2.0
+Maintainer  : nadia.yvette.chambers@ik.me
+Stability   : experimental
+Portability : non-portable (GHC Typechecker Plugin API)
+
+GHC typechecker plugin for @polytropos@.
+
+This plugin is the operational heart of the @polytropos@ compile-time engine.
+It inspects the row types carried in @RowRep@ and synthesizes literal evidence
+dictionaries directly into GHC Core during typechecking.
+
+= Architectural Overview & Rationale
+
+== Zero Type-Level Search at Runtime
+
+In conventional type-level row libraries, projecting a field from a record
+requires an inductive type-level search (e.g. via @KnownNat@ or recursive class instances)
+that produces \(O(N)\) or \(O(N^2)\) Core dictionary trees and compiles to pointer-chasing
+loops.
+
+@polytropos-plugin@ eliminates this entire cost:
+1. It intercepts wanted constraints for the evidence classes:
+   * @FieldIndex@: computes the zero-based literal slot index for a field symbol
+   * @ConstructorIndex@: computes the zero-based constructor tag for a variant symbol
+   * @RowEq@ and @RowEqSum@: synthesizes unrolled structural equality checks
+   * @RowShow@ and @RowShowSum@: synthesizes string formatting routines
+   * @AllFields@: synthesizes literal vectors of dictionary witnesses ('Data.Primitive.SmallArray.SmallArray')
+2. It solves these constraints immediately by emitting literal Core expressions with
+   exact numeric literals (e.g. @0#@, @1#@, @2#@).
+3. The resulting code compiles to direct array indexing into contiguous memory with
+   zero intermediate allocations.
+
+= How to Use This Plugin
+
+In your consuming project's @.cabal@ file, add @polytropos-plugin@ to @build-depends@
+and enable the plugin via @ghc-options@:
+
+@
+library
+  build-depends:
+      base >= 4.18
+    , polytropos-core
+    , polytropos-plugin
+  ghc-options:
+    -fplugin=Polytropos.Plugin
+@
+
+= Worked Example
+
+Once the plugin is enabled in your @.cabal@ file, field projections and constructor
+injections work seamlessly without manual instance declarations:
+
+@
+import Polytropos
+
+-- The plugin computes literal index 0 for "name" and 1 for "age"
+type User = Record '["name" ':= String, "age" ':= Int]
+
+mkUser :: String -> Int -> User
+mkUser n a = insertField (Field \@"name") n
+           $ insertField (Field \@"age")  a
+           $ emptyRecord
+
+-- Reading fields is compiled to direct O(1) array index lookup:
+userName :: User -> String
+userName = getField (Field \@"name")
+@
+-}
 module Polytropos.Plugin
-  ( plugin
+  ( -- * GHC Plugin Entry Point
+    plugin
   ) where
 
 import Prelude

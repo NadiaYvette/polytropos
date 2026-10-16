@@ -12,34 +12,68 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
--- |
--- Module      : Polytropos.Persistent
--- Description : persistent PersistValue marshalling for polytropos records
--- Copyright   : (c) 2026 The Polytropos Authors
--- License     : EUPL-1.2 OR Apache-2.0
---
--- Bridges @polytropos@ open records with the Yesod ecosystem's
--- @persistent@ relational database framework.
---
--- 'PersistRow' provides fast marshalling of records to and from
--- @['PersistValue']@ rows: 'toPersistFieldsRecord' serializes the flat
--- payload in row order, and 'fromPersistValuesRecord' reconstructs the
--- record by filling the payload slots directly, in O(n), with no
--- intermediate tuples. The walk is heterogeneous: each field uses its own
--- 'PersistField' instance.
---
--- 'PersistField (Record r)' lets a whole record travel through
--- persistent's value machinery as a 'PersistList' (a nested-column
--- analogue), and t'PolyRowEntity' pairs an integer key with a record in the
--- shape of persistent's 'Database.Persist.Entity', marshalling to the
--- key-then-fields row layout backends use for @Entity@ rows.
+{-|
+Module      : Polytropos.Persistent
+Description : persistent PersistValue marshalling for Polytropos records
+Copyright   : (c) 2026 The Polytropos Authors
+License     : EUPL-1.2 OR Apache-2.0
+Maintainer  : nadia.yvette.chambers@ik.me
+Stability   : experimental
+Portability : non-portable (GHC extensions)
+
+Bridges @polytropos@ open records with the Yesod ecosystem's
+@persistent@ relational database framework.
+
+= Architectural Overview & Rationale
+
+'PersistRow' provides fast marshalling of records to and from
+@['PersistValue']@ rows: 'toPersistFieldsRecord' serializes the flat
+payload in row order, and 'fromPersistValuesRecord' reconstructs the
+record by filling the payload slots directly, in \(O(N)\), with no
+intermediate tuples. The walk is heterogeneous: each field uses its own
+'PersistField' instance.
+
+'PersistField (Record r)' lets a whole record travel through
+persistent's value machinery as a 'PersistList' (a nested-column
+analogue), and @t'PolyRowEntity'@ pairs an integer key with a record in the
+shape of persistent's 'Database.Persist.Entity', marshalling to the
+key-then-fields row layout backends use for @Entity@ rows.
+
+= When to Use This Module
+
+* When persisting @polytropos@ open records with Yesod and the @persistent@ ORM.
+
+= Worked Example
+
+@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeApplications #-}
+
+import Database.Persist
+import Polytropos
+import Polytropos.Persistent
+
+type PersonRow = Record '["name" ':= Text, "age" ':= Int]
+
+person :: PersonRow
+person = insertField (Field \@"name") "Alice"
+       $ insertField (Field \@"age") (30 :: Int)
+       $ emptyRecord
+
+-- Convert to persistent values:
+vals :: [PersistValue]
+vals = toPersistFieldsRecord person
+@
+-}
 module Polytropos.Persistent
-  ( -- * Row marshalling
+  ( -- * Row Marshalling
     PersistRow (..)
-    -- * Row constraint walks
+
+    -- * Row Constraint Walks
   , AllToPersist (..)
   , AllFromPersist (..)
-    -- * Entity wrapper
+
+    -- * Entity Wrapper
   , PolyRowEntity (..)
   , toPolyRowEntity
   , fromPolyRowEntity

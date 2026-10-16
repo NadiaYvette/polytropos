@@ -11,34 +11,65 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 
--- |
--- Module      : Polytropos.Hasql
--- Description : hasql row decoders for polytropos open records
--- Copyright   : (c) 2026 The Polytropos Authors
--- License     : EUPL-1.2 OR Apache-2.0
---
--- Integrates @polytropos@ open records with the high-performance
--- PostgreSQL driver @hasql@.
---
--- 'recordRow' builds a @'Row' (Record r)@ that consumes one column per row
--- field, in row order, and packs the decoded values straight into the
--- contiguous 'Data.Primitive.SmallArray.SmallArray' payload of the record. The column decoders are
--- combined by the 'AllRowDecoder' constraint walk instead of a tuple
--- constructor, so there are no intermediate tuple allocations and none of
--- GHC's 62-column tuple limit: a row of any arity decodes in a single
--- pass, appending one slot at a time.
---
--- Each column picks its value decoder from the 'Column' class at that
--- field's own type, so rows may mix column types. The instances provided
--- cover the fixed-width integral columns (@INT2@\/@INT4@\/@INT8@); more can
--- be added locally without touching this module's machinery.
+{-|
+Module      : Polytropos.Hasql
+Description : High-performance hasql PostgreSQL row decoders for Polytropos records
+Copyright   : (c) 2026 The Polytropos Authors
+License     : EUPL-1.2 OR Apache-2.0
+Maintainer  : nadia.yvette.chambers@ik.me
+Stability   : experimental
+Portability : non-portable (GHC extensions)
+
+Integrates @polytropos@ open records with the high-performance
+PostgreSQL driver @hasql@.
+
+= Architectural Overview & Rationale
+
+== Bypassing Tuple Limits & Intermediate Allocations
+
+Conventional database libraries map SQL rows to Haskell data types via intermediate
+tuples (e.g. @(a, b, c)@). This imposes GHC's 62-column tuple limit and generates
+large numbers of short-lived heap objects.
+
+'recordRow' builds a @'Row' (Record r)@ that consumes one column per row
+field, in row order, and packs the decoded values straight into the
+contiguous 'Data.Primitive.SmallArray.SmallArray' payload of the record. The column decoders are
+combined by the 'AllRowDecoder' constraint walk in a single pass, appending one slot
+at a time. Rows of arbitrary arity (50, 100, 200+ columns) decode with zero tuple overhead.
+
+Each column picks its value decoder from the 'Column' class at that
+field's own type, allowing heterogeneous column rows.
+
+= When to Use This Module
+
+* When executing high-throughput PostgreSQL queries with @hasql@ where rows have
+  many columns or where open records are used as query results.
+
+= Worked Example
+
+@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeApplications #-}
+
+import qualified Hasql.Decoders as HD
+import Polytropos
+import Polytropos.Hasql
+
+type UserRow = Record '["id" ':= Int64, "age" ':= Int32]
+
+userDecoder :: HD.Row UserRow
+userDecoder = recordRow \@UserRow
+@
+-}
 module Polytropos.Hasql
-  ( -- * Row decoder construction
+  ( -- * Row Decoder Construction
     HasqlRow
   , recordRow
-    -- * Column-decoder walk
+
+    -- * Column-Decoder Walk
   , AllRowDecoder (..)
-    -- * Per-column value decoders
+
+    -- * Per-Column Value Decoders
   , Column (..)
   ) where
 

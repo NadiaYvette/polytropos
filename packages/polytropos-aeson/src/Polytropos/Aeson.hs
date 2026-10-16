@@ -14,33 +14,67 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
--- |
--- Module      : Polytropos.Aeson
--- Description : aeson JSON codecs for polytropos open records and variants
--- Copyright   : (c) 2026 The Polytropos Authors
--- License     : EUPL-1.2 OR Apache-2.0
---
--- Linear @O(N)@ 'A.ToJSON' and 'A.FromJSON' instances for 'Record' and t'Variant'
--- without standard GHC.Generics compile slowdowns: the codecs unroll the
--- flat t'Polytropos.Core.Rep' payload directly into a JSON object and back,
--- with no generic-representation tree anywhere.
---
--- = Encoding
---
--- A record encodes as a JSON object with one member per field, in row order;
--- a variant encodes as a single-member object @{"ctor": fields}@, where the
--- member name is the active constructor and the value is an object of that
--- constructor's fields (empty object for a nullary constructor). The decoder
--- is strict: it requires exactly the row's member count for records, and
--- exactly one member naming a constructor of the row for variants.
---
--- All fields must share one type for now ('AllFieldsAre' / 'AllCtorsHom');
--- the codecs walk the payload slots in lockstep with the reified field
--- names, coercing each erased slot to that type exactly as the row evidence
--- guarantees. The field type itself is pinned to the row by 'RowField' and
--- 'SumField', so the instances never leave a metavariable ambiguous.
+{-|
+Module      : Polytropos.Aeson
+Description : aeson JSON codecs for Polytropos open records and variants
+Copyright   : (c) 2026 The Polytropos Authors
+License     : EUPL-1.2 OR Apache-2.0
+Maintainer  : nadia.yvette.chambers@ik.me
+Stability   : experimental
+Portability : non-portable (GHC extensions)
+
+Linear \(O(N)\) 'A.ToJSON' and 'A.FromJSON' instances for 'Record' and 'Variant'
+without standard "GHC.Generics" compile slowdowns: the codecs unroll the
+flat @t'Polytropos.Core.Rep'@ payload directly into a JSON object and back,
+with no generic-representation tree anywhere.
+
+= Architectural Overview & Rationale
+
+== Encoding Structure
+
+* A record encodes as an anonymous JSON object with one key per field symbol, in row order.
+* A variant encodes as a single-member tagged object @{"ctor": fields}@, where the
+  member key is the active constructor symbol and the value is the JSON object of that
+  constructor's payload fields (or empty object for a nullary constructor).
+
+== Why Avoid GHC.Generics Trees for JSON
+
+Standard @aeson@ deriving walks a nested binary tree of @M1@, @(:*:)@, and @(:+:)@ constructors.
+On large schemas (30+ fields or constructors), this causes significant compile-time memory
+blow-up. @polytropos-aeson@ walks the flat array of payload slots in a single tight loop
+directly into @aeson@'s 'Data.Aeson.KeyMap.KeyMap'.
+
+= When to Use This Module
+
+* When serializing or deserializing @polytropos@ open records and variants to and from JSON.
+
+= Worked Example
+
+@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
+
+import Data.Aeson (encode, decode)
+import Polytropos
+import Polytropos.Aeson
+
+type Config = Record '["host" ':= String, "port" ':= Int]
+
+cfg :: Config
+cfg = insertField (Field \@"host") "localhost"
+    $ insertField (Field \@"port") (8080 :: Int)
+    $ emptyRecord
+
+-- Encodes to JSON: {"host":"localhost","port":8080}
+jsonBytes = encode cfg
+
+-- Decodes back to Config:
+Just cfg' = decode \@Config jsonBytes
+@
+-}
 module Polytropos.Aeson
-  ( -- * Homogeneity evidence and row introspection
+  ( -- * Homogeneity Evidence and Row Introspection
     AllFieldsAre
   , AllCtorsHom (..)
   , FieldNames (..)
