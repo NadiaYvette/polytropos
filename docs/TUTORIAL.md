@@ -15,14 +15,17 @@ SPDX-License-Identifier: EUPL-1.2 OR Apache-2.0
 Every concept in this tutorial is backed by live, compilable code in this repository. You can run the executable tutorial pass right now from your terminal:
 
 ```bash
-# Build and run the executable tutorial
+# Build and run the Nanopass compiler pass tutorial (Addendum A)
 cabal run example-nanopass
 
+# Build and run the Resilient Parsing tutorial (Addendum B)
+cabal run example-resilient
+
 # Or explore the types and combinators interactively in GHCi
-cabal repl example-nanopass
+cabal repl example-resilient
 ```
 
-The executable source code is located at [`examples/nanopass/src/Main.hs`](../examples/nanopass/src/Main.hs).
+The executable source code is located at [`examples/nanopass/src/Main.hs`](../examples/nanopass/src/Main.hs) and [`examples/resilient/src/Main.hs`](../examples/resilient/src/Main.hs).
 
 ### Standard GHC Extensions & Setup
 
@@ -428,11 +431,201 @@ ppSurface (SurfaceStmt stmt) = case peel @"while_" stmt of
 
 ---
 
+## Addendum B: Worked Case Study — Resilient Parsing & Error ASTs ("Stope and Winze")
+
+In modern IDEs, language servers, and interactive programming environments, user code is syntactically incomplete or broken more than 90% of the time as the developer types. 
+
+Traditional compiler pipelines use **fail-stop** parsing:
+```haskell
+parseProgram :: String -> Either ParseError AST
+```
+If a single token or semicolon is missing in the middle of a file, the parser aborts, the entire `AST` is discarded, and the language server loses its outline view, type tooltips, and autocompletion across the entire module.
+
+### B.1 The Error AST Dilemma in Closed Nominal Type Systems
+Language designers attempting to make parsers error-tolerant in traditional Haskell run directly into the **Nominal Dilemma**:
+1. **Approach 1: Polluting the Core AST:**
+   Add an error node constructor directly to the closed nominal data type:
+   ```haskell
+   data Expr
+     = Lit Int
+     | Var String
+     | BinOp String Expr Expr
+     | ExprHole Span [Token]   -- Error node!
+   ```
+   *The fatal flaw:* Now **every single downstream pass**—the typechecker, constant folder, dead code eliminator, and code generator—is permanently forced to pattern match on `ExprHole`, even in backend passes that run long after errors have been validated! If someone forgets to handle `ExprHole` in a backend pass, it crashes at runtime.
+2. **Approach 2: Duplicating the AST Hierarchy:**
+   Maintain two parallel ASTs: `data ParsedExpr = ... | ParsedHole ...` and `data CleanExpr = ...`.
+   *The fatal flaw:* You must write hundreds of lines of boilerplate tree-conversion code just to copy identical nodes (`ParsedLit` $\to$ `CleanLit`, `ParsedVar` $\to$ `CleanVar`, etc.) from the parser into the compiler.
+
+### B.2 The "Stope and Winze" Architecture
+Rather than viewing error recovery as "island parsing" (where valid code is treated as isolated islands in a meaningless sea of errors), the **stope and winze** model views errors through the lens of mining geology:
+* **The Stope (The Ore Body):** The overarching, structurally valid framework of the program (module headers, imports, function declarations, and clean sibling statements).
+* **The Winze (The Local Excavation):** An explicit, localized error hole carved out of the stope at the exact failure site.
+* **The Gangue (The Waste Rock):** The unparsed raw tokens trapped within the winze.
+
+With `polytropos`, we model this architecture cleanly:
+* The **Stope** is an open row of clean language constructs (`ExprRow e`).
+* The **Winze** is an additive variant constructor (`"hole" := ParseHoleRow`).
+* The parser emits `ResilientExpr` (widened with `"hole"`).
+* IDE passes inspect the tree and step over the winze, preserving symbols in the stope.
+* The compilation gate narrows `ResilientExpr` back to `CleanExpr` using $\mathcal{O}(1)$ `peel @"hole"` with **zero tree-conversion boilerplate**!
+
+### B.3 Defining the Schemas
+We parameterize the clean expression and statement rows by sub-node type `e`, and derive the resilient versions by prepending error constructors:
+
+```haskell
+-- 1. Localized syntax error node (The Winze carrying Gangue):
+type ParseHoleRow =
+  '[ "span"     := String    -- e.g. "line 2:10"
+   , "expected" := String    -- Grammar expectation
+   , "gangue"   := [String]  -- Trapped unparsed tokens
+   ]
+
+-- 2. The Clean Stope (Valid Expression Forms):
+type ExprRow e =
+  '[ "lit"   := '[ "val" := Int ]
+   , "var"   := '[ "name" := String ]
+   , "binop" := '[ "op" := String, "lhs" := e, "rhs" := e ]
+   ]
+
+type CleanExprRow = ExprRow CleanExpr
+newtype CleanExpr = CleanExpr (Variant CleanExprRow)
+
+-- 3. The Resilient Parse AST: simply prepend "hole"!
+type ResilientExprRow = ("hole" := ParseHoleRow) ': ExprRow ResilientExpr
+newtype ResilientExpr = ResilientExpr (Variant ResilientExprRow)
+
+-- 4. Statements:
+type StmtRow e =
+  '[ "assign" := '[ "var" := String, "val" := e ]
+   , "print"  := '[ "val" := e ]
+   ]
+
+type CleanStmtRow = StmtRow CleanExpr
+newtype CleanStmt = CleanStmt (Variant CleanStmtRow)
+
+type ResilientStmtRow = ("stmtHole" := ParseHoleRow) ': StmtRow ResilientExpr
+newtype ResilientStmt = ResilientStmt (Variant ResilientStmtRow)
+```
+
+### B.4 Resilient Parsing: Localizing the Winze
+In our parser, when expression parsing fails (e.g. ungrammatical characters or missing delimiters), the parser doesn't crash or drop the statement. It skips tokens up to the statement delimiter (`;`), bundles the unparsed tokens as `gangue`, and emits a localized hole:
+
+```haskell
+parseResilientExpr (t : ts)
+  | all isDigit t.tokStr = ...
+  | isAlpha (head t.tokStr) = ...
+  -- Syntax error encountered: isolate the winze!
+  | otherwise =
+      let (gangueTokens, rest) = L.span (\tok -> tok.tokStr /= ";") (t:ts)
+          gangue = map (\tok -> tok.tokStr) gangueTokens
+          hole = VAR
+            { hole = REC
+                { span = formatSpan t
+                , expected = "number or variable"
+                , gangue
+                }
+            }
+      in (ResilientExpr hole, rest)
+```
+
+When parsing a source file with syntax errors:
+```text
+a = 10;
+b = 20 + %$#@!;        -- Localized expression hole in b's RHS!
+??? malformed stmt;    -- Complete statement hole!
+c = 30;
+print c;
+```
+The parser emits a lossless list of 5 `ResilientStmt` nodes! Statement 1 (`a`), Statement 4 (`c`), and Statement 5 (`print c`) are completely valid, while Statements 2 and 3 isolate their gangue into explicit holes.
+
+### B.5 IDE Passes: Stepping Over the Winze
+Because `ResilientStmt` is an open variant, downstream IDE tools can query the tree and step right over error holes:
+
+```haskell
+-- | IDE Symbol Table Pass:
+-- Harvests variable declarations across the entire file so autocomplete and
+-- jump-to-definition continue working even when other statements are broken.
+collectSymbols :: [ResilientStmt] -> [String]
+collectSymbols = concatMap getSym
+  where
+    getSym (ResilientStmt s) = case peel @"stmtHole" s of
+      Right _ -> [] -- Step over the statement hole!
+      Left validStmt -> case peel @"assign" validStmt of
+        Right (REC { var }) -> [var]
+        Left _              -> []
+```
+
+Running `collectSymbols` on the broken source above produces:
+```haskell
+["a", "b", "c"]
+```
+Even though line 2 and line 3 contain invalid syntax, the language server **successfully extracted all declared variables**. Autocompletion, outline views, and hover documentation remain fully operational across the entire file!
+
+Simultaneously, an IDE diagnostic pass collects error squigglies:
+```haskell
+collectDiagnostics :: [ResilientStmt] -> [String]
+collectDiagnostics = concatMap stmtDiag
+  where
+    stmtDiag (ResilientStmt s) = case peel @"stmtHole" s of
+      Right (REC { span, expected, gangue }) ->
+        [ "[" ++ span ++ "] Syntax Error: expected " ++ expected ++ ", but found: " ++ unwords gangue ]
+      Left validStmt -> case peel @"assign" validStmt of
+        Right (REC { val }) -> exprDiag val
+        Left rest -> case peel @"print" rest of
+          Right (REC { val }) -> exprDiag val
+          Left _              -> []
+
+    exprDiag (ResilientExpr e) = case peel @"hole" e of
+      Right (REC { span, expected, gangue }) ->
+        [ "[" ++ span ++ "] Expression Error: expected " ++ expected ++ ", but found: " ++ unwords gangue ]
+      Left rest -> case peel @"binop" rest of
+        Right (REC { lhs, rhs }) -> exprDiag lhs ++ exprDiag rhs
+        Left _                   -> []
+```
+
+### B.6 The Compilation Gate: Zero-Boilerplate Narrowing via `peel`
+When the compiler moves from IDE analysis to code generation, we must guarantee that no error holes can possibly reach the backend.
+
+In traditional Haskell, converting from `ParsedAST` to `CleanAST` requires copying every constructor. With `polytropos`, we use `peel @"hole"`:
+
+```haskell
+validateExpr :: ResilientExpr -> Either String CleanExpr
+validateExpr (ResilientExpr e) = case peel @"hole" e of
+  Right (REC { span, expected, gangue }) ->
+    Left ("[" ++ span ++ "] Unresolved hole: expected " ++ expected)
+  Left rest -> case peel @"binop" rest of
+    Right (REC { op, lhs, rhs }) -> do
+      cleanL <- validateExpr lhs
+      cleanR <- validateExpr rhs
+      Right (CleanExpr (VAR { binop = REC { op, lhs = cleanL, rhs = cleanR } }))
+    Left nonBinop -> case peel @"lit" nonBinop of
+      Right (REC { val }) ->
+        Right (CleanExpr (VAR { lit = REC { val } }))
+      Left nonLit -> case peel @"var" nonLit of
+        Right (REC { name }) ->
+          Right (CleanExpr (VAR { var = REC { name } }))
+        Left _ ->
+          Left "Internal error"
+```
+
+Notice what happens in `Left rest`:
+1. `peel @"hole"` verified in $\mathcal{O}(1)$ that the active constructor was not `"hole"`.
+2. The remaining variant is definitionally stripped of `"hole"`.
+3. If the expression is a leaf (`lit` or `var`), it is **already** of type `Variant CleanExprRow`!
+4. The pure backend evaluator (`evalCleanExpr`) only ever accepts `CleanExpr`, guaranteeing total type safety at compile time with zero AST duplication.
+
+You can run the full, live resilient parsing tutorial right now:
+```bash
+cabal run example-resilient
+```
+
+---
+
 ## Upcoming Addenda in this Series
 
 | Addendum | Architecture | Core Primitives Demonstrated |
 |---|---|---|
-| **Addendum B** | *Resilient Parsing & Error ASTs ("Stope and Winze")* | Explicit variant error nodes (`ParseHole`), semantic error containment, IDE language server fault tolerance. |
 | **Addendum C** | *Relational Database Models* | High-throughput SQL table schemas and query projection with `polytropos-rel8` and `polytropos-persistent`. |
 | **Addendum D** | *Extensible Algebraic Effects* | Modular effect rows and $\mathcal{O}(1)$ handler dispatch with `effectful-polytropos` and `kernmantle-polytropos`. |
 
@@ -461,3 +654,10 @@ Re-run `cabal run example-nanopass`. Notice that `desugarStmt` **still compiles 
 
 ### Exercise 3: Inspect Compiler Diagnostics
 Deliberately misspell a field name in a record (e.g. `val_` instead of `val`) or omit a constructor handler in `ppCore`. Observe how the `Polytropos.Plugin` intercepts the unsolved constraint and outputs a custom human-centric diagnostic suggesting the correct name.
+
+### Exercise 4: Add String Literals to the Resilient AST
+Open [`examples/resilient/src/Main.hs`](../examples/resilient/src/Main.hs) and extend `ExprRow e` with a string literal:
+```haskell
+, "str" := '[ "val" := String ]
+```
+Update the tokenizer and `parseResilientExpr` to recognize double-quoted strings (e.g. `"hello"`). Notice how `collectSymbols`, `collectDiagnostics`, and the compilation gate adapt with minimal edits!

@@ -1,0 +1,22 @@
+cabal-version: 3.14
+name: example-resilient
+version: 0.1.0.0
+synopsis: Worked tutorial example of resilient parsing and error ASTs with polytropos
+description:
+  Interactive tutorial example demonstrating the "stope and winze" architecture
+  for resilient parsing and error containment using @polytropos@ open variants.
+license: EUPL-1.2 OR Apache-2.0
+author: Nadia Yvette Chambers
+maintainer: nadia.yvette.chambers@ik.me
+category: Compilers/Interpreters
+build-type: Simple
+
+executable example-resilient
+  default-language: GHC2021
+  hs-source-dirs: src
+  main-is: Main.hs
+  ghc-options: -Wall -fplugin=Polytropos.Plugin
+  build-depends:
+    base >= 4.19 && < 5,
+    polytropos-core >= 0.1 && < 0.2,
+    polytropos-plugin >= 0.1 && < 0.2

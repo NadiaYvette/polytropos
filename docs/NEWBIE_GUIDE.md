@@ -18,6 +18,7 @@ If you are new to `polytropos` and want to understand how open records and varia
 - **Lesson 4:** Structural Subtyping in Practice (`projectRecord`, `widenVariant`, `narrowVariant`)
 - **Lesson 5:** Extensible Pipelines & Total Elimination (`eliminateUniform`, `matchVariant`)
 - **Addendum A:** Live worked Nanopass compiler pass (`cabal run example-nanopass`)
+- **Addendum B:** Resilient Parsing & Error ASTs ("Stope and Winze") (`cabal run example-resilient`)
 
 Once you are comfortable with the concepts, use this guide for repository navigation and token conservation.
 

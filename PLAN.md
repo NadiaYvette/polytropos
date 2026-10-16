@@ -65,9 +65,9 @@ Design note §6, in order:
 ## Milestone 8 — documentation & pedagogical framework
 
 - [x] Candidate tutorial examples evaluation matrix (`docs/notes/TUTORIAL_EXAMPLES_EVALUATION.md`)
-- [x] Worked live Nanopass tutorial executable in `examples/nanopass/` (`cabal run example-nanopass`)
+- [x] Worked live Nanopass and Resilient Parsing tutorial executables in `examples/nanopass/` and `examples/resilient/` (`cabal run example-nanopass`, `cabal run example-resilient`)
 - [ ] Four-Audience documentation agenda overhaul:
-  - [x] Audience 1: Foundational 5-Lesson Plan + Nanopass Addendum (`docs/TUTORIAL.md`) and refreshed `docs/NEWBIE_GUIDE.md`
+  - [x] Audience 1: Foundational 5-Lesson Plan + Nanopass & Resilient Parsing Addenda (`docs/TUTORIAL.md`) and refreshed `docs/NEWBIE_GUIDE.md`
   - [x] Audience 2: Systematic Haddock audit & polish across `Polytropos` and `Polytropos.Core`
   - [x] Audience 3: Authoritative architectural guide & maintenance recipes (`docs/MAINTAINER_GUIDE.md`)
   - [x] Audience 4: AI context projections & agentic governance (`AGENTS.md`, `.agents/rules/`)
