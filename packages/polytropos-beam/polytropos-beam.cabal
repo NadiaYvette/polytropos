@@ -3,14 +3,15 @@ name: polytropos-beam
 version: 0.1.0.0
 synopsis: beam database schema integration for polytropos open records
 description:
-  Integration enabling @polytropos@ open records to act as @beam-core@ database
-  tables and query projections without compiler out-of-memory crashes on wide schemas (50+ columns).
+  Integration enabling <https://hackage.haskell.org/package/polytropos polytropos> open records to act as
+  <https://hackage.haskell.org/package/beam-core beam-core> database tables and query projections without
+  compiler out-of-memory crashes on wide schemas (50+ columns).
 
-  The @Beamable@ instance operates directly over the flat contiguous @SmallArray@ payload:
-  scaling column count costs exactly one array slot rather than exploding generic-representation
-  AST trees during compilation.
+  The 'Database.Beam.Schema.Tables.Beamable' instance operates directly over the flat contiguous
+  'Data.Primitive.SmallArray.SmallArray' payload: scaling column count costs exactly one array slot
+  rather than exploding generic-representation AST trees during compilation.
 
-  Start at the front door module @Polytropos.Beam@ for schema definitions,
+  Start at the front door module "Polytropos.Beam" for schema definitions,
   table wrappers, and worked examples.
 license: EUPL-1.2 OR Apache-2.0
 author: Nadia Yvette Chambers

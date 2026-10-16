@@ -3,15 +3,15 @@ name: polytropos-rel8
 version: 0.1.0.0
 synopsis: rel8 Rel8able table schemas and queries over polytropos open rows
 description:
-  High-level type-safe PostgreSQL database mapping connecting @polytropos@ open rows
-  to Oliver Charles' @rel8@ framework.
+  High-level type-safe PostgreSQL database mapping connecting <https://hackage.haskell.org/package/polytropos polytropos> open rows
+  to Oliver Charles' <https://hackage.haskell.org/package/rel8 rel8> framework.
 
-  Exposes @PolyRow@, a higher-kinded @Rel8able@ schema representation whose columns
+  Exposes 'Polytropos.Rel8.PolyRow', a higher-kinded 'Rel8.Rel8able' schema representation whose columns
   are derived directly from the row's type-level field specification into an @HProduct@
-  tree. Conversions between @rel8@'s columnar representation and the flat @SmallArray@
+  tree. Conversions between @rel8@'s columnar representation and the flat 'Data.Primitive.SmallArray.SmallArray'
   payload execute slot-by-slot in row order without intermediate tuples or arity limits.
 
-  Start at the front door module @Polytropos.Rel8@ for complete documentation,
+  Start at the front door module "Polytropos.Rel8" for complete documentation,
   schema definitions, and worked query examples.
 license: EUPL-1.2 OR Apache-2.0
 author: Nadia Yvette Chambers

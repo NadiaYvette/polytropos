@@ -3,14 +3,15 @@ name: polytropos-aeson
 version: 0.1.0.0
 synopsis: High-performance aeson JSON codecs for polytropos open records and variants
 description:
-  Linear O(N) @ToJSON@ and @FromJSON@ serialization codecs for @polytropos@ open
-  records and variants via @aeson@.
+  Linear O(N) 'Data.Aeson.ToJSON' and 'Data.Aeson.FromJSON' serialization codecs for
+  <https://hackage.haskell.org/package/polytropos polytropos> open records and variants
+  via <https://hackage.haskell.org/package/aeson aeson>.
 
-  Unlike @GHC.Generics@ which builds intermediate binary tree nodes during serialization,
-  @polytropos-aeson@ unrolls the flat contiguous @SmallArray@ payload directly into a
-  JSON object and back. Variants serialize into tagged JSON objects with O(1) tag dispatch.
+  Unlike "GHC.Generics" which builds intermediate binary tree nodes during serialization,
+  @polytropos-aeson@ unrolls the flat contiguous 'Data.Primitive.SmallArray.SmallArray' payload
+  directly into a JSON object and back. Variants serialize into tagged JSON objects with O(1) tag dispatch.
 
-  Start at the front door module @Polytropos.Aeson@ for complete documentation,
+  Start at the front door module "Polytropos.Aeson" for complete documentation,
   codec options, and worked examples.
 license: EUPL-1.2 OR Apache-2.0
 author: Nadia Yvette Chambers

@@ -3,15 +3,15 @@ name: polytropos-quickcheck
 version: 0.1.0.0
 synopsis: QuickCheck generators and slot-indexed shrinkers for polytropos open rows
 description:
-  Property-based testing integration connecting @polytropos@ open records and variants
-  to @QuickCheck@.
+  Property-based testing integration connecting <https://hackage.haskell.org/package/polytropos polytropos> open records and variants
+  to <https://hackage.haskell.org/package/QuickCheck QuickCheck>.
 
-  Provides @Arbitrary@ instances for @Record@ and @Variant@: records generate values
-  heterogeneously via @AllFields@ and shrink slot-by-slot (avoiding Cartesian product blowup);
+  Provides 'Test.QuickCheck.Arbitrary' instances for 'Polytropos.Record' and 'Polytropos.Variant': records generate values
+  heterogeneously via 'Polytropos.Core.AllFields' and shrink slot-by-slot (avoiding Cartesian product blowup);
   variants pick uniformly across constructor tags and shrink strictly within the active
   constructor branch.
 
-  Start at the front door module @Polytropos.QuickCheck@ for complete documentation,
+  Start at the front door module "Polytropos.QuickCheck" for complete documentation,
   shrink semantics, and worked examples.
 license: EUPL-1.2 OR Apache-2.0
 author: Nadia Yvette Chambers

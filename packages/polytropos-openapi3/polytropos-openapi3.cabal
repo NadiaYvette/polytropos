@@ -3,14 +3,14 @@ name: polytropos-openapi3
 version: 0.1.0.0
 synopsis: OpenAPI 3.0 schema generation for polytropos open records and variants
 description:
-  Automatic OpenAPI 3.0 specification and JSON Schema generation for @polytropos@
-  open records and variants via @openapi3@.
+  Automatic OpenAPI 3.0 specification and JSON Schema generation for <https://hackage.haskell.org/package/polytropos polytropos>
+  open records and variants via <https://hackage.haskell.org/package/openapi3 openapi3>.
 
-  Generates @ToSchema@ instances without @GHC.Generics@ tree explosion: open records
+  Generates 'Data.OpenApi.Schema.ToSchema' instances without "GHC.Generics" tree explosion: open records
   yield schema objects with typed properties and required lists, while open variants
-  yield @oneOf@ tagged-union schemas.
+  yield 'Data.OpenApi.Lens.oneOf' tagged-union schemas.
 
-  Start at the front door module @Polytropos.OpenApi@ for complete documentation,
+  Start at the front door module "Polytropos.OpenApi" for complete documentation,
   schema customizing options, and worked examples.
 license: EUPL-1.2 OR Apache-2.0
 author: Nadia Yvette Chambers

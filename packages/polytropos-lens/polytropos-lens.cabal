@@ -3,18 +3,18 @@ name: polytropos-lens
 version: 0.1.0.0
 synopsis: Comprehensive lens-suite integration for polytropos open records and variants
 description:
-  Comprehensive optics integration between @polytropos@ open records and variants
-  and Edward Kmett's @lens@ ecosystem.
+  Comprehensive optics integration between <https://hackage.haskell.org/package/polytropos polytropos> open records and variants
+  and Edward Kmett's <https://hackage.haskell.org/package/lens lens> ecosystem.
 
-  Bridges the unified flat runtime representation @Rep@ to standard @lens@ typeclasses:
-  positional lenses (@Field1@ through @Field9@), label-based lenses (@fieldLens@),
-  container indexing (@Ixed@ and @At@ keyed by field name), single-pass homogeneous
-  traversals (@Each@), and first-class profunctor prisms (@prismVariant@) for open
+  Bridges the unified flat runtime representation 'Polytropos.Core.Rep' to standard "Control.Lens" typeclasses:
+  positional lenses ('Control.Lens.Tuple.Field1' through 'Control.Lens.Tuple.Field9'), label-based lenses ('Polytropos.Lens.fieldLens'),
+  container indexing ('Control.Lens.At.Ixed' and 'Control.Lens.At.At' keyed by field name), single-pass homogeneous
+  traversals ('Control.Lens.Each.Each'), and first-class profunctor prisms ('Polytropos.Lens.prismVariant') for open
   variant constructors with O(1) tag dispatch.
 
   Keeps the core @polytropos@ packages lightweight and free from transitive dependencies.
 
-  Start at the front door module @Polytropos.Lens@ for complete documentation,
+  Start at the front door module "Polytropos.Lens" for complete documentation,
   usage guidelines, and worked examples.
 license: EUPL-1.2 OR Apache-2.0
 author: Nadia Yvette Chambers

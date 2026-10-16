@@ -3,15 +3,16 @@ name: polytropos-persistent
 version: 0.1.0.0
 synopsis: persistent database marshalling and entity wrappers for polytropos
 description:
-  Integration bridging @polytropos@ open records with the Yesod ecosystem's
-  @persistent@ relational database library.
+  Integration bridging <https://hackage.haskell.org/package/polytropos polytropos> open records
+  with the Yesod ecosystem's <https://hackage.haskell.org/package/persistent persistent> relational database library.
 
-  Provides fast zero-tuple marshalling of records to and from @[PersistValue]@ rows
-  via @PersistRow@ (@toPersistFieldsRecord@, @fromPersistValuesRecord@), whole-record
-  column storage as @PersistList@ via @PersistField@ and @PersistFieldSql@, and
-  entity wrappers via @PolyRowEntity@.
+  Provides fast zero-tuple marshalling of records to and from @['Database.Persist.Class.PersistField.PersistValue']@ rows
+  via 'Polytropos.Persistent.PersistRow' ('Polytropos.Persistent.toPersistFieldsRecord', 'Polytropos.Persistent.fromPersistValuesRecord'),
+  whole-record column storage as 'Database.Persist.Class.PersistField.PersistList' via
+  'Database.Persist.Class.PersistField.PersistField' and 'Database.Persist.Sql.Class.PersistFieldSql',
+  and entity wrappers via 'Polytropos.Persistent.PolyRowEntity'.
 
-  Start at the front door module @Polytropos.Persistent@ for complete documentation,
+  Start at the front door module "Polytropos.Persistent" for complete documentation,
   schema mappings, and worked examples.
 license: EUPL-1.2 OR Apache-2.0
 author: Nadia Yvette Chambers

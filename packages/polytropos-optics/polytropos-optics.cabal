@@ -3,13 +3,14 @@ name: polytropos-optics
 version: 0.1.0.0
 synopsis: optics-core integration for polytropos open records and variants
 description:
-  Integration between @polytropos@ and the @optics@ \/ @optics-core@ ecosystem.
+  Integration between <https://hackage.haskell.org/package/polytropos polytropos> and the
+  <https://hackage.haskell.org/package/optics optics> \/ <https://hackage.haskell.org/package/optics-core optics-core> ecosystem.
 
-  Provides Van Laarhoven lenses for record fields via @fieldLens@, first-class
-  prisms for variant constructors via @ctorOptic@, and @LabelOptic@ instances
+  Provides Van Laarhoven lenses for record fields via 'Polytropos.Optics.fieldLens', first-class
+  prisms for variant constructors via 'Polytropos.Optics.ctorOptic', and 'Optics.Label.LabelOptic' instances
   allowing @#fieldName@ lens syntax with @OverloadedLabels@.
 
-  Start at the front door module @Polytropos.Optics@ for complete documentation,
+  Start at the front door module "Polytropos.Optics" for complete documentation,
   usage guidelines, and worked examples.
 license: EUPL-1.2 OR Apache-2.0
 author: Nadia Yvette Chambers

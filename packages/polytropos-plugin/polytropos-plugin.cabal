@@ -3,17 +3,18 @@ name:               polytropos-plugin
 version:            0.1.0.0
 synopsis:           TcPlugin that emits literal evidence for Polytropos row classes
 description:
-  A GHC typechecker plugin for @polytropos@ that solves the evidence-class
-  constraints (@FieldIndex@, @ConstructorIndex@, @RowEq@, @RowShow@,
-  @RowEqSum@, @RowShowSum@, @AllFields@) by inspecting the row carried in a
-  @RowRep@'s type and emitting literal slot indices, tags, and dictionary
-  vectors directly into GHC Core AST — eliminating inductive type-level search
-  and pointer-chasing runtime overhead entirely.
+  A GHC typechecker plugin for <https://hackage.haskell.org/package/polytropos polytropos>
+  that solves the evidence-class constraints ('Polytropos.Core.FieldIndex',
+  'Polytropos.Core.ConstructorIndex', 'Polytropos.Core.RowEq', 'Polytropos.Core.RowShow',
+  'Polytropos.Core.RowEqSum', 'Polytropos.Core.RowShowSum', 'Polytropos.Core.AllFields')
+  by inspecting the row carried in a 'Polytropos.Core.RowRep''s type and emitting literal
+  slot indices, tags, and dictionary vectors directly into GHC Core AST — eliminating
+  inductive type-level search and pointer-chasing runtime overhead entirely.
 
-  Uses the @ghc-tcplugin-api@ library for a streamlined interface to GHC's
-  typechecker plugin API across compiler versions.
+  Uses the <https://hackage.haskell.org/package/ghc-tcplugin-api ghc-tcplugin-api> library
+  for a streamlined interface to GHC's typechecker plugin API across compiler versions.
 
-  Start at the front door module @Polytropos.Plugin@ for complete usage
+  Start at the front door module "Polytropos.Plugin" for complete usage
   instructions and worked examples. Enable in consuming packages via:
   @ghc-options: -fplugin=Polytropos.Plugin@.
 license: EUPL-1.2 OR Apache-2.0

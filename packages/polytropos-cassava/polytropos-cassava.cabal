@@ -3,15 +3,15 @@ name: polytropos-cassava
 version: 0.1.0.0
 synopsis: Fast CSV codecs for polytropos open records via cassava
 description:
-  CSV tabular serialization and deserialization connecting @polytropos@ open records
-  to the standard Haskell CSV library @cassava@ without intermediate nominal data conversions.
+  CSV tabular serialization and deserialization connecting <https://hackage.haskell.org/package/polytropos polytropos> open records
+  to the standard Haskell CSV library <https://hackage.haskell.org/package/cassava cassava> without intermediate nominal data conversions.
 
-  Supports both named records (@FromNamedRecord@, @ToNamedRecord@) and ordered positional
-  records (@FromRecord@, @ToRecord@) with genuine heterogeneous field decoding via @AllFields@.
-  Marshals directly to and from the flat contiguous @SmallArray@ payload without tuple arity
+  Supports both named records ('Data.Csv.FromNamedRecord', 'Data.Csv.ToNamedRecord') and ordered positional
+  records ('Data.Csv.FromRecord', 'Data.Csv.ToRecord') with genuine heterogeneous field decoding via 'Polytropos.Core.AllFields'.
+  Marshals directly to and from the flat contiguous 'Data.Primitive.SmallArray.SmallArray' payload without tuple arity
   restrictions.
 
-  Start at the front door module @Polytropos.Cassava@ for complete documentation,
+  Start at the front door module "Polytropos.Cassava" for complete documentation,
   streaming guidance, and worked examples.
 license: EUPL-1.2 OR Apache-2.0
 author: Nadia Yvette Chambers

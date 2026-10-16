@@ -3,14 +3,14 @@ name: polytropos-cbor
 version: 0.1.0.0
 synopsis: Binary CBOR serialization for polytropos open records and variants
 description:
-  Binary CBOR serialization and deserialization for @polytropos@ open records
-  and variants via @cborg@ and @serialise@.
+  Binary CBOR serialization and deserialization for <https://hackage.haskell.org/package/polytropos polytropos> open records
+  and variants via <https://hackage.haskell.org/package/cborg cborg> and <https://hackage.haskell.org/package/serialise serialise>.
 
   Records serialize as an array length header followed by sequential flat payload
   encodings; variants serialize as an integer constructor tag followed by active payload
   fields. Eliminates intermediate tree allocations and boxing overhead entirely.
 
-  Start at the front door module @Polytropos.CBOR@ for complete documentation,
+  Start at the front door module "Polytropos.CBOR" for complete documentation,
   binary encoding formats, and worked examples.
 license: EUPL-1.2 OR Apache-2.0
 author: Nadia Yvette Chambers
