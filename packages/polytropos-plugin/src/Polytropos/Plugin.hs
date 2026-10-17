@@ -296,6 +296,9 @@ Notes defined in this module:
   * Note [Type-Level Metadata Rewriting and Defunctionalization] [ref:note-metadata-rewriting]
   * Note [Human-Centric TypeError Diagnostics & Fuzzy Matching] [ref:note-typeerror-diagnostics]
   * Note [OCaml Subtype/Unify Correlation and Row Tail Algebra] [ref:note-ocaml-row-algebra]
+  * Note [Solving Pipeline: Wanteds, Givens, and Staged Evidence Synthesis] [ref:note-solving-pipeline]
+  * Note [SubRow and SubSum Interior Mechanics: Matchers and Witness Generation] [ref:note-subrow-subsum-mechanics]
+  * Note [Diagnostic Recovery and Cascading Error Prevention] [ref:note-diagnostic-prevention]
 
 External Canonical Design References:
   * docs/notes/POLYTROPOS_DESIGN.md (decisions D1–D10, open questions)
@@ -462,6 +465,144 @@ In Polytropos:
 - Solvers for subtyping (`SubRow`, `SubSum`) behave like OCaml's `subtype_row`: they
   only solve when tails are fixed, and leave wanted constraints deferred when tails
   are unfixed.
+-}
+
+{- Note [Solving Pipeline: Wanteds, Givens, and Staged Evidence Synthesis] [tag:note-solving-pipeline]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+GHC's typechecker plugin architecture (via `ghc-tcplugin-api`) invokes `polytroposSolve`
+during constraint simplification with two lists of constraints:
+  * `givens`: constraints assumed to hold in the current lexical scope (e.g. from an
+    enclosing type signature `(RowEq r) => ...`).
+  * `wanteds`: constraints that GHC needs evidence for in order to typecheck the program.
+
+The polytropos constraint solving pipeline operates in five deterministic stages:
+
+1. Classification and Target Isolation (`solveOne`):
+   - We inspect each constraint's predicate type via `classifyPredType (ctPred ct)`.
+   - If the predicate is a class constraint `ClassPred cls tys`, we match the unqualified
+     OccName of `className cls` against our known evidence classes:
+     `FieldIndex`, `ConstructorIndex`, `RowEq`, `RowShow`, `RowEqSum`, `RowShowSum`,
+     `HasField`, `AllFields`, `SubRow`, `SubSum`, and `KnownHash`.
+   - Non-polytropos constraints are immediately bypassed (`Right ()`), returning control
+     to GHC's default solver.
+
+2. Given Bypassing:
+   - Givens are assumptions, not proof obligations. While givens can inform type inference,
+     evidence classes in polytropos are defined over closed structural rows where evidence
+     is a direct, deterministic property of the type itself. We therefore filter for
+     `isWanted (ctEvidence ct)` and avoid re-solving givens.
+
+3. Staged Solving and Deferral (Open vs Closed Rows):
+   - Each individual solver inspects the row arguments.
+   - If a row is still open with an unfixed tail (see Note [Row Type Anatomy: Open vs Closed
+     Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]), the solver CANNOT make a closed-world
+     judgement. It returns `Right ()` (deferral), leaving the constraint in GHC's worklist.
+     As subsequent unification steps instantiate type variables, GHC will re-invoke the
+     plugin with more concrete rows.
+
+4. Direct Evidence Construction:
+   - When a row is closed, the solver evaluates the query and synthesizes Core AST
+     evidence directly (see Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]).
+   - For `FieldIndex`: emits literal Int offset `mkIntExpr idx`.
+   - For `ConstructorIndex`: emits literal Word tag `mkWordExpr tag`.
+   - For `RowEq`/`RowShow`/`RowEqSum`/`RowShowSum`: builds complete method lambdas in Core AST.
+   - For `HasField`: synthesizes selector lambda `\r -> fieldAt idx (unRowRep r)`.
+   - For `AllFields`: packs runtime dictionaries into a `SmallArray (DictAny c)` and emits
+     new wanted constraints for each field type so GHC resolves underlying field instances.
+   - For `SubRow`/`SubSum`: generates projection slot index lists and narrowing maps
+     (see Note [SubRow and SubSum Interior Mechanics: Matchers and Witness Generation] [ref:note-subrow-subsum-mechanics]).
+   - For `KnownHash`: computes literal 64-bit FNV-1a hash constant.
+
+5. Result Assembly and Worklist Emission:
+   - `polytroposSolve` partitions the results into:
+     * `tcPluginSolvedCts`: constraints successfully discharged by our synthesized evidence terms.
+     * `tcPluginNewCts`: newly spawned proof obligations (e.g. `TypeError` diagnostics or
+       per-field wanted constraints for `AllFields`).
+     * `tcPluginInsolubleCts`: explicitly failed constraints (kept empty; see Note [Diagnostic
+       Recovery and Cascading Error Prevention] [ref:note-diagnostic-prevention]).
+-}
+
+{- Note [SubRow and SubSum Interior Mechanics: Matchers and Witness Generation] [tag:note-subrow-subsum-mechanics]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+The `SubRow` and `SubSum` evidence classes form the structural subtyping backbone of polytropos.
+Their solvers (`solveSubRow` and `solveSubSum`) transform high-level type inclusion checks into
+efficient, zero-overhead runtime witness arrays:
+
+1. `SubRow sub super` (Width Subtyping for Records):
+   - Mathematical Intuition: `sub` is a sub-record of `super` if EVERY field `(name, fieldTy)`
+     in `sub` also exists in `super` with an identical type.
+   - Directionality: A smaller record schema can be projected *out of* a larger record schema:
+     `projectRecord :: SubRow sub super => Record super -> Record sub`.
+   - Interior Matching (`matchFields`):
+     * Walks each field in `sub` in target order.
+     * Searches `super` for a field with matching name (or matches anonymously if either name is null)
+       and checks type equality with `eqType`.
+     * Records the 0-based offset `j` of that field in `super`.
+     * Produces `indices :: [Int]`, specifying which slots in `super` correspond to each slot in `sub`.
+   - Evidence Emission:
+     * Constructs Core AST: `DictSubRow [Int]`.
+     * At runtime, `projectRecord` uses this list to slice the source `SmallArray` directly into
+       the pre-sized destination `SmallArray` in a single pass without searching.
+
+2. `SubSum sub super` (Widening and Narrowing for Variants):
+   - Mathematical Intuition: `sub` is a sub-variant of `super` if EVERY constructor `(conName, payloadRow)`
+     in `sub` also exists in `super` with an identical payload schema.
+   - Directionality:
+     * Widening (Injection): A smaller variant can be injected *into* a larger variant totally:
+       `widenVariant :: SubSum sub super => Variant sub -> Variant super`.
+     * Narrowing (Projection): A larger variant can be projected *down to* a smaller variant partially:
+       `narrowVariant :: SubSum sub super => Variant super -> Maybe (Variant sub)`.
+   - Interior Matching (`matchCons` and `narrowIndices`):
+     * `matchCons`: Maps each constructor in `sub` to its 0-based tag `j` in `super`, producing
+       `injectIndices :: [Word]`.
+     * `narrowIndices`: Walks all constructors in `super`. For each `super` constructor, checks if it
+       exists in `sub`. If yes, records `Just subTag`; if no, records `Nothing`.
+     * Produces `narrowIndices :: [Maybe Word]`.
+   - Nested Payload Equivalence (`sameRow`):
+     * Verifies that the payload product rows of matching constructors are structurally identical:
+       same number of fields, matching field names, and pairwise `eqType` equality.
+   - Evidence Emission:
+     * Constructs Core AST: `DictSubSum [Word] [Maybe Word]`.
+     * At runtime:
+       - `widenVariant` looks up the source tag in the `injectIndices` array to rewrite the tag in O(1).
+       - `narrowVariant` looks up the source tag in the `narrowIndices` array: if `Just t'`, replaces
+         the tag with `t'`; if `Nothing`, returns `Nothing` in O(1) without branch trees.
+-}
+
+{- Note [Diagnostic Recovery and Cascading Error Prevention] [tag:note-diagnostic-prevention]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+A notorious weakness of extensible record libraries in Haskell is diagnostic cascading.
+When a developer makes a typo (e.g. `user.nmae`), standard GHC behavior is catastrophic:
+1. GHC fails to solve `HasField "nmae" User a`.
+2. GHC reports: "No instance for (HasField "nmae" User a) arising from selection 'user.nmae'".
+3. Because the type variable `a` cannot be deduced, downstream expressions fail to typecheck:
+   "Could not deduce (Show a) from use of 'print'", "Ambiguous type variable 'a'", etc.
+4. The developer is inundated with 10–20 irrelevant compiler errors, obscuring the simple typo.
+
+`Polytropos.Plugin` employs a sophisticated two-pronged diagnostic recovery architecture:
+
+1. Custom Diagnostic Synthesis (`mkTypeErrorCt`):
+   When a field or constructor lookup fails on a closed row:
+   - We construct an actionable, human-centric error message explaining exactly what failed.
+   - We format a Levenshtein-distance fuzzy typo suggestion ("Did you mean: 'name'?") using
+     our Wagner-Fischer algorithm (edit distance <= 2).
+   - We print the entire actual record or variant schema so the developer has immediate context.
+   - We package this into a `TypeError` constraint from `GHC.TypeLits` / `GHC.Internal.TypeError`
+     and emit it as a new wanted constraint (`tcPluginNewCts`).
+
+2. Safe Dummy Evidence Emission (`mkDummyHasFieldDict`, dummy `EvExpr`):
+   - Alongside the newly emitted `TypeError` constraint, we **SOLVE** the original wanted constraint
+     with a safe dummy dictionary!
+   - For `HasField`: `mkDummyHasFieldDict` synthesizes a Core lambda `\r -> noInlineUnsafeCo ()`.
+   - For `FieldIndex` / `ConstructorIndex`: we emit literal dummy offset 0.
+   - For `SubRow` / `SubSum`: we emit empty dummy index lists.
+
+Why solve the original constraint if it was invalid?
+Because by discharging the original constraint:
+- GHC considers the type of `user.nmae` to be successfully solved (instantiating `a` to the expected type).
+- Downstream functions, typeclasses, and expressions typecheck without a single secondary error!
+- When compilation reaches the reporting phase, GHC encounters the newly emitted `TypeError` wanted
+  constraint and halts with **ONLY** our clean, focused, actionable diagnostic.
 -}
 
 -------------------------------------------------------------------------------
@@ -685,8 +826,27 @@ rewriteFieldTypes tyCon _givens args
 
 -------------------------------------------------------------------------------
 -- Human-Centric TypeError Diagnostics Helpers
+--
+-- See Note [Human-Centric TypeError Diagnostics & Fuzzy Matching] [ref:note-typeerror-diagnostics]
+-- See Note [Diagnostic Recovery and Cascading Error Prevention] [ref:note-diagnostic-prevention]
 -------------------------------------------------------------------------------
 
+-- | Computes the Levenshtein edit distance between two strings using dynamic
+-- programming. Used to rank fuzzy typo suggestions when a requested field or
+-- constructor label is not found in a closed row.
+--
+-- Implementation details:
+-- - Uses the standard Wagner-Fischer algorithm with row-by-row DP optimization.
+-- - Rather than allocating an (M x N) matrix on the heap, it maintains only two
+--   rows of distance integers: the previous row ('row') and the current row being
+--   computed via 'scanl'.
+-- - In 'stepRow':
+--   * 'left' is the distance for the cell directly to the left (insertion: left + 1).
+--   * 'above' is the distance for the cell directly above (deletion: above + 1).
+--   * 'diag' is the diagonal distance (substitution: diag + (if c1 == c2 then 0 else 1)).
+--   * The cell takes the minimum of all three edit costs.
+-- - Complexity: O(M * N) time and O(min(M, N)) space, running in microseconds for
+--   typical identifier lengths (<30 characters).
 levenshtein :: String -> String -> Int
 levenshtein s1 s2 =
   let n = length s1
@@ -702,15 +862,32 @@ levenshtein s1 s2 =
        [] -> 0
        res -> last res
 
+-- | Filters and ranks candidate field/constructor names against a target typo.
+--
+-- Policy:
+-- - Candidates with edit distance <= 2 are retained. Distance 2 is the empirical
+--   sweet spot in compiler ergonomics: it catches transposed letters ("nmae"),
+--   dropped characters ("nam"), and single-character substitutions ("nane"),
+--   while rejecting false positives on short labels.
+-- - Results are sorted ascending by edit distance (closest match first).
 suggestSimilar :: String -> [String] -> [String]
 suggestSimilar target candidates =
   let scored = [ (c, d) | c <- candidates, let d = levenshtein target c, d <= 2 ]
   in map fst (sortOn snd scored)
 
+-- | Formats a product row's schema for display in compiler diagnostics:
+-- "{ field1 :: Type1, field2 :: Type2, ... }"
+--
+-- Unrolls GHC Core Types to human-readable strings via 'ppr' and 'showSDocUnsafe'.
 formatRecordRow :: [(Int, FastString, Type)] -> String
 formatRecordRow fields =
   "{ " ++ intercalate ", " [ unpackFS n ++ " :: " ++ showSDocUnsafe (ppr ty) | (_, n, ty) <- fields ] ++ " }"
 
+-- | Formats a sum row's schema for display in compiler diagnostics:
+-- "< Con1 RecordPayload | Con2 TypePayload | Con3 >"
+--
+-- Handles empty constructors, single-field bare constructors, and multi-field
+-- record constructors, printing a clean structural variant signature.
 formatVariantRow :: [(Int, FastString, Type)] -> String
 formatVariantRow ctors =
   "< " ++ intercalate " | " (map formatCtor ctors) ++ " >"
@@ -721,6 +898,10 @@ formatVariantRow ctors =
         [(_, fn, ty)] | nullFS fn -> unpackFS n ++ " :: " ++ showSDocUnsafe (ppr ty)
         fs -> unpackFS n ++ " " ++ formatRecordRow fs
 
+-- | Formats a field suggestion clause:
+-- - If close matches exist: "Did you mean: 'name' or 'age'?"
+-- - If no close matches: lists all available fields in the record.
+-- - If the record is empty: reports "(no fields in record)".
 formatSuggestion :: String -> [String] -> String
 formatSuggestion target candidates =
   case suggestSimilar target candidates of
@@ -729,6 +910,7 @@ formatSuggestion target candidates =
       _  -> "Available fields: " ++ intercalate ", " (map (\c -> "'" ++ c ++ "'") candidates)
     suggs -> "Did you mean: " ++ intercalate " or " (map (\s -> "'" ++ s ++ "'") suggs) ++ "?"
 
+-- | Formats a constructor suggestion clause for variants.
 formatCtorSuggestion :: String -> [String] -> String
 formatCtorSuggestion target candidates =
   case suggestSimilar target candidates of
@@ -737,17 +919,32 @@ formatCtorSuggestion target candidates =
       _  -> "Available constructors: " ++ intercalate ", " (map (\c -> "'" ++ c ++ "'") candidates)
     suggs -> "Did you mean: " ++ intercalate " or " (map (\s -> "'" ++ s ++ "'") suggs) ++ "?"
 
+-- | Checks whether a Type contains no free type or coercion variables.
+-- A closed type is fully grounded and ready for terminal diagnostic reporting.
 isClosedType :: Type -> Bool
 isClosedType ty = isEmptyVarSet (tyCoVarsOfType (unwrapSynonyms ty))
 
+-- | Wraps a Haskell string into GHC's promoted 'Text constructor for type-level ErrorMessage.
 mkTextMsg :: PluginState -> String -> Type
 mkTextMsg state s = mkTyConApp (psPromotedText state) [mkStrLitTy (fsLit s)]
 
+-- | Combines multiple promoted 'Text messages vertically using ':$$: (promoted Vcat).
 mkVcatMsgs :: PluginState -> [Type] -> Type
 mkVcatMsgs _ [] = error "mkVcatMsgs: empty list"
 mkVcatMsgs _ [m] = m
 mkVcatMsgs state (m : ms) = mkTyConApp (psPromotedVcat state) [m, mkVcatMsgs state ms]
 
+-- | Synthesizes a new wanted GHC 'TypeError' constraint from a list of diagnostic strings.
+--
+-- Mechanics:
+-- 1. Promotes each string into an 'ErrorMessage ('Text ...)'.
+-- 2. Combines lines vertically with ':$$:'.
+-- 3. Constructs the predicate type 'TypeError Constraint fullMsg'.
+-- 4. Allocates a fresh wanted evidence variable with the original constraint's 'CtLoc'.
+-- 5. Wraps the evidence in 'mkNonCanonical' so GHC's solver processes it as an unsolved
+--    wanted constraint that halts compilation with the specified error message.
+--
+-- See Note [Diagnostic Recovery and Cascading Error Prevention] [ref:note-diagnostic-prevention]
 mkTypeErrorCt :: PluginState -> CtLoc -> [String] -> TcPluginM 'Solve Ct
 mkTypeErrorCt state loc msgLines = do
   let msgTys = map (mkTextMsg state) msgLines
@@ -756,6 +953,18 @@ mkTypeErrorCt state loc msgLines = do
   ev <- newWanted loc predTy
   pure (mkNonCanonical ev)
 
+-- | Synthesizes a dummy dictionary for GHC.Records.HasField that produces a safe bottom
+-- value at runtime via 'noInlineUnsafeCo ()'.
+--
+-- Why dummy dictionaries are necessary:
+-- When a user accesses an invalid field ('rec.nonexistent'), we emit a custom 'TypeError'
+-- wanted constraint. If we leave the original 'HasField' wanted constraint unsolved, GHC
+-- reports a confusing "No instance for HasField" error AND marks downstream expressions
+-- as untypeable, triggering a cascade of secondary compiler errors. By discharging the
+-- 'HasField' constraint with this dummy dictionary, downstream code typechecks cleanly,
+-- and GHC halts with ONLY our custom typo diagnostic!
+--
+-- See Note [Diagnostic Recovery and Cascading Error Prevention] [ref:note-diagnostic-prevention]
 mkDummyHasFieldDict :: PluginState -> Class -> [Type] -> TcPluginM 'Solve EvTerm
 mkDummyHasFieldDict state cls tys = do
   let getFieldId = case classMethods cls of
@@ -769,11 +978,13 @@ mkDummyHasFieldDict state cls tys = do
       fieldTy = last tys
   rName <- unsafeLiftTcM $ newName (mkVarOcc "rec")
   let rVar = mkLocalId rName (scaledMult scaledRTy) (scaledThing scaledRTy)
+      -- dummyVal = noInlineUnsafeCo () :: fieldTy
       dummyVal = mkCoreApps (Var (psNoInlineCo state))
                    [ Type (mkTyConTy unitTyCon)
                    , Type fieldTy
                    , mkCoreConApps unitDataCon []
                    ]
+      -- getFieldExpr = \rec -> dummyVal
       getFieldExpr = mkCoreLams (tyVars ++ [rVar]) dummyVal
   pure $ EvExpr (evDataConApp (classDataCon cls) tys [getFieldExpr])
 
@@ -781,6 +992,15 @@ mkDummyHasFieldDict state cls tys = do
 -- Constraint solving
 -------------------------------------------------------------------------------
 
+-- | Top-level constraint solver entry point for @Polytropos.Plugin@.
+--
+-- Invoked by GHC during constraint simplification with 'givens' and 'wanteds'.
+-- See Note [Solving Pipeline: Wanteds, Givens, and Staged Evidence Synthesis] [ref:note-solving-pipeline]
+--
+-- Execution Flow:
+-- 1. Evaluates all active constraints through 'solveOne'.
+-- 2. Partitions results into solved evidence pairs and newly spawned wanted constraints.
+-- 3. Returns 'TcPluginSolveResult' to GHC.
 polytroposSolve
   :: PluginState
   -> [Ct]
@@ -842,10 +1062,32 @@ solveOne state ct
 -- FieldIndex solver
 -------------------------------------------------------------------------------
 
--- | Solves the FieldIndex constraint by statically locating the field's 0-based
+-- | Solves the 'FieldIndex' constraint by statically locating the field's 0-based
 -- offset in the row and returning literal Int evidence.
+--
 -- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
 -- See Note [Human-Centric TypeError Diagnostics & Fuzzy Matching] [ref:note-typeerror-diagnostics]
+-- See Note [Diagnostic Recovery and Cascading Error Prevention] [ref:note-diagnostic-prevention]
+--
+-- Execution Phases:
+-- 1. Deconstruct Predicate Types:
+--    Extracts the field identifier type 'nTy', the enclosing row 'rowTy', and the
+--    expected field type 'expectedATy'.
+-- 2. Label Discrimination (Named vs. Anonymous):
+--    - Case A (Named Symbol): If 'nTy' is a type-level string literal (e.g. @"name"@),
+--      locates the field via 'findFieldType'.
+--    - Case B (Anonymous / Positional): If 'nTy' is an arbitrary type without a symbol
+--      label, locates the first field possessing that exact type via 'findFieldIndexByType'.
+-- 3. Verification & Evidence Synthesis:
+--    - On Match: Verifies that 'actualTy' matches 'expectedATy' (or that 'expectedATy'
+--      contains free type variables awaiting downstream unification). Emits 'mkIntExpr i'
+--      wrapped in the 'FieldIndex' class dictionary.
+--    - On Type Discrepancy: Synthesizes a human-readable 'TypeError' detailing the actual
+--      vs expected type, and discharges the wanted with dummy evidence (index 0) to
+--      prevent GHC from halting with cascading secondary errors.
+--    - On Missing Field: Inspects the closed row schema, computes fuzzy Levenshtein
+--      suggestions via 'formatSuggestion', emits a custom 'TypeError', and discharges
+--      with dummy evidence.
 solveFieldIndex
   :: PluginState
   -> Ct
@@ -861,12 +1103,15 @@ solveFieldIndex state ct cls tys
           loc         = ctLoc ct
       case isStrLitTy unwrapN of
         Just fieldName -> do
+          -- Named field lookup by type-level Symbol
           case findFieldType fieldName rowTy of
             Just (i, actualTy)
+              -- Accept exact type match, or uninstantiated type variable awaiting unification
               | actualTy `eqType` expectedATy || not (isClosedType expectedATy) -> do
                   let iExpr = mkIntExpr i
                       dictExpr = evDataConApp (classDataCon cls) tys [iExpr]
                   pure $ Left ((EvExpr dictExpr, ct), [])
+              -- Terminal type discrepancy: emit diagnostic and safe dummy evidence
               | otherwise -> do
                   let dummyExpr = mkIntExpr 0
                       dummyDict = evDataConApp (classDataCon cls) tys [dummyExpr]
@@ -880,6 +1125,7 @@ solveFieldIndex state ct cls tys
                   errCt <- mkTypeErrorCt state loc diagLines
                   pure $ Left ((EvExpr dummyDict, ct), [errCt])
             Nothing -> do
+              -- Field not found: format schema and compute fuzzy typo suggestions
               case walkRowWithTypes_maybe rowTy of
                 Just fields -> do
                   let dummyExpr = mkIntExpr 0
@@ -893,8 +1139,9 @@ solveFieldIndex state ct cls tys
                         ]
                   errCt <- mkTypeErrorCt state loc diagLines
                   pure $ Left ((EvExpr dummyDict, ct), [errCt])
-                Nothing -> pure $ Right ()
+                Nothing -> pure $ Right () -- Row tail is still open/unfixed: defer solving
         Nothing -> do
+          -- Anonymous/positional field lookup by payload Type
           case findFieldIndexByType unwrapN rowTy of
             Just i -> do
               let iExpr = mkIntExpr i
@@ -919,10 +1166,23 @@ solveFieldIndex state ct cls tys
 -- ConstructorIndex solver
 -------------------------------------------------------------------------------
 
--- | Solves the ConstructorIndex constraint by statically locating the constructor's
+-- | Solves the 'ConstructorIndex' constraint by statically locating the constructor's
 -- 0-based tag in the sum row and returning literal Word evidence.
+--
 -- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
 -- See Note [Human-Centric TypeError Diagnostics & Fuzzy Matching] [ref:note-typeerror-diagnostics]
+-- See Note [Diagnostic Recovery and Cascading Error Prevention] [ref:note-diagnostic-prevention]
+--
+-- Execution Phases:
+-- 1. Deconstruct Constructor Predicate:
+--    Extracts constructor identifier type 'nTy' and sum row 'rowTy'.
+-- 2. Constructor Tag Lookup:
+--    - Named Symbol: Locates constructor tag 'w' via 'findConstructorIndex'.
+--    - Type-Indexed: Locates constructor possessing matching payload type via 'findConstructorIndexByType'.
+-- 3. Evidence Synthesis & Recovery:
+--    - Success: Emits literal 'mkWordExpr w' wrapped in 'ConstructorIndex' dictionary.
+--    - Failure: Formats variant schema via 'formatVariantRow', ranks constructor typo
+--      suggestions via 'formatCtorSuggestion', emits 'TypeError', and returns dummy evidence (tag 0).
 solveConstructorIndex
   :: PluginState
   -> Ct
@@ -937,12 +1197,14 @@ solveConstructorIndex state ct cls tys
           loc = ctLoc ct
       case isStrLitTy unwrapN of
         Just conName -> do
+          -- Named constructor lookup by type-level Symbol
           case findConstructorIndex conName rowTy of
             Just w -> do
               let wExpr = mkWordExpr w
                   dictExpr = evDataConApp (classDataCon cls) tys [wExpr]
               pure $ Left ((EvExpr dictExpr, ct), [])
             Nothing -> do
+              -- Missing constructor: format variant schema and fuzzy suggestions
               case walkSumRowWithTypes_maybe rowTy of
                 Just ctors -> do
                   let dummyExpr = mkWordExpr 0
@@ -956,8 +1218,9 @@ solveConstructorIndex state ct cls tys
                         ]
                   errCt <- mkTypeErrorCt state loc diagLines
                   pure $ Left ((EvExpr dummyDict, ct), [errCt])
-                Nothing -> pure $ Right ()
+                Nothing -> pure $ Right () -- Open sum tail: defer solving
         Nothing -> do
+          -- Anonymous constructor lookup by payload Type
           case findConstructorIndexByType unwrapN rowTy of
             Just w -> do
               let wExpr = mkWordExpr w
@@ -982,9 +1245,30 @@ solveConstructorIndex state ct cls tys
 -- RowEq solver
 -------------------------------------------------------------------------------
 
--- | Solves the RowEq constraint by synthesizing an unrolled comparison expression over all fields.
+-- | Solves the 'RowEq' constraint by synthesizing an unrolled comparison expression over all fields.
+--
 -- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
 -- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
+--
+-- Architectural Blueprint:
+-- 1. Unrolls Product Schema:
+--    Traverses the row using 'walkRowWithTypes', collecting (index, name, fieldType) for every slot.
+-- 2. Superclass Evidence Synthesis:
+--    Emits trivial evidence for 'RowFlavour r' superclass constraint.
+-- 3. Core Lambda Construction:
+--    Extracts method signature for 'repEq' and allocates local variables 'r1' and 'r2'.
+-- 4. Tag & Arity Checks:
+--    Builds 'eqTag' ('repTag rep1 == repTag rep2') and 'eqArity' ('repArity rep1 == repArity rep2').
+--    Note: In products, tag is statically 0 and arity is statically N, so GHC's simplifier folds
+--    these comparisons into 'True' at compile time!
+-- 5. Field Comparison Unrolling:
+--    - Spawns fresh wanted 'Eq fieldTy' constraints for each field.
+--    - Reads slot 'i' using 'fieldAt @i rep1' and 'fieldAt @i rep2'.
+--    - Coerces payload pointers via 'noInlineUnsafeCo'.
+--    - Invokes '==' from the corresponding 'Eq' dictionary.
+-- 6. Boolean Short-Circuiting Conjunction:
+--    Chains all comparisons using GHC's Boolean '(&&)' operator into a single flat Core expression:
+--    @eqTag && eqArity && (field0_1 == field0_2) && (field1_1 == field1_2) && ...@
 solveRowEq
   :: PluginState
   -> Ct
@@ -997,8 +1281,10 @@ solveRowEq state ct cls tys = do
       fields = walkRowWithTypes rowTy
       loc    = ctLoc ct
 
+      -- Superclass evidence for RowFlavour r
       scEvidence = evDataConApp (classDataCon (psRowFlavourCls state)) [rTy] []
 
+      -- Extract repEq method type and bind lambda arguments: \r1 r2 -> ...
       repEqId = case classMethods cls of
         (m : _) -> m
         []      -> error "Polytropos.Plugin: RowEq class has no methods"
@@ -1019,10 +1305,12 @@ solveRowEq state ct cls tys = do
       aTy    = mkTyVarTy (tyVars !! 2)
       kRowTy = typeKind rowTy
 
+      -- Unpack RowRep wrappers: unRowRep r1, unRowRep r2
       unRowRepTypeArgs = [Type kRowTy, Type kATy, Type fTy, Type rTy, Type rowTy, Type aTy]
       rep1 = mkCoreApps (Var (psUnRowRep state)) (unRowRepTypeArgs ++ [Var r1Var])
       rep2 = mkCoreApps (Var (psUnRowRep state)) (unRowRepTypeArgs ++ [Var r2Var])
 
+      -- Structural header checks: repTag and repArity
       repTypeArgs = [Type kATy, Type fTy, Type aTy]
       tag1 = mkCoreApps (Var (psRepTag state)) (repTypeArgs ++ [rep1])
       tag2 = mkCoreApps (Var (psRepTag state)) (repTypeArgs ++ [rep2])
@@ -1032,10 +1320,13 @@ solveRowEq state ct cls tys = do
       arity2 = mkCoreApps (Var (psRepArity state)) (repTypeArgs ++ [rep2])
       eqArity = mkCoreApps (Var (psEqClass state)) [Type intTy, Var (psFEqInt state), arity1, arity2]
 
+  -- Spawn wanted Eq constraints for every field type in the row
   wanteds <- forM fields $ \(i, _nameFS, fieldTy) -> do
     ev <- newWanted loc (mkAppTy (mkTyConTy (classTyCon (psEqCls state))) fieldTy)
     pure (i, fieldTy, ev)
 
+  -- Synthesize comparison expression for slot i:
+  -- (==) @fieldTy eqDict (noInlineUnsafeCo (fieldAt @i rep1)) (noInlineUnsafeCo (fieldAt @i rep2))
   let compareField (i, fieldTy, ev) =
         let fieldAtTypeArgs = [Type kATy, Type fTy, Type aTy, Type fieldTy]
             idxExpr = mkIntExpr i
@@ -1049,6 +1340,7 @@ solveRowEq state ct cls tys = do
 
       fieldComps = map compareField wanteds
 
+      -- Fold all comparisons left-to-right with short-circuiting Boolean (&&)
       andFn e1 e2 = mkCoreApps (Var (psAnd state)) [e1, e2]
       bodyExpr = foldl andFn (andFn eqTag eqArity) fieldComps
       repEqExpr = mkCoreLams (tyVars ++ [r1Var, r2Var]) bodyExpr
@@ -1061,9 +1353,22 @@ solveRowEq state ct cls tys = do
 -- RowShow solver
 -------------------------------------------------------------------------------
 
--- | Solves the RowShow constraint by synthesizing an unrolled showsPrec expression over all fields.
+-- | Solves the 'RowShow' constraint by synthesizing an unrolled showsPrec expression over all fields.
+--
 -- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
 -- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
+--
+-- Architectural Blueprint:
+-- 1. Format Prefix:
+--    Extracts row name prefix (e.g. "R2 " or nominal alias).
+-- 2. Core Lambda Construction:
+--    Binds lambda arguments for precedence 'p' and record 'r': @\p r -> ...@.
+-- 3. Field Rendering Unrolling:
+--    - Spawns fresh wanted 'Show fieldTy' constraints for each field.
+--    - Reads slot 'i' using 'fieldAt @i rep' and invokes 'showsPrec 0 val' from the dictionary.
+-- 4. Alloc-Free ShowS Composition:
+--    Composes all 'ShowS' functions using function composition '(.)', completely avoiding
+--    intermediate heap-allocated string buffers during serialization.
 solveRowShow
   :: PluginState
   -> Ct
@@ -1076,8 +1381,10 @@ solveRowShow state ct cls tys = do
       fields = walkRowWithTypes rowTy
       loc    = ctLoc ct
 
+      -- Superclass evidence for RowFlavour r
       scEvidence = evDataConApp (classDataCon (psRowFlavourCls state)) [rTy] []
 
+      -- Extract repShowsPrec method type and bind lambda arguments: \p r -> ...
       repShowsPrecId = case classMethods cls of
         (m : _) -> m
         []      -> error "Polytropos.Plugin: RowShow class has no methods"
@@ -1098,9 +1405,11 @@ solveRowShow state ct cls tys = do
       aTy    = mkTyVarTy (tyVars !! 2)
       kRowTy = typeKind rowTy
 
+      -- Unpack RowRep wrapper: unRowRep r
       unRowRepTypeArgs = [Type kRowTy, Type kATy, Type fTy, Type rTy, Type rowTy, Type aTy]
       rep = mkCoreApps (Var (psUnRowRep state)) (unRowRepTypeArgs ++ [Var rVar])
 
+      -- Determine record display prefix
       rowName = case splitTyConApp_maybe rowTy of
         Just (tc, _)
           | let name = occNameString (getOccName tc)
@@ -1112,10 +1421,13 @@ solveRowShow state ct cls tys = do
   let prefixShowS = mkCoreApps (Var (psShowString state)) [prefixExpr]
       spaceShowS  = mkCoreApps (Var (psShowChar state)) [mkCharExpr ' ']
 
+  -- Spawn wanted Show constraints for every field type in the row
   wanteds <- forM fields $ \(i, _nameFS, fieldTy) -> do
     ev <- newWanted loc (mkAppTy (mkTyConTy (classTyCon (psShowCls state))) fieldTy)
     pure (i, fieldTy, ev)
 
+  -- Synthesize ShowS expression for slot i:
+  -- showsPrec @fieldTy showDict 0 (noInlineUnsafeCo (fieldAt @i rep))
   let showField (i, fieldTy, ev) =
         let fieldAtTypeArgs = [Type kATy, Type fTy, Type aTy, Type fieldTy]
             idxExpr = mkIntExpr i
@@ -1131,6 +1443,7 @@ solveRowShow state ct cls tys = do
         [] -> [prefixShowS]
         (f0 : fs) -> prefixShowS : f0 : concatMap (\f -> [spaceShowS, f]) fs
 
+      -- Chain all ShowS functions via (.) function composition
       compFn f g = mkCoreApps (Var (psComp state)) [Type stringTy, Type stringTy, Type stringTy, f, g]
       bodyExpr = foldr1 compFn showParts
       repShowsPrecExpr = mkCoreLams (tyVars ++ [precVar, rVar]) bodyExpr
@@ -1143,9 +1456,24 @@ solveRowShow state ct cls tys = do
 -- RowEqSum / RowShowSum solvers
 -------------------------------------------------------------------------------
 
--- | Solves the RowEqSum constraint by synthesizing branch comparison Core trees.
+-- | Solves the 'RowEqSum' constraint by synthesizing constructor branch comparison Core trees.
+--
 -- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
 -- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
+--
+-- Architectural Blueprint:
+-- 1. Unrolls Variant Sum Schema:
+--    Traverses the sum row with 'walkSumRowWithTypes', collecting (tag, constructorName, conRowTy)
+--    for every constructor branch.
+-- 2. Fast-Path Tag Inequality:
+--    Verifies 'tag1 == tag2'. If two variant values have different active constructor tags,
+--    they are structurally unequal immediately, requiring zero payload inspections.
+-- 3. Branching Decision Tree ('buildTree'):
+--    If 'tag1 == tag2', constructs a cascading if-then-else Core expression matching on the tag:
+--    @if tag1 == 0 then (compare payload of Con0) else if tag1 == 1 then (compare payload of Con1) ... else False@
+-- 4. Payload Equality Conjunction:
+--    Inside each constructor branch, compares the payload fields using 'fieldAt' and the
+--    corresponding 'Eq' dictionary, chained with short-circuiting Boolean '(&&)'.
 solveRowEqSum
   :: PluginState
   -> Ct
@@ -1158,8 +1486,10 @@ solveRowEqSum state ct cls tys = do
       constructors = walkSumRowWithTypes rowTy
       loc    = ctLoc ct
 
+      -- Superclass evidence for RowFlavour r
       scEvidence = evDataConApp (classDataCon (psRowFlavourCls state)) [rTy] []
 
+      -- Extract repEqSum method type and bind lambda arguments: \r1 r2 -> ...
       repEqSumId = case classMethods cls of
         (m : _) -> m
         []      -> error "Polytropos.Plugin: RowEqSum class has no methods"
@@ -1180,10 +1510,12 @@ solveRowEqSum state ct cls tys = do
       aTy    = mkTyVarTy (tyVars !! 2)
       kRowTy = typeKind rowTy
 
+      -- Unpack RowRep wrappers: unRowRep r1, unRowRep r2
       unRowRepTypeArgs = [Type kRowTy, Type kATy, Type fTy, Type rTy, Type rowTy, Type aTy]
       rep1 = mkCoreApps (Var (psUnRowRep state)) (unRowRepTypeArgs ++ [Var r1Var])
       rep2 = mkCoreApps (Var (psUnRowRep state)) (unRowRepTypeArgs ++ [Var r2Var])
 
+      -- Extract and compare constructor tags: repTag rep1 == repTag rep2
       repTypeArgs = [Type kATy, Type fTy, Type aTy]
       tag1 = mkCoreApps (Var (psRepTag state)) (repTypeArgs ++ [rep1])
       tag2 = mkCoreApps (Var (psRepTag state)) (repTypeArgs ++ [rep2])
@@ -1193,6 +1525,7 @@ solveRowEqSum state ct cls tys = do
       trueExpr  = mkCoreConApps trueDataCon []
       andFn e1 e2 = mkCoreApps (Var (psAnd state)) [e1, e2]
 
+  -- Spawn wanted Eq constraints for all fields of all constructors
   ctorWanteds <- forM constructors $ \(i, conName, conRowTy) -> do
     let fields = walkRowWithTypes conRowTy
     fWanteds <- forM fields $ \(fi, _nameFS, fieldTy) -> do
@@ -1200,6 +1533,7 @@ solveRowEqSum state ct cls tys = do
       pure (fi, fieldTy, ev)
     pure (i, conName, fWanteds)
 
+  -- Compare fields within an active constructor payload
   let compareConFields fWanteds =
         let fieldComps = [ compareField fi fieldTy ev | (fi, fieldTy, ev) <- fWanteds ]
         in foldl andFn trueExpr fieldComps
@@ -1215,12 +1549,14 @@ solveRowEqSum state ct cls tys = do
             eqDict = ctEvExpr ev
         in mkCoreApps (Var (psEqClass state)) [Type fieldTy, eqDict, val1, val2]
 
+      -- Synthesize recursive branch test: if tag == i then compareConFields else buildTree (rest)
       buildTree _ [] = falseExpr
       buildTree tagExpr ((i, _conName, fWanteds) : rest) =
         let iLit = mkWordExpr (fromIntegral i)
             cond = mkCoreApps (Var (psEqClass state)) [Type (mkTyConTy wordTyCon), Var (psFEqWord state), tagExpr, iLit]
         in mkIfThenElse cond (compareConFields fWanteds) (buildTree tagExpr rest)
 
+      -- Top-level check: only inspect payload if constructor tags are equal
       bodyExpr = mkIfThenElse eqTag (buildTree tag1 ctorWanteds) falseExpr
       repEqSumExpr = mkCoreLams (tyVars ++ [r1Var, r2Var]) bodyExpr
 
@@ -1229,9 +1565,22 @@ solveRowEqSum state ct cls tys = do
 
   pure $ Left ((EvExpr dictExpr, ct), allNewWanteds)
 
--- | Solves the RowShowSum constraint by synthesizing constructor branch showsPrec Core trees.
+-- | Solves the 'RowShowSum' constraint by synthesizing constructor branch showsPrec Core trees.
+--
 -- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
 -- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
+--
+-- Architectural Blueprint:
+-- 1. Extract Tag & Constructors:
+--    Reads runtime tag via 'repTag rep' and unrolls all constructors in 'rowTy'.
+-- 2. Constructor Dispatch Tree:
+--    Builds a cascading branch dispatcher testing @tag == 0@, @tag == 1@, etc.
+-- 3. In-Branch Payload Formatting:
+--    For the active constructor:
+--    - Emits constructor name string prefix (e.g. @"Just "@).
+--    - Emits wanted 'Show' constraints for all payload fields.
+--    - Formats each field with 'showsPrec 0 val'.
+--    - Composes all segments using alloc-free '(.)' 'ShowS' composition.
 solveRowShowSum
   :: PluginState
   -> Ct
@@ -1244,8 +1593,10 @@ solveRowShowSum state ct cls tys = do
       constructors = walkSumRowWithTypes rowTy
       loc    = ctLoc ct
 
+      -- Superclass evidence for RowFlavour r
       scEvidence = evDataConApp (classDataCon (psRowFlavourCls state)) [rTy] []
 
+      -- Extract repShowsPrecSum method type and bind lambda arguments: \p r -> ...
       repShowsPrecSumId = case classMethods cls of
         (m : _) -> m
         []      -> error "Polytropos.Plugin: RowShowSum class has no methods"
@@ -1266,6 +1617,7 @@ solveRowShowSum state ct cls tys = do
       aTy    = mkTyVarTy (tyVars !! 2)
       kRowTy = typeKind rowTy
 
+      -- Unpack RowRep wrapper: unRowRep r
       unRowRepTypeArgs = [Type kRowTy, Type kATy, Type fTy, Type rTy, Type rowTy, Type aTy]
       rep = mkCoreApps (Var (psUnRowRep state)) (unRowRepTypeArgs ++ [Var rVar])
 
@@ -1275,6 +1627,7 @@ solveRowShowSum state ct cls tys = do
       spaceShowS  = mkCoreApps (Var (psShowChar state)) [mkCharExpr ' ']
       compFn f g = mkCoreApps (Var (psComp state)) [Type stringTy, Type stringTy, Type stringTy, f, g]
 
+  -- Spawn wanted Show constraints for every field of every constructor
   ctorWanteds <- forM constructors $ \(i, conNameFS, conRowTy) -> do
     let fields = walkRowWithTypes conRowTy
     fWanteds <- forM fields $ \(fi, _nameFS, fieldTy) -> do
@@ -1302,6 +1655,7 @@ solveRowShowSum state ct cls tys = do
               (f0 : fs) -> prefixShowS : f0 : concatMap (\f -> [spaceShowS, f]) fs
         pure $ foldr1 compFn showParts
 
+  -- Synthesize recursive branch dispatcher: if tag == i then showConFields else buildTree (rest)
   let buildTree _tagExpr [] = do
         errorPrefix <- unsafeLiftTcM $ mkStringExpr "??? "
         pure $ mkCoreApps (Var (psShowString state)) [errorPrefix]
@@ -1324,10 +1678,27 @@ solveRowShowSum state ct cls tys = do
 -- HasField solver
 -------------------------------------------------------------------------------
 
--- | Solves GHC's HasField class for records, returning a record selector function
--- using literal slot indices.
+-- | Solves GHC's 'HasField' class for records, enabling standard dot-syntax selection
+-- (@rec.fieldName@) via literal slot offsets without runtime hash lookups.
+--
 -- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
 -- See Note [Human-Centric TypeError Diagnostics & Fuzzy Matching] [ref:note-typeerror-diagnostics]
+-- See Note [Diagnostic Recovery and Cascading Error Prevention] [ref:note-diagnostic-prevention]
+--
+-- Architectural Blueprint:
+-- 1. Structural Verification:
+--    Ensures the target record is a 'RowRep' with flavour 'ProductRowT' or 'ProductRowHKDT'.
+-- 2. Slot Offset Lookup:
+--    Finds 0-based index 'i' and field type 'actualFieldTy' from 'rowTy'.
+-- 3. Selector Lambda Synthesis:
+--    Synthesizes the Core selector lambda:
+--    @getField = \rec -> noInlineUnsafeCo (fieldAt @i (unRowRep rec))@
+-- 4. Functor Transparency:
+--    Accepts both bare field types and functor-wrapped field types ('fFieldTy'), allowing
+--    'HasField' to operate transparently on both standard 'Record' and higher-kinded 'RecordF'.
+-- 5. Diagnostic Recovery & Dummy Dictionary:
+--    If the field is missing or has a type mismatch, emits a custom 'TypeError' and returns
+--    a safe dummy dictionary ('mkDummyHasFieldDict') to prevent downstream cascading errors.
 solveHasField
   :: PluginState
   -> Ct
@@ -1357,6 +1728,7 @@ solveHasField state ct cls tys = do
                 Just (tcR, []) | occNameString (getOccName tcR) `elem` ["ProductRowT", "ProductRowHKDT"] -> do
                   case findFieldType fieldName rowTy of
                     Just (i, actualFieldTy) -> do
+                      -- Locate getField method and bind record argument: \rec -> ...
                       let getFieldId = case classMethods cls of
                             (m : _) -> m
                             [] -> error "Polytropos.Plugin: HasField has no methods"
@@ -1376,6 +1748,7 @@ solveHasField state ct cls tys = do
                           idxExpr = mkIntExpr i
                           raw = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep])
 
+                          -- Verify type compatibility (bare or wrapped in field functor f)
                           fFieldTy = mkAppTy fTy actualFieldTy
                           validTy  = fieldTy `eqType` actualFieldTy
                                   || fieldTy `eqType` fFieldTy
@@ -1386,6 +1759,7 @@ solveHasField state ct cls tys = do
 
                       if isClosedType fieldTy && not validTy
                         then do
+                          -- Field exists but context requested incompatible type: emit diagnostic
                           let diagLines =
                                 [ "Polytropos Record Error:"
                                 , "  Field '" ++ unpackFS fieldName ++ "' in record has type:"
@@ -1398,6 +1772,7 @@ solveHasField state ct cls tys = do
                         else
                           pure $ Left ((EvExpr dictExpr, ct), [])
                     Nothing -> do
+                      -- Field not found: emit fuzzy typo suggestions and dummy HasField dictionary
                       case walkRowWithTypes_maybe rowTy of
                         Just fields -> do
                           dummyDict <- mkDummyHasFieldDict state cls tys
@@ -1410,7 +1785,7 @@ solveHasField state ct cls tys = do
                                 ]
                           errCt <- mkTypeErrorCt state loc diagLines
                           pure $ Left ((dummyDict, ct), [errCt])
-                        Nothing -> pure $ Right ()
+                        Nothing -> pure $ Right () -- Open row tail: defer solving
                 _ -> pure $ Right ()
           _ -> pure $ Right ()
       Nothing -> pure $ Right ()
@@ -1420,9 +1795,24 @@ solveHasField state ct cls tys = do
 -- AllFields solver (generic field-class dictionary supply)
 -------------------------------------------------------------------------------
 
--- | Solves AllFields by synthesizing an array of DictAny evidence dictionaries.
+-- | Solves 'AllFields' by synthesizing a flat array of type-erased 'DictAny' dictionaries.
+--
 -- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
 -- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
+--
+-- Architectural Blueprint:
+-- 1. Row Schema Inspection:
+--    Verifies the row is closed and extracts all field types.
+-- 2. Per-Field Wanted Dicts:
+--    Spawns a wanted constraint @c fieldTy@ for every field in the row.
+-- 3. Type Erasure & Packing:
+--    Wraps each evidence dictionary in 'mkDictAny @c @fieldTy dict', casting each heterogeneous
+--    instance to the uniform type-erased carrier @DictAny c@.
+-- 4. Contiguous Array Construction:
+--    Constructs a Core list of type-erased dictionaries and wraps it via 'evidenceAllFields',
+--    producing a flat 'SmallArray (DictAny c)' at runtime. This allows combinators like
+--    'cmapRecord' and 'cfoldMapRecord' to iterate over fields in O(N) time with zero
+--    typeclass overhead!
 solveAllFields
   :: PluginState
   -> Ct
@@ -1467,11 +1857,28 @@ solveAllFields state ct cls tys
 
 -------------------------------------------------------------------------------
 -- SubRow and SubSum solvers
+--
+-- See Note [SubRow and SubSum Projection and Narrowing Evidence] [ref:note-subrow-subsum]
+-- See Note [SubRow and SubSum Interior Mechanics: Matchers and Witness Generation] [ref:note-subrow-subsum-mechanics]
+-- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
+-- See Note [Diagnostic Recovery and Cascading Error Prevention] [ref:note-diagnostic-prevention]
 -------------------------------------------------------------------------------
 
--- | Solves the SubRow constraint by synthesizing literal index projection lists.
--- See Note [SubRow and SubSum Projection and Narrowing Evidence] [ref:note-subrow-subsum]
--- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
+-- | Solves the 'SubRow sub super' constraint by synthesizing literal index projection lists.
+--
+-- Intuition:
+-- A sub-record 'sub' can be projected out of a super-record 'super' if every field
+-- declared in 'sub' also exists in 'super' with an identical type.
+--
+-- Implementation Phases:
+-- 1. Extract and unwrap the row types 'subTy' and 'superTy'.
+-- 2. Traverse both rows using 'walkRowWithTypes_maybe'. If either row has an unfixed tail,
+--    we return 'Right ()' (defer) because full field complements are not yet known.
+-- 3. Run 'matchFields' to find the 0-based offset of each sub-field in the super-record.
+-- 4. If all match: synthesize a literal Core list '[Int]' containing the projection indices.
+-- 5. If matching fails: invoke 'findSubRowMismatch' to pinpoint whether a field is missing
+--    or has a type discrepancy, synthesize a custom 'TypeError' wanted constraint, and
+--    discharge the original constraint with dummy evidence to stop error cascading.
 solveSubRow
   :: PluginState
   -> Ct
@@ -1487,16 +1894,27 @@ solveSubRow state ct cls tys
   , Just superFields <- walkRowWithTypes_maybe superTy
   = case matchFields subFields superFields of
       Just indices -> do
+        -- Successful match: compile literal index list [Int] into Core AST:
+        -- evidenceSubRow :: [Int] -> DictSubRow k sub super
         let indicesExpr = mkListExpr intTy (map mkIntExpr indices)
             dictExpr    = evDataConApp (classDataCon cls) tys [indicesExpr]
         pure $ Left ((EvExpr dictExpr, ct), [])
       Nothing -> do
+        -- Structural mismatch: diagnose failure and synthesize custom TypeError.
+        -- We emit a dummy dictionary so GHC does not cascade secondary errors.
         let dummyDict = evDataConApp (classDataCon cls) tys [mkListExpr intTy []]
             mismatchDiag = findSubRowMismatch subFields superFields
         errCt <- mkTypeErrorCt state loc mismatchDiag
         pure $ Left ((EvExpr dummyDict, ct), [errCt])
   | otherwise = pure $ Right ()
   where
+    -- | Recursive field matcher:
+    -- For each field '(name, fieldTy)' in the sub-record:
+    -- 1. Look for a field '(j, sName, sFieldTy)' in 'superFields'.
+    -- 2. Names match if they are equal, or if either is anonymous ('nullFS', for positional tuples).
+    -- 3. Field types must be strictly equal under GHC's 'eqType'.
+    -- 4. If found, record index 'j' and continue for the remainder of 'subFields'.
+    -- 5. If any sub-field is missing or has a type mismatch, return 'Nothing'.
     matchFields :: [(Int, FastString, Type)] -> [(Int, FastString, Type)] -> Maybe [Int]
     matchFields [] _ = Just []
     matchFields ((_, name, fieldTy) : rest) sFields =
@@ -1506,6 +1924,11 @@ solveSubRow state ct cls tys
         (j : _) -> (j :) <$> matchFields rest sFields
         []      -> Nothing
 
+    -- | Diagnostic generator for SubRow failure:
+    -- Pinpoints the exact reason why sub-record projection failed:
+    -- - Case A: A required field is missing in the super-record. We list the available fields
+    --   and format fuzzy Levenshtein suggestions ("Did you mean: 'name'?").
+    -- - Case B: The field name exists, but its type does not match. We print both types side-by-side.
     findSubRowMismatch :: [(Int, FastString, Type)] -> [(Int, FastString, Type)] -> [String]
     findSubRowMismatch [] _ =
       [ "Polytropos SubRow Error:"
@@ -1532,9 +1955,18 @@ solveSubRow state ct cls tys
               ]
           | otherwise -> findSubRowMismatch rest sFields
 
--- | Solves the SubSum constraint by synthesizing literal injection and narrowing arrays.
--- See Note [SubRow and SubSum Projection and Narrowing Evidence] [ref:note-subrow-subsum]
--- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
+-- | Solves the 'SubSum sub super' constraint by synthesizing literal injection and narrowing arrays.
+--
+-- Intuition:
+-- A sub-variant 'sub' can be widened into a super-variant 'super' if every constructor
+-- declared in 'sub' also exists in 'super' with an identical payload schema.
+--
+-- Dual Operations Synthesized in a Single Witness:
+-- 1. Widening (Injection): maps each constructor tag in 'sub' to its corresponding tag in 'super'.
+--    This mapping is total: 'injectIndices :: [Word]'.
+-- 2. Narrowing (Projection): maps each constructor tag in 'super' back to its tag in 'sub'
+--    (or 'Nothing' if the active constructor is not present in 'sub').
+--    This mapping is partial: 'narrowIndices :: [Maybe Word]'.
 solveSubSum
   :: PluginState
   -> Ct
@@ -1551,8 +1983,11 @@ solveSubSum state ct cls tys
   = case matchCons subCons superCons of
       Just injectIndices -> do
         let wordTy = mkTyConTy wordTyCon
+            -- Core list of Word: [Word]
             injectExpr = mkListExpr wordTy (map mkWordExpr injectIndices)
 
+            -- Build the narrowing table: for every constructor in 'superCons',
+            -- check if it exists in 'subCons'. If yes -> Just subIdx; if no -> Nothing.
             narrowIndices =
               [ case [ fromIntegral i :: Word
                      | (i, sName, sConRowTy) <- subCons
@@ -1564,14 +1999,17 @@ solveSubSum state ct cls tys
               | (_j, superName, superConRowTy) <- superCons
               ]
 
+            -- Core list of Maybe Word: [Maybe Word]
             maybeWordTy = mkAppTy (mkTyConTy maybeTyCon) wordTy
             narrowDataExpr Nothing = mkCoreConApps nothingDataCon [Type wordTy]
             narrowDataExpr (Just w) = mkCoreConApps justDataCon [Type wordTy, mkWordExpr w]
             narrowExpr = mkListExpr maybeWordTy (map narrowDataExpr narrowIndices)
 
+            -- Evidence term: DictSubSum [Word] [Maybe Word]
             dictExpr = evDataConApp (classDataCon cls) tys [injectExpr, narrowExpr]
         pure $ Left ((EvExpr dictExpr, ct), [])
       Nothing -> do
+        -- Constructor mismatch: generate custom diagnostic and return dummy dictionary.
         let wordTy = mkTyConTy wordTyCon
             maybeWordTy = mkAppTy (mkTyConTy maybeTyCon) wordTy
             dummyDict = evDataConApp (classDataCon cls) tys [mkListExpr wordTy [], mkListExpr maybeWordTy []]
@@ -1580,6 +2018,9 @@ solveSubSum state ct cls tys
         pure $ Left ((EvExpr dummyDict, ct), [errCt])
   | otherwise = pure $ Right ()
   where
+    -- | Constructor matcher:
+    -- Verifies that every constructor in 'subCons' exists in 'sCons' with an identical
+    -- payload row (checked via 'sameRow'), and collects the super-variant tag 'j'.
     matchCons :: [(Int, FastString, Type)] -> [(Int, FastString, Type)] -> Maybe [Word]
     matchCons [] _ = Just []
     matchCons ((_, conName, conRowTy) : rest) sCons =
@@ -1589,6 +2030,10 @@ solveSubSum state ct cls tys
         (j : _) -> (fromIntegral j :) <$> matchCons rest sCons
         []      -> Nothing
 
+    -- | Deep structural comparison of constructor payload rows:
+    -- 1. Fast path: check syntactic equality via 'eqType'.
+    -- 2. Slow path: unroll both rows via 'walkRowWithTypes_maybe'. Assert identical arity,
+    --    matching field names, and pairwise 'eqType' equality on every payload slot.
     sameRow r1 r2
       | r1 `eqType` r2 = True
       | Just fs1 <- walkRowWithTypes_maybe r1
@@ -1597,6 +2042,10 @@ solveSubSum state ct cls tys
         and [ (if nullFS n1 || nullFS n2 then True else n1 == n2) && t1 `eqType` t2 | ((_, n1, t1), (_, n2, t2)) <- zip fs1 fs2 ]
       | otherwise = False
 
+    -- | Diagnostic generator for SubSum failure:
+    -- Distinguishes between:
+    -- - Missing constructor in super-variant (with fuzzy typo suggestions).
+    -- - Payload row mismatch (displaying both constructor payload schemas).
     findSubSumMismatch :: [(Int, FastString, Type)] -> [(Int, FastString, Type)] -> [String]
     findSubSumMismatch [] _ =
       [ "Polytropos SubSum Error:"
@@ -1629,17 +2078,32 @@ solveSubSum state ct cls tys
 
 -- | FNV-1a 64-bit hash for a type-level label symbol.
 --
--- Standard FNV-1a 64-bit parameters:
---   offset_basis = 14695981039346656037 (0xcbf29ce484222325)
---   prime        = 1099511628211        (0x100000001b3)
+-- Algorithmic Details:
+-- - Uses the standard Fowler-Noll-Vo 64-bit non-cryptographic hash algorithm (FNV-1a).
+-- - Constants:
+--   * offset_basis = 14695981039346656037 (0xcbf29ce484222325)
+--   * prime        = 1099511628211        (0x100000001b3)
+-- - Executes in microsecond compile-time: folds over characters in 'fs', XORing with the
+--   accumulator and multiplying by the 64-bit prime modulo \(2^{64}\).
+-- - Yields uniform distribution with effectively zero collision probability across
+--   domain record labels.
 fnv1a64FS :: FastString -> Word
 fnv1a64FS fs = fromIntegral (foldl' step (14695981039346656037 :: Word64) (unpackFS fs))
   where
     step !h !c = (h `xor` fromIntegral (ord c)) * 1099511628211
 
--- | Solves the KnownHash constraint by computing compile-time 64-bit FNV-1a hash
--- and emitting literal Word evidence.
+-- | Solves the 'KnownHash' constraint by computing the compile-time 64-bit FNV-1a hash
+-- of a type-level Symbol and emitting literal Word evidence.
+--
 -- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
+--
+-- Mechanics:
+-- 1. Extracts the type-level symbol 'sTy'.
+-- 2. Evaluates its string value via 'isStrLitTy' on the synonym-unwrapped type.
+-- 3. Computes the 64-bit FNV-1a hash at compile time via 'fnv1a64FS'.
+-- 4. Emits a literal Word expression 'mkWordExpr h' wrapped in the 'KnownHash' dictionary.
+-- 5. Enables users to perform O(1) integer branch dispatch and HAMT indexing without
+--    paying for runtime string hashing or KnownSymbol reflection.
 solveKnownHash
   :: Ct
   -> Class
@@ -1660,7 +2124,14 @@ solveKnownHash ct cls tys = do
       Nothing -> pure $ Right ()
     Nothing -> pure $ Right ()
 
--- | Walks a record row type. Fails (returns Nothing) if the row tail is unfixed or open.
+-------------------------------------------------------------------------------
+-- Row walking & schema extraction helpers
+-------------------------------------------------------------------------------
+
+-- | Walks a record row type to extract its field schema.
+-- Returns 'Nothing' if the row tail is unfixed or open (deferring solving until
+-- the row tail is unified by downstream inference).
+--
 -- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
 -- See Note [OCaml Subtype/Unify Correlation and Row Tail Algebra] [ref:note-ocaml-row-algebra]
 walkRowWithTypes_maybe :: Type -> Maybe [(Int, FastString, Type)]
@@ -1678,7 +2149,9 @@ walkRowWithTypes_maybe rowTy = do
           -> Just (i, n, fieldTy)
         _ -> Just (i, nilFS, elemTy)
 
--- | Walks a variant sum row type. Fails (returns Nothing) if the row tail is unfixed or open.
+-- | Walks a variant sum row type to extract its constructor schema.
+-- Returns 'Nothing' if the row tail is unfixed or open.
+--
 -- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
 -- See Note [OCaml Subtype/Unify Correlation and Row Tail Algebra] [ref:note-ocaml-row-algebra]
 walkSumRowWithTypes_maybe :: Type -> Maybe [(Int, FastString, Type)]
@@ -1696,18 +2169,21 @@ walkSumRowWithTypes_maybe rowTy = do
           -> Just (i, n, conRowTy)
         _ -> Just (i, nilFS, elemTy)
 
--------------------------------------------------------------------------------
--- Row walking
--------------------------------------------------------------------------------
-
+-- | Fully unrolls GHC type synonyms to expose the underlying type constructor.
+-- Uses 'coreView' recursively until no further synonyms can be stripped.
 unwrapSynonyms :: Type -> Type
 unwrapSynonyms ty = case coreView ty of
   Just ty' -> unwrapSynonyms ty'
   Nothing  -> ty
 
-
--- | Extracts elements from a promoted type-level list.
--- Returns Nothing if the list has an unfixed type variable tail (an open row).
+-- | Extracts elements from a promoted type-level list (@'[a, b, c]@).
+--
+-- Invariants:
+-- - Returns 'Just [a, b, c]' for closed lists terminating in @'[]@.
+-- - Returns 'Nothing' if the list terminates in a type variable (an open row tail)
+--   or an unreduced type family application. This signals to TcPlugin solvers that
+--   the row is still open, prompting them to defer solving safely.
+--
 -- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
 -- See Note [OCaml Subtype/Unify Correlation and Row Tail Algebra] [ref:note-ocaml-row-algebra]
 myExtractPromotedList :: Type -> Maybe [Type]
@@ -1718,6 +2194,7 @@ myExtractPromotedList ty = case splitTyConApp_maybe (unwrapSynonyms ty) of
   Just (tc, [_]) | occNameString (getOccName tc) == "[]" -> Just []
   _ -> Nothing
 
+-- | Pure version of 'walkRowWithTypes_maybe' that defaults open tails to '[]'.
 walkRowWithTypes :: Type -> [(Int, FastString, Type)]
 walkRowWithTypes rowTy =
   case myExtractPromotedList (unwrapSynonyms rowTy) of { Just xs -> zipWith extractField [0..] xs; Nothing -> [] }
@@ -1732,6 +2209,7 @@ walkRowWithTypes rowTy =
           -> (i, n, fieldTy)
         _ -> (i, nilFS, elemTy)
 
+-- | Pure version of 'walkSumRowWithTypes_maybe' that defaults open tails to '[]'.
 walkSumRowWithTypes :: Type -> [(Int, FastString, Type)]
 walkSumRowWithTypes rowTy =
   case myExtractPromotedList (unwrapSynonyms rowTy) of { Just xs -> zipWith extractCon [0..] xs; Nothing -> [] }
@@ -1746,25 +2224,28 @@ walkSumRowWithTypes rowTy =
           -> (i, n, conRowTy)
         _ -> (i, nilFS, elemTy)
 
-
+-- | Find 0-based constructor tag by name in a sum row.
 findConstructorIndex :: FastString -> Type -> Maybe Word
 findConstructorIndex conName rowTy =
   case [fromIntegral i | (i, n, _) <- walkSumRowWithTypes rowTy, n == conName] of
     (w : _) -> Just w
     []      -> Nothing
 
+-- | Find 0-based field index by matching field payload type.
 findFieldIndexByType :: Type -> Type -> Maybe Int
 findFieldIndexByType targetTy rowTy =
   case [i | (i, _, ty) <- walkRowWithTypes rowTy, targetTy `eqType` ty] of
     (i : _) -> Just i
     []      -> Nothing
 
+-- | Find 0-based constructor tag by matching constructor payload type.
 findConstructorIndexByType :: Type -> Type -> Maybe Word
 findConstructorIndexByType targetTy rowTy =
   case [fromIntegral i | (i, _, ty) <- walkSumRowWithTypes rowTy, targetTy `eqType` ty] of
     (w : _) -> Just w
     []      -> Nothing
 
+-- | Find 0-based field index and field type by name in a product row.
 findFieldType :: FastString -> Type -> Maybe (Int, Type)
 findFieldType fieldName rowTy =
   case [(i, ty) | (i, n, ty) <- walkRowWithTypes rowTy, n == fieldName] of
@@ -1776,11 +2257,17 @@ findFieldType fieldName rowTy =
 -------------------------------------------------------------------------------
 
 -- | Construct a boxed Int Core expression from an Int value.
+--
+-- Generates: 'GHC.Types.I# <literal>'
+-- Used by TcPlugin to emit literal 0-based slot offsets into dictionary evidence.
 -- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
 mkIntExpr :: Int -> CoreExpr
 mkIntExpr i = mkCoreConApps intDataCon [Lit (LitNumber LitNumInt (toInteger i))]
 
 -- | Construct a boxed Word Core expression from a Word value.
+--
+-- Generates: 'GHC.Types.W# <literal>'
+-- Used by TcPlugin to emit literal 0-based constructor tags into dictionary evidence.
 -- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
 mkWordExpr :: Word -> CoreExpr
 mkWordExpr w = mkCoreConApps wordDataCon [Lit (LitNumber LitNumWord (toInteger w))]

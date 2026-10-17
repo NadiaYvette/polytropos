@@ -29,7 +29,7 @@ import GHC.TypeLits (Symbol)
 import System.Directory (getTemporaryDirectory, removeFile)
 import System.Environment (lookupEnv)
 import System.Exit (ExitCode(..))
-import System.FilePath ((</>))
+import System.IO (hClose, hPutStr, openTempFile)
 import System.Process (readProcessWithExitCode)
 import Test.Tasty (defaultMain, testGroup)
 import Test.Tasty.HUnit (testCase, (@?=), assertBool)
@@ -421,8 +421,9 @@ main = defaultMain $ testGroup "plugin RowEq/RowShow smoke"
 checkGhcDiag :: String -> [String] -> IO ()
 checkGhcDiag snippet expectedSubstrings = do
   tmpDir <- getTemporaryDirectory
-  let tmpFile = tmpDir </> "PolytroposDiagTest.hs"
-  writeFile tmpFile snippet
+  (tmpFile, h) <- openTempFile tmpDir "PolytroposDiagTest.hs"
+  hPutStr h snippet
+  hClose h
   extraFlags <- maybe [] words <$> lookupEnv "POLYTROPOS_TEST_GHC_FLAGS"
   (exitCode, _stdout, stderr) <- readProcessWithExitCode
     "ghc"

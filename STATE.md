@@ -10,9 +10,9 @@ and verified through their deterministic gates. All milestones of `plans/2026-10
 §1.4 subrow/subsum projection evidence, §1.5 compile-time label hashing `KnownHash`, §1.6 source-plugin construction syntax & open declaration forms,
 and §1.7 generic instance layer over rows & dynamic dictionary emission) are implemented and verified.
 All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
-- `polytropos-core` passes 37 tests (primitive SmallArray CoW updates, `setFieldsAt` batch updates,
+- `polytropos-core` passes 45 tests (primitive SmallArray CoW updates, `setFieldsAt` batch updates,
   `MRep` transient builders, `Polytropos` consumer surface, `Record`, `Variant`, `peel`, `peelF`,
-  `eliminateUniform`, `eliminateUniformM`, `eliminate`, `matchVariant`).
+  `eliminateUniform`, `eliminateUniformM`, `eliminate`, `matchVariant`, SIMD CoW 64/100-field record scaling).
 - `polytropos-plugin-smoke` passes 54 tests with `-fplugin=Polytropos.Plugin` (`RowEq`, `RowShow`,
   `RowEqSum`, `RowShowSum`, native `OverloadedRecordDot` on bare and `RecordF Maybe` records,
   `AllFields` generic dictionary supply across standard and HKD product rows, `FieldIndex`/`ConstructorIndex` on HKD rows,
@@ -24,6 +24,15 @@ All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
   $O(1)$ eliminator jump tables (`eliminateUniform`, `eliminateUniformM`, `eliminate`) and single-constructor peeling (`peel`),
   and human-centric `TypeError` diagnostics with Levenshtein-distance fuzzy suggestions and schema summaries
   for missing fields, missing constructors, field type mismatches, and `SubRow`/`SubSum` structural discrepancies).
+- **Extensive Internal Developer Commentary & GHC Notes Architecture:**
+  * Expanded internal non-Haddock developer commentary across all core and plugin modules (`Polytropos.Plugin`, `Polytropos.Plugin.Source`, `Polytropos.Core`, and `Polytropos`) to reach GHC-grade explanatory comment density (~43%+ on intricate algorithms).
+  * Formalized 19 GHC Notes cross-referenced with `tagref` (validating 19 tags, 126 references across 236 files with 0 errors):
+    - `Polytropos.Plugin`: Note 1 `[ref:note-row-anatomy]`, Note 2 `[ref:note-literal-evidence]`, Note 3 `[ref:note-subrow-subsum]`, Note 4 `[ref:note-metadata-rewriting]`, Note 5 `[ref:note-typeerror-diagnostics]`, Note 6 `[ref:note-ocaml-row-algebra]`, Note 7 `[ref:note-solving-pipeline]`, Note 8 `[ref:note-subrow-subsum-mechanics]`, Note 9 `[ref:note-diagnostic-prevention]`.
+    - `Polytropos.Plugin.Source`: `[ref:note-source-plugin-arch]`, `[ref:note-open-declarations]`, `[ref:note-view-patterns]`.
+    - `Polytropos.Core`: `[ref:note-rep-memory-physics]`, `[ref:note-transient-cow]`, `[ref:note-peeling-elimination]`.
+    - `Polytropos`: `[ref:note-consumer-facade]`, `[ref:note-patterns-view-patterns]`, `[ref:note-subtyping-combinators]`, `[ref:note-array-jump-table-elimination]`.
+  * Deep local definition commentary covering constraint solving, dictionary array synthesis, Levenshtein fuzzy diagnostics, desugaring passes, transient `MRep` lifetimes, SIMD CoW block copying, and jump-table dispatch.
+  * Resolved parallel smoke test race condition in `packages/polytropos-plugin/tests/smoke/Main.hs` by switching to thread-isolated temporary files.
 - `polytropos-generics-test` passes 13 tests (`Generic` and `GInstances` datatype generics bridge over flat `Rep`
   and `RowRep`, `geq`, `gcompare`, `gshowsPrec`, `gmap`, `gfoldMap` over product and sum ADTs and plugin-solved rows,
   including HKD `RecordF Maybe`).
@@ -297,7 +306,6 @@ Milestone T9 has been implemented, tested, and deterministically verified across
 
 ## What is deliberately missing
 
-- The plugin itself (now in development).
 - Subsumption for sum elimination when the result row is not syntactically identical.
 
 ## Next action
