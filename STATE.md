@@ -41,7 +41,10 @@ All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
 - `polytropos-lens-test` passes 14 tests (positional `_1`..`_9`, name-keyed `At`/`Ixed`, `each`,
   `fieldLens`, variant prisms).
 - `polytropos-aeson-test` passes 7 tests (O(N) record/variant codecs, 20-field roundtrip,
-  canonical row-order encoding, tagged variant shape).
+  canonical row-order encoding, tagged variant shape with modern `REC { ... }` syntax).
+  Documented with high-level architectural exposition explaining the role of homogeneity
+  reflection witnesses (`AllFieldsAre`, `AllCtorsHom`, `FieldNames`, `RowField`, `SumField`)
+  in enabling direct flat `Rep` unrolling without intermediate binary trees or plugin resolution.
 - `polytropos-beam-test` passes 6 tests (30-column `Beamable` table: skeleton arity, lockstep
   `zipBeamFieldsM`, `allBeamValues`, row-symbol column names; compiles in a fraction of a second).
 - `polytropos-openapi3-test` passes 7 tests (record object schemas with properties/required in row

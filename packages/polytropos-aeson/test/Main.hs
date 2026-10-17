@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 module Main (main) where
 
@@ -13,16 +14,13 @@ type MyRec = Record '["x" ':= Int, "y" ':= Int, "z" ':= Int]
 type MyVar = Variant '["A" ':= '["foo" ':= Int], "B" ':= '["bar" ':= Int]]
 
 myRec :: MyRec
-myRec = insertField (Field @"x") (1 :: Int)
-      $ insertField (Field @"y") (2 :: Int)
-      $ insertField (Field @"z") (3 :: Int)
-      $ emptyRecord
+myRec = REC { x = 1, y = 2, z = 3 }
 
 varA :: MyVar
-varA = Variant (Field @"A") (insertField (Field @"foo") (42 :: Int) emptyRecord)
+varA = Variant (Field @"A") (REC { foo = 42 :: Int })
 
 varB :: MyVar
-varB = Variant (Field @"B") (insertField (Field @"bar") (7 :: Int) emptyRecord)
+varB = Variant (Field @"B") (REC { bar = 7 :: Int })
 
 type RowOf20 =
   '[ "f00" ':= Int, "f01" ':= Int, "f02" ':= Int, "f03" ':= Int, "f04" ':= Int
