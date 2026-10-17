@@ -1,4 +1,4 @@
-cabal-version: 3.14
+cabal-version: 3.0
 name: polytropos-hasql
 version: 0.1.0.0
 synopsis: High-performance hasql PostgreSQL decoders for polytropos open records
@@ -13,10 +13,21 @@ description:
   Start at the front door module "Polytropos.Hasql" for complete documentation,
   row decoder combinators, and worked examples.
 license: EUPL-1.2 OR Apache-2.0
+license-file: LICENSE
 author: Nadia Yvette Chambers
 maintainer: nadia.yvette.chambers@ik.me
 category: Database, PostgreSQL
+homepage: https://github.com/NadiaYvette/polytropos
+bug-reports: https://github.com/NadiaYvette/polytropos/issues
+extra-doc-files:
+    README.md
+  , CHANGELOG.md
 build-type: Simple
+
+source-repository head
+  type:     git
+  location: https://github.com/NadiaYvette/polytropos
+  subdir:   packages/polytropos-hasql
 
 library
   default-language: GHC2021

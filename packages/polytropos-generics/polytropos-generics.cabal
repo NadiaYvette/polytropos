@@ -1,4 +1,4 @@
-cabal-version: 3.14
+cabal-version: 3.0
 name: polytropos-generics
 version: 0.1.0.0
 synopsis: Structural datatype generics, representation bridging, and whole-data traversal
@@ -20,10 +20,21 @@ description:
   Start at the front door module "Polytropos.Generics" for architectural rationales,
   usage guidance, and worked examples for both open rows and nominal ADTs.
 license: EUPL-1.2 OR Apache-2.0
+license-file: LICENSE
 author: Nadia Yvette Chambers
 maintainer: nadia.yvette.chambers@ik.me
 category: Generics, Data
+homepage: https://github.com/NadiaYvette/polytropos
+bug-reports: https://github.com/NadiaYvette/polytropos/issues
+extra-doc-files:
+    README.md
+  , CHANGELOG.md
 build-type: Simple
+
+source-repository head
+  type:     git
+  location: https://github.com/NadiaYvette/polytropos
+  subdir:   packages/polytropos-generics
 
 library
   exposed-modules:

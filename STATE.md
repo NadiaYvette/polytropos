@@ -97,6 +97,12 @@ All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
   * All 16 `.cabal` files across `packages/` and `examples/` specify `license: EUPL-1.2 OR Apache-2.0` and validate under `cabal check`.
   * All source files, test suites, scripts, and documentation updated with `SPDX-License-Identifier: EUPL-1.2 OR Apache-2.0` headers and Haddock `-- License : EUPL-1.2 OR Apache-2.0` tags.
   * Registers and provenance notes updated (`THIRD_PARTY.md`, `docs/notes/PROVENANCE.md`, `docs/registers/PACKAGES.md`, `README.md`).
+- **Hackage Upload Readiness Audit & Packaging Polish (All 16 Packages):**
+  * **License File Distribution:** Placed canonical dual-licensing `LICENSE` files into all 16 package root directories (`packages/*/LICENSE`) and added `license-file: LICENSE` to every `.cabal` manifest.
+  * **Release Changelogs:** Authored tailored `CHANGELOG.md` files for version `0.1.0.0` across all 16 packages with itemized architectural feature sets.
+  * **Package Front-Page Readmes:** Authored dedicated `README.md` files in each package root with feature overviews, usage snippets, and links to documentation and upstream repository.
+  * **Cabal Manifest Standards:** Harmonized `cabal-version: 3.0` across all packages, added `homepage: https://github.com/NadiaYvette/polytropos`, `bug-reports: https://github.com/NadiaYvette/polytropos/issues`, `extra-doc-files: README.md, CHANGELOG.md`, and monorepo-aware `source-repository head` blocks (with `subdir: packages/<pkg>`).
+  * **Hygiene & Verification:** Removed stray `.hi` build artifact from `polytropos-plugin/src/`; confirmed 100% clean `cabal check` (0 errors, 0 warnings across all 16 packages); confirmed `cabal sdist all` generates complete, self-contained source tarballs containing license, changelog, readme, sources, and tests; confirmed `cabal haddock --haddock-for-hackage all` builds all documentation tarballs with 100% coverage; and confirmed all 210 test cases pass.
 - **GHC 9.6–9.14 Backward Compatibility & Build Matrix:**
   * Architectural strategy and implementation blueprint established in `docs/developer/BUILD_SYSTEMS_MATRIX.md`.
   * Covers multi-version GHC baseline (9.6, 9.8, 9.10, 9.12, 9.14) with SIMD fallback shims for < 9.14.

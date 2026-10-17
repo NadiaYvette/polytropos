@@ -1,4 +1,4 @@
-cabal-version: 3.14
+cabal-version: 3.0
 name: polytropos-persistent
 version: 0.1.0.0
 synopsis: persistent database marshalling and entity wrappers for polytropos
@@ -15,10 +15,21 @@ description:
   Start at the front door module "Polytropos.Persistent" for complete documentation,
   schema mappings, and worked examples.
 license: EUPL-1.2 OR Apache-2.0
+license-file: LICENSE
 author: Nadia Yvette Chambers
 maintainer: nadia.yvette.chambers@ik.me
 category: Database
+homepage: https://github.com/NadiaYvette/polytropos
+bug-reports: https://github.com/NadiaYvette/polytropos/issues
+extra-doc-files:
+    README.md
+  , CHANGELOG.md
 build-type: Simple
+
+source-repository head
+  type:     git
+  location: https://github.com/NadiaYvette/polytropos
+  subdir:   packages/polytropos-persistent
 
 library
   default-language: GHC2021

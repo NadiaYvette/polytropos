@@ -1,4 +1,4 @@
-cabal-version: 3.14
+cabal-version: 3.0
 name: polytropos-openapi3
 version: 0.1.0.0
 synopsis: OpenAPI 3.0 schema generation for polytropos open records and variants
@@ -13,10 +13,21 @@ description:
   Start at the front door module "Polytropos.OpenApi" for complete documentation,
   schema customizing options, and worked examples.
 license: EUPL-1.2 OR Apache-2.0
+license-file: LICENSE
 author: Nadia Yvette Chambers
 maintainer: nadia.yvette.chambers@ik.me
 category: Web
+homepage: https://github.com/NadiaYvette/polytropos
+bug-reports: https://github.com/NadiaYvette/polytropos/issues
+extra-doc-files:
+    README.md
+  , CHANGELOG.md
 build-type: Simple
+
+source-repository head
+  type:     git
+  location: https://github.com/NadiaYvette/polytropos
+  subdir:   packages/polytropos-openapi3
 
 library
   default-language: GHC2021

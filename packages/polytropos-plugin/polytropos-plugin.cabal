@@ -17,11 +17,20 @@ description:
   Start at the front door module "Polytropos.Plugin" for complete usage
   instructions and worked examples. Enable in consuming packages via:
   @ghc-options: -fplugin=Polytropos.Plugin@.
-license: EUPL-1.2 OR Apache-2.0
+license:            EUPL-1.2 OR Apache-2.0
+license-file:       LICENSE
 author:             Nadia Yvette Chambers
 maintainer:         nadia.yvette.chambers@ik.me
 category:           Compiler Plugin
-extra-doc-files:    CHANGELOG.md
+homepage:           https://github.com/NadiaYvette/polytropos
+bug-reports:        https://github.com/NadiaYvette/polytropos/issues
+extra-doc-files:    README.md
+                  , CHANGELOG.md
+
+source-repository head
+  type:     git
+  location: https://github.com/NadiaYvette/polytropos
+  subdir:   packages/polytropos-plugin
 
 common warnings
   ghc-options:

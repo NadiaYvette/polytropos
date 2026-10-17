@@ -1,4 +1,4 @@
-cabal-version: 3.14
+cabal-version: 3.0
 name: polytropos-quickcheck
 version: 0.1.0.0
 synopsis: QuickCheck generators and slot-indexed shrinkers for polytropos open rows
@@ -14,10 +14,21 @@ description:
   Start at the front door module "Polytropos.QuickCheck" for complete documentation,
   shrink semantics, and worked examples.
 license: EUPL-1.2 OR Apache-2.0
+license-file: LICENSE
 author: Nadia Yvette Chambers
 maintainer: nadia.yvette.chambers@ik.me
 category: Testing
+homepage: https://github.com/NadiaYvette/polytropos
+bug-reports: https://github.com/NadiaYvette/polytropos/issues
+extra-doc-files:
+    README.md
+  , CHANGELOG.md
 build-type: Simple
+
+source-repository head
+  type:     git
+  location: https://github.com/NadiaYvette/polytropos
+  subdir:   packages/polytropos-quickcheck
 
 library
   default-language: GHC2021

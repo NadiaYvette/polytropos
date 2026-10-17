@@ -19,11 +19,20 @@ description:
   For design decisions, memory physics, and background on the OCaml polymorphic variant
   heritage, see <https://github.com/NadiaYvette/polytropos/blob/master/docs/notes/POLYTROPOS_DESIGN.md POLYTROPOS_DESIGN.md>.
 
-license: EUPL-1.2 OR Apache-2.0
+license:            EUPL-1.2 OR Apache-2.0
+license-file:       LICENSE
 author:             Nadia Yvette Chambers
 maintainer:         nadia.yvette.chambers@ik.me
 category:           Data
-extra-doc-files:    CHANGELOG.md
+homepage:           https://github.com/NadiaYvette/polytropos
+bug-reports:        https://github.com/NadiaYvette/polytropos/issues
+extra-doc-files:    README.md
+                  , CHANGELOG.md
+
+source-repository head
+  type:     git
+  location: https://github.com/NadiaYvette/polytropos
+  subdir:   packages/polytropos-core
 
 common warnings
   ghc-options:
