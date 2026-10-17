@@ -45,20 +45,24 @@ zero generic overhead.
 
 = Worked Example
 
-@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeApplications #-}
-
-import Data.OpenApi (toSchema, Schema)
-import Data.Proxy (Proxy (..))
-import Polytropos
-import Polytropos.OpenApi
-
-type User = Record '["id" ':= Int, "name" ':= String]
-
-userSchema :: Schema
-userSchema = toSchema (Proxy \@User)
-@
+> {-# LANGUAGE DataKinds #-}
+> {-# LANGUAGE TypeApplications #-}
+> {-# OPTIONS_GHC -fplugin=Polytropos.Plugin #-}
+>
+> import Data.OpenApi (toSchema, Schema)
+> import Data.Proxy (Proxy (..))
+> import Polytropos
+> import Polytropos.OpenApi
+>
+> type User = Record '["id" ':= Int, "name" ':= String]
+>
+> -- A conforming record value:
+> userVal :: User
+> userVal = REC { id = 1, name = "Alice" }
+>
+> -- Generated OpenAPI schema with properties and required list in row order:
+> userSchema :: Schema
+> userSchema = toSchema (Proxy @User)
 -}
 module Polytropos.OpenApi
   ( -- * Row Schema Walkers

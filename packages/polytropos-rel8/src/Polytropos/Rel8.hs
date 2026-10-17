@@ -43,26 +43,25 @@ framework.
 
 = Worked Example
 
-@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeApplications #-}
+= Worked Example
 
-import Rel8
-import Polytropos
-import Polytropos.Rel8
-
-type AccountRow = '["id" ':= Int64, "balance" ':= Double]
-type AccountTable = PolyRow AccountRow
-
--- Lift a record to a Rel8 SQL expression row:
-rec :: Record AccountRow
-rec = insertField (Field \@"id") (42 :: Int64)
-    $ insertField (Field \@"balance") (1000.50 :: Double)
-    $ emptyRecord
-
-sqlExpr :: AccountTable Expr
-sqlExpr = litRecord rec
-@
+> {-# LANGUAGE DataKinds #-}
+> {-# LANGUAGE TypeApplications #-}
+> {-# OPTIONS_GHC -fplugin=Polytropos.Plugin #-}
+>
+> import Rel8
+> import Polytropos
+> import Polytropos.Rel8
+>
+> type AccountRow = '["id" ':= Int64, "balance" ':= Double]
+> type AccountTable = PolyRow AccountRow
+>
+> -- Lift a record to a Rel8 SQL expression row:
+> rec :: Record AccountRow
+> rec = REC { id = 42 :: Int64, balance = 1000.50 :: Double }
+>
+> sqlExpr :: AccountTable Expr
+> sqlExpr = litRecord rec
 -}
 module Polytropos.Rel8
   ( -- * A rel8 Table from an Open Row

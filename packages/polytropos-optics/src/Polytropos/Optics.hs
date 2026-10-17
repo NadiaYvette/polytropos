@@ -47,39 +47,36 @@ Prisms inspect the unboxed constructor tag in \(O(1)\) and extract the construct
 
 = Worked Example
 
-@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE OverloadedLabels #-}
-{-# LANGUAGE TypeApplications #-}
-
-import Optics.Core
-import Polytropos
-import Polytropos.Optics
-
-type Person = Record '["name" ':= String, "age" ':= Int]
-
-alice :: Person
-alice = insertField (Field \@"name") "Alice"
-      $ insertField (Field \@"age") (30 :: Int)
-      $ emptyRecord
-
--- Reading via overloaded label:
-aliceAge :: Int
-aliceAge = alice ^. #age  -- 30
-
--- Updating via overloaded label:
-olderAlice :: Person
-olderAlice = alice & #age %~ (+ 1)  -- age = 31
-
--- Working with variant prisms:
-type Shape = Variant '["Circle" ':= '["radius" ':= Double]]
-
-myCircle :: Shape
-myCircle = Variant (Field \@"Circle") (insertField (Field \@"radius") 5.0 emptyRecord)
-
-circleRadius :: Maybe Double
-circleRadius = preview (ctorOptic (Field \@"Circle") % #radius) myCircle  -- Just 5.0
-@
+> {-# LANGUAGE DataKinds #-}
+> {-# LANGUAGE OverloadedLabels #-}
+> {-# LANGUAGE TypeApplications #-}
+> {-# OPTIONS_GHC -fplugin=Polytropos.Plugin #-}
+>
+> import Optics.Core
+> import Polytropos
+> import Polytropos.Optics
+>
+> type Person = Record '["name" ':= String, "age" ':= Int]
+>
+> alice :: Person
+> alice = REC { name = "Alice", age = 30 }
+>
+> -- Reading via overloaded label:
+> aliceAge :: Int
+> aliceAge = alice ^. #age  -- 30
+>
+> -- Updating via overloaded label:
+> olderAlice :: Person
+> olderAlice = alice & #age %~ (+ 1)  -- age = 31
+>
+> -- Working with variant prisms:
+> type Shape = Variant '["Circle" ':= '["radius" ':= Double]]
+>
+> myCircle :: Shape
+> myCircle = VAR { Circle = REC { radius = 5.0 } }
+>
+> circleRadius :: Maybe Double
+> circleRadius = preview (ctorOptic (Field @"Circle") % #radius) myCircle  -- Just 5.0
 -}
 module Polytropos.Optics (
     -- * Record Field Lenses

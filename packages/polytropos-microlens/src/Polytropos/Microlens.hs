@@ -46,29 +46,27 @@ In @polytropos-microlens@:
 
 = Worked Example
 
-@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeApplications #-}
-
-import Lens.Micro ((^.), (%~), (&))
-import Polytropos
-import Polytropos.Microlens
-
-type Point = Record '["x" ':= Int, "y" ':= Int]
-
-pt :: Point
-pt = insertField (Field \@"x") 10
-   $ insertField (Field \@"y") 20
-   $ emptyRecord
-
--- Accessing a field:
-ptX :: Int
-ptX = pt ^. fieldLens (Field \@"x")  -- 10
-
--- Modifying a field:
-pt' :: Point
-pt' = pt & fieldLens (Field \@"y") %~ (+ 5)  -- y = 25
-@
+> {-# LANGUAGE DataKinds #-}
+> {-# LANGUAGE TypeApplications #-}
+> {-# OPTIONS_GHC -fplugin=Polytropos.Plugin #-}
+>
+> import Lens.Micro ((^.), (%~), (&))
+> import Polytropos
+> import Polytropos.Microlens
+>
+> -- A genuinely heterogeneous record:
+> type User = Record '["name" ':= String, "score" ':= Int]
+>
+> user :: User
+> user = REC { name = "Alice", score = 95 }
+>
+> -- Accessing a field via heterogeneous fieldLens:
+> userName :: String
+> userName = user ^. fieldLens (Field @"name")  -- "Alice"
+>
+> -- Modifying a field:
+> user' :: User
+> user' = user & fieldLens (Field @"score") %~ (+ 5)  -- score = 100
 -}
 module Polytropos.Microlens
   ( -- * Field Lenses

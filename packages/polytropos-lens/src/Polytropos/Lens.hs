@@ -49,33 +49,35 @@ abstractions:
 
 = Worked Example
 
-@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeApplications #-}
-
-import Control.Lens
-import Polytropos
-import Polytropos.Lens
-
-type Person = Record '["name" ':= String, "age" ':= Int]
-
-person :: Person
-person = insertField (Field \@"name") "Bob"
-       $ insertField (Field \@"age") (25 :: Int)
-       $ emptyRecord
-
--- Positional access:
-firstField :: String
-firstField = person ^. _1  -- "Bob"
-
--- Name-based access:
-ageVal :: Int
-ageVal = person ^. fieldLens (Field \@"age")  -- 25
-
--- Positional modification:
-olderPerson :: Person
-olderPerson = person & _2 .~ 26
-@
+> {-# LANGUAGE DataKinds #-}
+> {-# LANGUAGE TypeApplications #-}
+> {-# OPTIONS_GHC -fplugin=Polytropos.Plugin #-}
+>
+> import Control.Lens
+> import Polytropos
+> import Polytropos.Lens
+>
+> -- A genuinely heterogeneous record:
+> type Person = Record '["name" ':= String, "age" ':= Int]
+>
+> person :: Person
+> person = REC { name = "Bob", age = 25 }
+>
+> -- Positional heterogeneous access:
+> firstField :: String
+> firstField = person ^. _1  -- "Bob"
+>
+> -- Name-based heterogeneous access:
+> ageVal :: Int
+> ageVal = person ^. fieldLens (Field @"age")  -- 25
+>
+> -- Positional modification:
+> olderPerson :: Person
+> olderPerson = person & _2 .~ 26
+>
+> -- Name-based modification:
+> olderPerson' :: Person
+> olderPerson' = person & fieldLens (Field @"age") %~ (+ 1)
 -}
 module Polytropos.Lens
   ( -- * Field Lenses by Name

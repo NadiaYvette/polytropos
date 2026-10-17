@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 module Main (main) where
 
@@ -16,16 +17,10 @@ type MyRec = Record '[ "x" ':= Int, "y" ':= Int, "z" ':= Int ]
 type Hetero = Record '[ "n" ':= Int, "w" ':= Word, "m" ':= Int ]
 
 myRec :: MyRec
-myRec = insertField (Field @"x") (1 :: Int)
-      $ insertField (Field @"y") (2 :: Int)
-      $ insertField (Field @"z") (3 :: Int)
-      $ emptyRecord
+myRec = REC { x = 1, y = 2, z = 3 }
 
 heteroRec :: Hetero
-heteroRec = insertField (Field @"n") (7 :: Int)
-          $ insertField (Field @"w") (9 :: Word)
-          $ insertField (Field @"m") (11 :: Int)
-          $ emptyRecord
+heteroRec = REC { n = 7, w = 9, m = 11 }
 
 type RowOf12 =
   '[ "c00" ':= Int, "c01" ':= Int, "c02" ':= Int, "c03" ':= Int

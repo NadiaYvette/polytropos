@@ -45,25 +45,22 @@ key-then-fields row layout backends use for @Entity@ rows.
 
 = Worked Example
 
-@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeApplications #-}
-
-import Database.Persist
-import Polytropos
-import Polytropos.Persistent
-
-type PersonRow = Record '["name" ':= Text, "age" ':= Int]
-
-person :: PersonRow
-person = insertField (Field \@"name") "Alice"
-       $ insertField (Field \@"age") (30 :: Int)
-       $ emptyRecord
-
--- Convert to persistent values:
-vals :: [PersistValue]
-vals = toPersistFieldsRecord person
-@
+> {-# LANGUAGE DataKinds #-}
+> {-# LANGUAGE TypeApplications #-}
+> {-# OPTIONS_GHC -fplugin=Polytropos.Plugin #-}
+>
+> import Database.Persist
+> import Polytropos
+> import Polytropos.Persistent
+>
+> type PersonRow = Record '["name" ':= Text, "age" ':= Int]
+>
+> person :: PersonRow
+> person = REC { name = "Alice", age = 30 }
+>
+> -- Convert to persistent values:
+> vals :: [PersistValue]
+> vals = toPersistFieldsRecord person
 -}
 module Polytropos.Persistent
   ( -- * Row Marshalling

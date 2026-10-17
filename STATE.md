@@ -40,8 +40,9 @@ All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
 - `polytropos-microlens-test` passes 5 tests (homogeneous `each` traversal, plugin-indexed `fieldLens`).
 - `polytropos-lens-test` passes 14 tests (positional `_1`..`_9`, name-keyed `At`/`Ixed`, `each`,
   `fieldLens`, variant prisms).
-- `polytropos-aeson-test` passes 7 tests (O(N) record/variant codecs, 20-field roundtrip,
-  canonical row-order encoding, tagged variant shape with modern `REC { ... }` syntax).
+- `polytropos-aeson-test` passes 10 tests (heterogeneous open record codecs via `AllToJSON`/`AllFromJSON`,
+  heterogeneous variant codecs via `AllCtorsToJSON`/`AllCtorsFromJSON`, homogeneous fast paths via
+  `AllFieldsAre`/`AllCtorsHom`, 20-field roundtrip, canonical row-order encoding, tagged variant shape with modern `REC { ... }` and `VAR { ... }` syntax).
   Documented with high-level architectural exposition explaining the role of homogeneity
   reflection witnesses (`AllFieldsAre`, `AllCtorsHom`, `FieldNames`, `RowField`, `SumField`)
   in enabling direct flat `Rep` unrolling without intermediate binary trees or plugin resolution.
@@ -49,8 +50,9 @@ All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
   `zipBeamFieldsM`, `allBeamValues`, row-symbol column names; compiles in a fraction of a second).
 - `polytropos-openapi3-test` passes 7 tests (record object schemas with properties/required in row
   order, variant `oneOf` tagged unions, JSON roundtrip of the generated schemas).
-- `polytropos-cbor-test` passes 6 tests (3- and 20-field record roundtrips, variant roundtrips,
-  byte-level format assertions: length header + flat payload, tag + payload).
+- `polytropos-cbor-test` passes 9 tests (heterogeneous open record codecs via `AllSerialise`,
+  heterogeneous variant codecs via `AllCtorsSerialise`, homogeneous fast paths, 3- and 20-field record roundtrips,
+  variant roundtrips, byte-level format assertions: length header + flat payload, tag + payload).
 - `polytropos-cassava-test` passes 4 tests (heterogeneous CSV named record codecs, 12-field roundtrips).
 - `polytropos-persistent-test` passes 10 tests (PersistRow marshalling, 20-field roundtrips,
   row-order serialization, PersistField bridge, and Entity wrapper).

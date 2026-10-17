@@ -46,25 +46,22 @@ but ignores extra columns in the CSV input, matching cassava's own generic behav
 
 = Worked Example
 
-@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeApplications #-}
-
-import qualified Data.Csv as Csv
-import Polytropos
-import Polytropos.Cassava
-
-type UserRow = Record '["username" ':= String, "score" ':= Int]
-
-row :: UserRow
-row = insertField (Field \@"username") "Alice"
-    $ insertField (Field \@"score") (95 :: Int)
-    $ emptyRecord
-
--- Encodes to CSV named record:
-namedRec = Csv.toNamedRecord row
-@
+> {-# LANGUAGE DataKinds #-}
+> {-# LANGUAGE OverloadedStrings #-}
+> {-# LANGUAGE TypeApplications #-}
+> {-# OPTIONS_GHC -fplugin=Polytropos.Plugin #-}
+>
+> import qualified Data.Csv as Csv
+> import Polytropos
+> import Polytropos.Cassava
+>
+> type UserRow = Record '["username" ':= String, "score" ':= Int]
+>
+> row :: UserRow
+> row = REC { username = "Alice", score = 95 }
+>
+> -- Encodes to CSV named record:
+> namedRec = Csv.toNamedRecord row
 -}
 module Polytropos.Cassava
   ( -- * Row Constraint Walks

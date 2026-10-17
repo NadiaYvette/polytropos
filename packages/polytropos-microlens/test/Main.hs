@@ -19,10 +19,7 @@ import Polytropos.Microlens
 type MyRec = Record '["x" ':= Int, "y" ':= Int, "z" ':= Int]
 
 myRec :: MyRec
-myRec = insertField (Field @"x") (1 :: Int)
-      $ insertField (Field @"y") (2 :: Int)
-      $ insertField (Field @"z") (3 :: Int)
-      $ emptyRecord
+myRec = REC { x = 1, y = 2, z = 3 }
 
 main :: IO ()
 main = defaultMain $ testGroup "Microlens Integration"

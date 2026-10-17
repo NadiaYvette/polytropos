@@ -54,11 +54,7 @@ userSchema = TableSchema
   }
 
 userRecord :: Record UserRow
-userRecord =
-  insertField (Field @"id") (42 :: Int64)
-  $ insertField (Field @"name") ("Alice" :: Text)
-  $ insertField (Field @"active") True
-  $ emptyRecord
+userRecord = REC { id = 42 :: Int64, name = "Alice" :: Text, active = True }
 
 type SingleRow = '["value" ':= Int64]
 
@@ -69,7 +65,7 @@ singleSchema = TableSchema
   }
 
 singleRecord :: Record SingleRow
-singleRecord = insertField (Field @"value") (100 :: Int64) emptyRecord
+singleRecord = REC { value = 100 :: Int64 }
 
 {-------------------------------------------------------------------------------
   Main Test Tree

@@ -20,16 +20,24 @@ type MyRec = Record '["x" ':= Int, "y" ':= Int, "z" ':= Int]
 type MyVar = Variant '["A" ':= '["foo" ':= Int], "B" ':= '["bar" ':= Int]]
 
 myRec :: MyRec
-myRec = insertField (Field @"x") (1 :: Int)
-      $ insertField (Field @"y") (2 :: Int)
-      $ insertField (Field @"z") (3 :: Int)
-      $ emptyRecord
+myRec = REC { x = 1, y = 2, z = 3 }
 
 varA :: MyVar
-varA = Variant (Field @"A") (insertField (Field @"foo") (42 :: Int) emptyRecord)
+varA = Variant (Field @"A") (REC { foo = 42 :: Int })
 
 varB :: MyVar
-varB = Variant (Field @"B") (insertField (Field @"bar") (7 :: Int) emptyRecord)
+varB = Variant (Field @"B") (REC { bar = 7 :: Int })
+
+type HeteroRec = Record '["id" ':= Int, "name" ':= String, "flag" ':= Bool]
+heteroRec :: HeteroRec
+heteroRec = REC { id = 42, name = "test", flag = True }
+
+type HeteroVar = Variant '["Msg" ':= '["text" ':= String, "code" ':= Int], "Ping" ':= '[]]
+heteroVar1 :: HeteroVar
+heteroVar1 = Variant (Field @"Msg") (REC { text = "hi", code = 7 })
+
+heteroVar2 :: HeteroVar
+heteroVar2 = Variant (Field @"Ping") emptyRecord
 
 type RowOf20 =
   '[ "f00" ':= Int, "f01" ':= Int, "f02" ':= Int, "f03" ':= Int, "f04" ':= Int
@@ -67,6 +75,8 @@ main = defaultMain $ testGroup "CBOR Integration"
   [ testGroup "Record codecs"
       [ testCase "roundtrip 3 fields" $
           (deserialise (serialise myRec) :: MyRec) @?= myRec
+      , testCase "roundtrip heterogeneous 3 fields" $
+          (deserialise (serialise heteroRec) :: HeteroRec) @?= heteroRec
       , testCase "roundtrip 20 fields" $ do
           let big = buildBig (42 :: Int)
           (deserialise (serialise big) :: Record RowOf20) @?= big
@@ -78,6 +88,10 @@ main = defaultMain $ testGroup "CBOR Integration"
   , testGroup "Variant codecs"
       [ testCase "roundtrip A" $ (deserialise (serialise varA) :: MyVar) @?= varA
       , testCase "roundtrip B" $ (deserialise (serialise varB) :: MyVar) @?= varB
+      , testCase "roundtrip heterogeneous Msg" $
+          (deserialise (serialise heteroVar1) :: HeteroVar) @?= heteroVar1
+      , testCase "roundtrip heterogeneous empty Ping" $
+          (deserialise (serialise heteroVar2) :: HeteroVar) @?= heteroVar2
       , testCase "encodes as tag + payload" $
           serialise varA
             @?= W.toLazyByteString

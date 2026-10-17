@@ -22,6 +22,17 @@ varA = Variant (Field @"A") (REC { foo = 42 :: Int })
 varB :: MyVar
 varB = Variant (Field @"B") (REC { bar = 7 :: Int })
 
+type HeteroRec = Record '["host" ':= String, "port" ':= Int, "active" ':= Bool, "weight" ':= Double]
+heteroRec :: HeteroRec
+heteroRec = REC { host = "localhost", port = 8080, active = True, weight = 1.75 }
+
+type HeteroVar = Variant '["Msg" ':= '["text" ':= String, "priority" ':= Int], "Ping" ':= '[]]
+heteroVar1 :: HeteroVar
+heteroVar1 = Variant (Field @"Msg") (REC { text = "alert", priority = 1 })
+
+heteroVar2 :: HeteroVar
+heteroVar2 = Variant (Field @"Ping") emptyRecord
+
 type RowOf20 =
   '[ "f00" ':= Int, "f01" ':= Int, "f02" ':= Int, "f03" ':= Int, "f04" ':= Int
    , "f05" ':= Int, "f06" ':= Int, "f07" ':= Int, "f08" ':= Int, "f09" ':= Int
@@ -61,6 +72,8 @@ main = defaultMain $ testGroup "Aeson Integration"
       , testCase "roundtrip empty record" $
           (decode (encode (emptyRecord :: Record '[])))
             @?= (Just emptyRecord :: Maybe (Record '[]))
+      , testCase "roundtrip heterogeneous 4 fields" $
+          (decode (encode heteroRec) :: Maybe HeteroRec) @?= Just heteroRec
       , testCase "roundtrip 20 fields" $ do
           let big = buildBig (42 :: Int)
           (decode (encode big) :: Maybe (Record RowOf20)) @?= Just big
@@ -72,6 +85,10 @@ main = defaultMain $ testGroup "Aeson Integration"
           (decode (encode varA) :: Maybe MyVar) @?= Just varA
       , testCase "roundtrip B" $
           (decode (encode varB) :: Maybe MyVar) @?= Just varB
+      , testCase "roundtrip heterogeneous Msg" $
+          (decode (encode heteroVar1) :: Maybe HeteroVar) @?= Just heteroVar1
+      , testCase "roundtrip heterogeneous empty Ping" $
+          (decode (encode heteroVar2) :: Maybe HeteroVar) @?= Just heteroVar2
       , testCase "encodes tagged shape" $
           LBS.toStrict (encode varA) @?= BS8.pack "{\"A\":{\"foo\":42}}"
       ]

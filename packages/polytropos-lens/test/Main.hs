@@ -22,22 +22,16 @@ type HomRec = Record '["x" ':= Int, "y" ':= Int, "z" ':= Int]
 type MyVar = Variant '["A" ':= '["foo" ':= Int], "B" ':= '["bar" ':= Bool]]
 
 myRec :: MyRec
-myRec = insertField (Field @"x") (42 :: Int)
-      $ insertField (Field @"y") True
-      $ insertField (Field @"z") False
-      $ emptyRecord
+myRec = REC { x = 42, y = True, z = False }
 
 homRec :: HomRec
-homRec = insertField (Field @"x") (1 :: Int)
-       $ insertField (Field @"y") (2 :: Int)
-       $ insertField (Field @"z") (3 :: Int)
-       $ emptyRecord
+homRec = REC { x = 1, y = 2, z = 3 }
 
 varA :: MyVar
-varA = Variant (Field @"A") (insertField (Field @"foo") (42 :: Int) emptyRecord)
+varA = Variant (Field @"A") (REC { foo = 42 :: Int })
 
 varB :: MyVar
-varB = Variant (Field @"B") (insertField (Field @"bar") False emptyRecord)
+varB = Variant (Field @"B") (REC { bar = False })
 
 main :: IO ()
 main = defaultMain $ testGroup "Lens Integration"
