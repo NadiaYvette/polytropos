@@ -61,6 +61,18 @@ All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
   `toRecord`/`fromRecord` and `columnsToRow`/`rowToColumns` roundtrips, and columnar combinators
   `hfield`, `hfieldAt`, `htabulate`, `hmap`, `htraverse`, `hzipWith`).
 - `polytropos-quickcheck-test` passes 9 tests (record and variant arbitrary generation and convergence shrinking).
+- **Model Context Protocol & Capstone Satellite (`polytropos-mcp`):**
+  * Created native satellite package `packages/polytropos-mcp` implementing the MCP JSON-RPC 2.0 protocol over open rows.
+  * Provides `recordToTool` for automatic OpenAPI 3.0 schema generation from open product rows (`Proxy r`), `toolCallToVariant` for JSON argument parsing into open variants (`Variant s`), and `dispatchToolCall` with $O(1)$ jump-table dispatch via `eliminateUniform`.
+  * Provides standard `runStdioServer` and JSON-RPC request/response message handling (`handleJsonRpcMessage`).
+- **Real-World Case Study Executables (`examples/`):**
+  * `examples/database` (`example-database`): Demonstrates wide 10-column database entity modeling (`UserRow`), Rel8 SQL expression lifting (`PolyRow UserRow Expr`), column projection (`hfield @"name"`), Yesod Persistent `[PersistValue]` heterogeneous marshalling (`toPersistFieldsRecord`/`fromPersistValuesRecord`), and zero-cost sub-row projection (`projectRecord @UserSummaryRow`).
+  * `examples/effects` (`example-effects`): Demonstrates extensible arrow pipelines (`Rope (req :: Row) a b`) over open rows of strands (`LoggerStrand`, `DatabaseStrand`, `MetricsStrand`), sequential composition `(>>>)` and parallel fan-out `(&&&)` via `SubRow` projection, and higher-kinded records (`RecordF f r`) for capability auditing with `cfoldMapRecordF`.
+  * `examples/mcp-server` (`example-mcp-server`): Demonstrates the federated Context & Memory MCP Server capstone multiplexing Contextful codebase search (SQLite FTS5) and Kioku memory recall (Postgres event store) with OpenAPI schema synthesis, $O(1)$ jump-table dispatch, dynamic token-budget sub-row compression via `projectRecord`, and stdio/simulated execution modes.
+- **Pedagogical Framework Overhaul (`docs/TUTORIAL.md`):**
+  * Fully authored chapters for Addendum C (Relational Databases & Persistent Schemas), Addendum D (Extensible Effects & Ropes), and Addendum E (Federated MCP Server Capstone).
+  * Added hands-on reader exercises 5, 6, and 7 to Part III.
+  * Updated Quick Start and package registers (`docs/INDEX.md`, `docs/NEWBIE_GUIDE.md`, `docs/registers/PACKAGES.md`, `README.md`, `PLAN.md`).
 - **Haddock documentation & Cabal Front-Page Alignment:** All workspace packages build with 100% Haddock coverage and zero warnings under `cabal --jobs=20 haddock --haddock-for-hackage all`:
   * Adopted Kowainik and MMHaskell front-page documentation conventions across all 15 native packages:
     - Standardized module headers (`Module`, `Description`, `Copyright`, `License`, `Maintainer`, `Stability`, `Portability`).

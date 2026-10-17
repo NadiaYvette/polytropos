@@ -19,6 +19,9 @@ If you are new to `polytropos` and want to understand how open records and varia
 - **Lesson 5:** Extensible Pipelines & Total Elimination (`eliminateUniform`, `matchVariant`)
 - **Addendum A:** Live worked Nanopass compiler pass (`cabal run example-nanopass`)
 - **Addendum B:** Resilient Parsing & Error ASTs ("Stope and Winze") (`cabal run example-resilient`)
+- **Addendum C:** Relational Database Models & Persistent Schemas (`cabal run example-database`)
+- **Addendum D:** Extensible Algebraic Effects & Higher-Kinded Ropes (`cabal run example-effects`)
+- **Addendum E:** Federated Context & Memory MCP Server Capstone (`cabal run example-mcp-server`)
 
 Once you are comfortable with the concepts, use this guide for repository navigation and token conservation.
 

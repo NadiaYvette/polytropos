@@ -1,0 +1,28 @@
+cabal-version: 3.14
+name: example-database
+version: 0.1.0.0
+synopsis: Worked tutorial example of Relational Database Models & Persistent Schemas
+description:
+  Interactive tutorial companion executable demonstrating relational database models
+  with polytropos-rel8 and persistent entity marshalling with polytropos-persistent.
+license: EUPL-1.2 OR Apache-2.0
+author: Nadia Yvette Chambers
+maintainer: nadia.yvette.chambers@ik.me
+category: Database
+build-type: Simple
+
+executable example-database
+  default-language: GHC2021
+  hs-source-dirs: src
+  main-is: Main.hs
+  ghc-options: -Wall -fplugin=Polytropos.Plugin
+  build-depends:
+    base >= 4.19 && < 5,
+    text >= 2.0 && < 3,
+    bytestring >= 0.11 && < 0.13,
+    rel8 >= 1.4 && < 1.9,
+    persistent >= 2.14 && < 2.19,
+    polytropos-core >= 0.1 && < 0.2,
+    polytropos-plugin >= 0.1 && < 0.2,
+    polytropos-rel8 >= 0.1 && < 0.2,
+    polytropos-persistent >= 0.1 && < 0.2

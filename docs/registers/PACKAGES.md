@@ -31,7 +31,25 @@ not used: `../notes/PROVENANCE.md`.
 | --- | --- | --- | --- | --- | --- |
 | `packages/polytropos-core` | `polytropos-core` | native | — | EUPL-1.2 OR Apache-2.0 | Rows, `Rep`, evidence classes. Depends on `base`, `primitive`. |
 | `packages/polytropos-plugin` | `polytropos-plugin` | native | — | EUPL-1.2 OR Apache-2.0 | GHC typechecker plugin synthesizing literal dictionaries and O(1) jump tables. |
-| `examples/nanopass` | `example-nanopass` | native | — | EUPL-1.2 OR Apache-2.0 | Worked Nanopass compiler tutorial executable. |
+| `packages/polytropos-aeson` | `polytropos-aeson` | native | — | EUPL-1.2 OR Apache-2.0 | Fast Aeson ToJSON/FromJSON serialization and schema instances for open rows. |
+| `packages/polytropos-beam` | `polytropos-beam` | native | — | EUPL-1.2 OR Apache-2.0 | Beam table and database entity bindings for open rows. |
+| `packages/polytropos-cassava` | `polytropos-cassava` | native | — | EUPL-1.2 OR Apache-2.0 | High-throughput CSV serialization via Cassava over open rows. |
+| `packages/polytropos-cbor` | `polytropos-cbor` | native | — | EUPL-1.2 OR Apache-2.0 | Binary CBOR encoding/decoding via Serialise for open rows. |
+| `packages/polytropos-generics` | `polytropos-generics` | native | — | EUPL-1.2 OR Apache-2.0 | GHC.Generics Rep conversions between nominal types and open rows. |
+| `packages/polytropos-hasql` | `polytropos-hasql` | native | — | EUPL-1.2 OR Apache-2.0 | High-performance PostgreSQL row decoding and statement encoding via Hasql. |
+| `packages/polytropos-lens` | `polytropos-lens` | native | — | EUPL-1.2 OR Apache-2.0 | Control.Lens lenses, prisms, and traversals for open rows. |
+| `packages/polytropos-mcp` | `polytropos-mcp` | native | — | EUPL-1.2 OR Apache-2.0 | Model Context Protocol JSON-RPC 2.0 server with OpenAPI synthesis and O(1) jump table dispatch. |
+| `packages/polytropos-microlens` | `polytropos-microlens` | native | — | EUPL-1.2 OR Apache-2.0 | Lightweight MicroLens lenses and prisms for open rows. |
+| `packages/polytropos-openapi3` | `polytropos-openapi3` | native | — | EUPL-1.2 OR Apache-2.0 | OpenAPI 3.0 schema generation for open records and variants. |
+| `packages/polytropos-optics` | `polytropos-optics` | native | — | EUPL-1.2 OR Apache-2.0 | Optics library lenses and affine traversals for open rows. |
+| `packages/polytropos-persistent` | `polytropos-persistent` | native | — | EUPL-1.2 OR Apache-2.0 | Yesod Persistent PersistValue marshalling and entity schemas for open rows. |
+| `packages/polytropos-quickcheck` | `polytropos-quickcheck` | native | — | EUPL-1.2 OR Apache-2.0 | Arbitrary and CoArbitrary instances for property testing open rows. |
+| `packages/polytropos-rel8` | `polytropos-rel8` | native | — | EUPL-1.2 OR Apache-2.0 | Rel8 Rel8able table schemas and SQL query expressions over open rows. |
+| `examples/nanopass` | `example-nanopass` | native | — | EUPL-1.2 OR Apache-2.0 | Worked Nanopass compiler tutorial executable (Addendum A). |
+| `examples/resilient` | `example-resilient` | native | — | EUPL-1.2 OR Apache-2.0 | Worked Resilient Parsing and Error Tolerance tutorial executable (Addendum B). |
+| `examples/database` | `example-database` | native | — | EUPL-1.2 OR Apache-2.0 | Worked Relational Database Models & Persistent Schemas tutorial executable (Addendum C). |
+| `examples/effects` | `example-effects` | native | — | EUPL-1.2 OR Apache-2.0 | Worked Extensible Algebraic Effects & Higher-Kinded Ropes tutorial executable (Addendum D). |
+| `examples/mcp-server` | `example-mcp-server` | native | — | EUPL-1.2 OR Apache-2.0 | Worked Federated Context & Memory MCP Server capstone executable (Addendum E). |
 | `benchmark/variants` | `bench-variants` | benchmark | — | EUPL-1.2 OR Apache-2.0 | Four-arm compile-time harness. Standalone `cabal.project`, `-O0`, never built by `cabal build all`. |
 
 ## Dependencies

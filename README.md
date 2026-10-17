@@ -173,13 +173,36 @@ serve as an architectural foundation alongside:
 
 ## Packages
 
+### Core & Compiler Plugin
 - [`packages/polytropos-core`](packages/polytropos-core): The core representation
   (`Rep`, `RowRep`), type-level vocabulary (`Row`, `SumRow`), field projection and
   mutation, and evidence classes (`RowEq`, `RowShow`, `RowEqSum`, `RowShowSum`,
   `FieldIndex`, `ConstructorIndex`).
 - [`packages/polytropos-plugin`](packages/polytropos-plugin): GHC typechecker
   plugin (`Polytropos.Plugin`) that solves row constraints and synthesizes literal
-  evidence bodies at compile time. Includes smoke test suite.
+  evidence bodies and $O(1)$ jump tables at compile time.
+
+### Ecosystem Satellites
+- [`packages/polytropos-mcp`](packages/polytropos-mcp): Model Context Protocol (MCP) JSON-RPC 2.0 server with OpenAPI schema synthesis and $O(1)$ jump table dispatch.
+- [`packages/polytropos-aeson`](packages/polytropos-aeson): Fast Aeson `ToJSON`/`FromJSON` serialization and schemas for open rows.
+- [`packages/polytropos-openapi3`](packages/polytropos-openapi3): OpenAPI 3.0 schema generation for open records and variants.
+- [`packages/polytropos-rel8`](packages/polytropos-rel8): Oliver Charles' `rel8` PostgreSQL schemas (`PolyRow`) and type-safe query expressions.
+- [`packages/polytropos-persistent`](packages/polytropos-persistent): Yesod `persistent` `[PersistValue]` marshalling and `PolyRowEntity` schemas.
+- [`packages/polytropos-hasql`](packages/polytropos-hasql): High-throughput PostgreSQL binary decoding via Hasql.
+- [`packages/polytropos-beam`](packages/polytropos-beam): Beam relational table and query integration.
+- [`packages/polytropos-cbor`](packages/polytropos-cbor): Binary CBOR serialization via `serialise`.
+- [`packages/polytropos-cassava`](packages/polytropos-cassava): High-throughput CSV encoding/decoding via `cassava`.
+- [`packages/polytropos-generics`](packages/polytropos-generics): `GHC.Generics` bidirectional mappings between nominal types and open rows.
+- [`packages/polytropos-lens`](packages/polytropos-lens), [`polytropos-optics`](packages/polytropos-optics), [`polytropos-microlens`](packages/polytropos-microlens): Optics, prisms, and traversals.
+- [`packages/polytropos-quickcheck`](packages/polytropos-quickcheck): QuickCheck arbitrary generation and co-arbitrary testing.
+
+### Executable Case Studies & Benchmarks
+- [`examples/`](examples/): Interactive tutorial companion executables:
+  - `example-nanopass` (Nanopass compiler pass & desugaring)
+  - `example-resilient` (Resilient parsing & error ASTs)
+  - `example-database` (Rel8 queries & Persistent serialization)
+  - `example-effects` (Extensible algebraic arrow ropes)
+  - `example-mcp-server` (Federated Context & Memory MCP server capstone)
 - [`benchmark/variants`](benchmark/variants): Empirical compile-time measurement
   harness validating linear scaling against plain GHC data types and type-level search.
 

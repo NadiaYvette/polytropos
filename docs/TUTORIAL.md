@@ -21,11 +21,25 @@ cabal run example-nanopass
 # Build and run the Resilient Parsing tutorial (Addendum B)
 cabal run example-resilient
 
+# Build and run the Relational Database Models & Persistent Schemas tutorial (Addendum C)
+cabal run example-database
+
+# Build and run the Extensible Algebraic Effects & Ropes tutorial (Addendum D)
+cabal run example-effects
+
+# Build and run the Federated Context & Memory MCP Server Capstone (Addendum E)
+cabal run example-mcp-server
+
 # Or explore the types and combinators interactively in GHCi
 cabal repl example-resilient
 ```
 
-The executable source code is located at [`examples/nanopass/src/Main.hs`](../examples/nanopass/src/Main.hs) and [`examples/resilient/src/Main.hs`](../examples/resilient/src/Main.hs).
+The executable companion source code is located under [`examples/`](../examples/):
+- [`examples/nanopass/src/Main.hs`](../examples/nanopass/src/Main.hs) (Addendum A)
+- [`examples/resilient/src/Main.hs`](../examples/resilient/src/Main.hs) (Addendum B)
+- [`examples/database/src/Main.hs`](../examples/database/src/Main.hs) (Addendum C)
+- [`examples/effects/src/Main.hs`](../examples/effects/src/Main.hs) (Addendum D)
+- [`examples/mcp-server/src/Main.hs`](../examples/mcp-server/src/Main.hs) (Addendum E)
 
 ### Standard GHC Extensions & Setup
 
@@ -661,21 +675,303 @@ cabal run example-resilient
 
 ---
 
-## Upcoming Addenda in this Series
+## Addendum C: Relational Database Models & Persistent Schemas
 
-| Addendum | Architecture | Core Primitives Demonstrated |
-|---|---|---|
-| **Addendum C** | *Relational Database Models* | High-throughput SQL table schemas and query projection with `polytropos-rel8` and `polytropos-persistent`. |
-| **Addendum D** | *Extensible Algebraic Effects* | Modular effect rows and $\mathcal{O}(1)$ handler dispatch with `effectful-polytropos` and `kernmantle-polytropos`. |
+### C.1 Motivation: The Wide-Table Problem in Haskell Databases
+Relational database tables in production systems rarely resemble toy tutorial examples. A real-world database table—such as an enterprise `users`, `invoices`, or `transactions` table—typically contains between 15 and 60 columns.
+
+When interacting with relational backends in standard Haskell, developers face severe architectural bottlenecks:
+1. **The 62-Column GHC Tuple Ceiling:** Standard Haskell tuples cap at 62 fields. If an SQL query selects more than 62 columns, GHC cannot construct the result tuple, forcing developers into fragile nested pairs or raw string manipulation.
+2. **Nominal Record Proliferation:** Adding, dropping, or projecting columns (e.g. projecting a 3-column summary view from a 15-column table) requires declaring new nominal data types and writing repetitive projection boilerplate:
+   ```haskell
+   -- The tedious boilerplate required by traditional nominal records:
+   toSummary :: FullUser -> UserSummary
+   toSummary u = UserSummary { name = u.name, role = u.role, active = u.active }
+   ```
+3. **Template Haskell Compilation Tax:** Libraries like `persistent` often rely on heavy Template Haskell quasi-quoters (`[persistLowerCase| ... |]`). Modifying a single column triggers extensive recompilation cascades.
+
+### C.2 Solution: Unified Open Rows Across Rel8 and Persistent
+With `polytropos`, relational tables and queries are modeled as open rows. Because `polytropos` records are backed by a single flat `SmallArray`, they exhibit:
+- **Zero Arity Limit:** Schemas can have 10, 50, or 500 columns with no tuple limit.
+- **$\mathcal{O}(1)$ Column Access:** Compiles directly into literal array index offsets.
+- **Zero-Boilerplate Sub-Row Projection:** Any subset of columns is projected in $\mathcal{O}(N)$ payload copies via `projectRecord` without writing any conversion functions.
+
+Two dedicated satellite packages provide first-class integration:
+- `polytropos-rel8`: Connects open rows to Oliver Charles' `rel8` PostgreSQL framework, providing `PolyRow` for `Rel8able` schemas and type-safe SQL query expressions (`litRecord`, `hfield`).
+- `polytropos-persistent`: Bridges open rows to Yesod's `persistent` ORM, providing `PersistRow` for heterogeneous `[PersistValue]` marshalling and `PolyRowEntity` for entity keys.
+
+### C.3 Step-by-Step Architecture: The User Table Schema
+Let's examine how a 10-column database table is represented in [`examples/database/src/Main.hs`](../examples/database/src/Main.hs):
+
+```haskell
+-- | 10-column relational user entity row.
+type UserRow =
+  '[ "id"         ':= Int64
+   , "name"       ':= Text
+   , "email"      ':= Text
+   , "role"       ':= Text
+   , "tier"       ':= Text
+   , "active"     ':= Bool
+   , "points"     ':= Int64
+   , "quota"      ':= Int64
+   , "created_at" ':= Text
+   , "notes"      ':= Text
+   ]
+
+-- | Projection view: a 3-column summary subset.
+type UserSummaryRow =
+  '[ "name"   ':= Text
+   , "role"   ':= Text
+   , "active" ':= Bool
+   ]
+```
+
+### C.4 Lifting Open Rows to Rel8 SQL Expressions
+Using `polytropos-rel8`, we lift an in-memory record directly into a Rel8 SQL table expression (`PolyRow UserRow Expr`):
+
+```haskell
+let userTable :: PolyRow UserRow Expr
+    userTable = litRecord sampleUser
+
+    nameExpr :: Expr Text
+    nameExpr = hfield @"name" userTable
+
+    pointsExpr :: Expr Int64
+    pointsExpr = hfield @"points" userTable
+```
+
+Here:
+1. `litRecord` recursively traverses the row at compile time, lifting each field into `Rel8.lit`.
+2. `hfield @"name"` accesses the column expression using `HasField` typechecker resolution—completely avoiding manual tuple lens indexing.
+
+### C.5 Heterogeneous Persistent Marshalling
+Using `polytropos-persistent`, the same record marshals to and from Yesod's `[PersistValue]` rows in $\mathcal{O}(N)$ without intermediate tuples:
+
+```haskell
+-- Heterogeneous serialization
+let pvals :: [PersistValue]
+    pvals = toPersistFieldsRecord sampleUser
+
+-- Heterogeneous deserialization
+case fromPersistValuesRecord @UserRow pvals of
+  Left err -> putStrLn ("Decode failed: " ++ T.unpack err)
+  Right decodedUser -> putStrLn ("Decoded user: " ++ T.unpack decodedUser.name)
+```
+
+### C.6 Zero-Boilerplate Sub-Row Projection
+When an API endpoint or report only requires a subset of columns, `projectRecord` projects the 3-column `UserSummaryRow` from `sampleUser` with zero conversion boilerplate:
+
+```haskell
+let summary :: Record UserSummaryRow
+    summary = projectRecord sampleUser
+
+putStrLn ("User: " ++ T.unpack summary.name ++ " (" ++ T.unpack summary.role ++ ")")
+```
+The GHC typechecker plugin proves that `UserSummaryRow` is a structural sub-row of `UserRow` and synthesizes the exact memory indices to copy into the new `Record`.
+
+Run the full executable example:
+```bash
+cabal run example-database
+```
+
+---
+
+## Addendum D: Extensible Algebraic Effects & Higher-Kinded Ropes
+
+### D.1 Motivation: The Composition Crisis in Haskell Effects
+Managing side effects (database queries, logging, metrics, caching) in large Haskell applications has traditionally relied on one of three paradigms, each with trade-offs:
+1. **Monad Transformers (`MTL`):** Deep transformer stacks (`ReaderT (StateT (ExceptT ...)))`) suffer quadratic $O(N^2)$ instance resolution overhead and compile-time deceleration.
+2. **Free / Extensible Monads:** Deeply nested AST trees require $O(N)$ runtime tree walks for every effect invocation, incurring GC pressure and pointer chasing.
+3. **Effect Stacks (`effectful`, `polysemy`):** While fast, effect lists are typically closed type-level lists where changing the order or inserting a capability can break signatures across dozens of modules.
+
+### D.2 The Higher-Kinded Rope (`kernmantle-polytropos`)
+In pipeline-oriented and arrow-based applications (such as data pipelines, compiler passes, and microservices), effect composition is expressed naturally as an **extensible rope**:
+- **Strands:** Individual effect interfaces (e.g. `LoggerStrand`, `DatabaseStrand`, `MetricsStrand`).
+- **Mantle:** A record of active strands, modeled as an open row:
+  ```haskell
+  type AppMantle =
+    '[ "logger"  ':= LoggerStrand
+     , "db"      ':= DatabaseStrand
+     , "metrics" ':= MetricsStrand
+     ]
+  ```
+- **The Extensible Rope Arrow:**
+  ```haskell
+  newtype Rope (req :: Row) a b = Rope
+    { unRope :: Record req -> a -> IO b
+    }
+  ```
+
+### D.3 Composition via `SubRow` Projection
+Notice how individual pipeline steps declare **only** the strands they require. When composing steps sequentially (`(>>>)`) or in parallel fan-out (`(&&&)`), `SubRow` automatically reconciles capability requirements:
+
+```haskell
+-- Step 1 requires ONLY "logger" and "db"
+fetchAccountStep :: Rope '["logger" ':= LoggerStrand, "db" ':= DatabaseStrand] Text (Text, Int)
+
+-- Step 2 requires ONLY "db" and "metrics"
+chargeFeeStep :: Int -> Rope '["db" ':= DatabaseStrand, "metrics" ':= MetricsStrand] (Text, Int) (Text, Int)
+
+-- Step 3 requires ONLY "logger"
+auditStep :: Rope '["logger" ':= LoggerStrand] (Text, Int) Text
+
+-- Composite Pipeline: Chains Step 1 >>> Step 2 >>> Step 3
+-- Automatically infers the unified requirement row: 'AppMantle'!
+orderPipeline :: Rope AppMantle Text Text
+orderPipeline = fetchAccountStep >>> chargeFeeStep 25 >>> auditStep
+```
+
+When executing `orderPipeline`, each step receives its projected sub-mantle via `projectRecord`, executing at $\mathcal{O}(1)$ with zero runtime strand lookups!
+
+### D.4 Higher-Kinded Records (`RecordF`) & Capability Audits
+Beyond standard records, `polytropos` provides Higher-Kinded Records (`RecordF f r`), where every field slot is wrapped in a functor `f`.
+
+Using `RecordF`, we can inspect, mock, or audit capabilities before running a pipeline:
+- `RecordF Identity r`: Standard concrete runtime environment.
+- `RecordF Maybe r`: Environment with optional or disabled features.
+- `RecordF (Const [Text]) r`: Dry-run capability audit using `cfoldMapRecordF`.
+
+Run the full executable example:
+```bash
+cabal run example-effects
+```
+
+---
+
+## Addendum E: The Federated Context & Memory MCP Server Capstone
+
+### E.1 Motivation: Multi-Backend AI Tool Multiplexing
+Modern agentic AI architectures (such as Google Antigravity, Claude Desktop, and Claude Code) interact with codebases and knowledge stores via the **Model Context Protocol (MCP)**, an open standard built on JSON-RPC 2.0.
+
+In enterprise software engineering environments, an AI assistant must multiplex multiple distinct data backends:
+1. **Contextful:** High-speed local codebase search over SQLite3 FTS5 chunks, symbol indexes, and AST graphs.
+2. **Kioku:** Long-term agent episodic memory and knowledge claims stored in PostgreSQL event logs (via `hasql`).
+
+Implementing an MCP server in standard Haskell typically introduces extensive boilerplate:
+- Hand-writing JSON-RPC protocol envelopes.
+- Manually writing OpenAPI 3.0 input schemas for LLM tool calling.
+- Cascading `if-then-else` or string-matching dispatch blocks to execute tools.
+- Rigid response serialization that wastes expensive context window tokens.
+
+### E.2 The Polytropos MCP Solution (`polytropos-mcp`)
+The `polytropos-mcp` satellite package leverages the full four-quadrant design space of `polytropos`:
+1. **Tool Input Schemas as Product Rows:** Each tool's parameters are defined as an open product row (e.g. `SearchArgs`, `RecallArgs`).
+2. **Automatic OpenAPI 3.0 Schemas:** `recordToTool` automatically synthesizes valid OpenAPI 3.0 JSON Schema definitions directly from the type-level row structure!
+3. **Tools as a Sum Row (Variant):** The collection of all tools registered by the server is represented as an open variant:
+   ```haskell
+   type ServerToolsRow =
+     '[ "contextful_search" ':= SearchArgs
+      , "kioku_recall"      ':= RecallArgs
+      ]
+
+   type ServerTools = Variant ServerToolsRow
+   ```
+4. **$\mathcal{O}(1)$ Jump-Table Tool Dispatch:** Instead of linear string matching, `eliminateUniform` compiles the tool handlers into a hardware jump table.
+5. **Token-Budget Dynamic Sub-Row Compression:** When the LLM specifies a tight token budget, `projectRecord` dynamically sheds non-essential metadata fields before response serialization!
+
+### E.3 Walkthrough of the Capstone Implementation
+Let's walk through the architecture of [`examples/mcp-server/src/Main.hs`](../examples/mcp-server/src/Main.hs):
+
+#### Step 1: Defining Tool Arguments as Open Rows
+```haskell
+-- | Arguments for searching Contextful's SQLite FTS5 index.
+type SearchArgs =
+  '[ "query"     ':= Text
+   , "workspace" ':= Text
+   , "budget"    ':= Int
+   ]
+
+-- | Arguments for recalling memories from Kioku's PostgreSQL event store.
+type RecallArgs =
+  '[ "scope"     ':= Text
+   , "claim"     ':= Text
+   ]
+
+type ServerToolsRow =
+  '[ "contextful_search" ':= SearchArgs
+   , "kioku_recall"      ':= RecallArgs
+   ]
+
+type ServerTools = Variant ServerToolsRow
+```
+
+#### Step 2: Automatic Tool Registration & OpenAPI Synthesis
+```haskell
+serverTools :: [McpTool]
+serverTools =
+  [ recordToTool @"contextful_search"
+      "Search Contextful codebase FTS5 index across chunks and symbols"
+      (Proxy @SearchArgs)
+  , recordToTool @"kioku_recall"
+      "Recall agent memory and knowledge claims from Kioku PostgreSQL event store"
+      (Proxy @RecallArgs)
+  ]
+```
+`recordToTool` synthesizes the `tools/list` JSON response with zero runtime reflection or Template Haskell.
+
+#### Step 3: $\mathcal{O}(1)$ Jump-Table Dispatch & Token Compression
+```haskell
+-- Full result row with verbose scoring and workspace metadata
+type FullResultRow =
+  '[ "title"     ':= Text
+   , "path"      ':= Text
+   , "snippet"   ':= Text
+   , "score"     ':= Double
+   , "workspace" ':= Text
+   ]
+
+-- Compact result row (sub-row of FullResultRow)
+type CompactResultRow =
+  '[ "title"     ':= Text
+   , "path"      ':= Text
+   , "snippet"   ':= Text
+   ]
+
+serverHandler :: ServerTools -> IO [McpContent]
+serverHandler = eliminateUniform REC
+  { contextful_search = \args -> do
+      let rawResult :: Record FullResultRow
+          rawResult = REC
+            { title     = "Plugin Architecture Invariants"
+            , path      = "docs/notes/POLYTROPOS_DESIGN.md"
+            , snippet   = "Decisions D1-D10 collapse the four-quadrant design space into Rep."
+            , score     = 0.982
+            , workspace = args.workspace
+            }
+
+      -- Token-budget compression: if budget < 100 tokens, project to CompactResultRow!
+      if args.budget < 100
+        then do
+          let compact :: Record CompactResultRow
+              compact = projectRecord rawResult
+          pure [TextContent $ "[COMPACT] " <> compact.title <> ": " <> compact.snippet]
+        else do
+          pure [TextContent $ "[FULL] " <> rawResult.title <> " [" <> rawResult.path <> "]: " <> rawResult.snippet]
+
+  , kioku_recall = \args -> do
+      pure [TextContent $ "[KIOKU MEMORY] Recall from scope '" <> args.scope <> "': " <> args.claim]
+  }
+```
+
+### E.4 Running the Capstone Executable
+You can run the simulated interactive demo:
+```bash
+cabal run example-mcp-server
+```
+
+Or connect it directly to an MCP client (such as Claude Desktop or Antigravity) over standard input/output:
+```bash
+cabal run example-mcp-server -- --stdio
+```
 
 ---
 
 # Part III: Hands-on Reader Exercises
 
-To deepen your mastery, open [`examples/nanopass/src/Main.hs`](../examples/nanopass/src/Main.hs) and experiment with these exercises:
+To deepen your mastery, open the example files under [`examples/`](../examples/) and experiment with these exercises:
 
-### Exercise 1: Add a `"for_"` Loop
-Extend `SurfaceStmtRow` with a C-style for-loop:
+### Exercise 1: Add a `"for_"` Loop (Addendum A)
+Extend `SurfaceStmtRow` in [`examples/nanopass/src/Main.hs`](../examples/nanopass/src/Main.hs) with a C-style for-loop:
 ```haskell
 type SurfaceStmtRow =
   ("for_" := '[ "var" := String, "limit" := Int, "body" := [SurfaceStmt] ])
@@ -684,7 +980,7 @@ type SurfaceStmtRow =
 ```
 Now update `desugarStmt` to peel `"for_"` and lower it into an `"assign"` followed by a `"while_"`. Notice how your lowering passes compose naturally!
 
-### Exercise 2: Add an `"if_"` Statement to Core
+### Exercise 2: Add an `"if_"` Statement to Core (Addendum A)
 Add an `"if_"` statement to `CoreStmtRow`:
 ```haskell
 , "if_" := '[ "cond" := String, "thenB" := [CoreStmt], "elseB" := [CoreStmt] ]
@@ -694,9 +990,29 @@ Re-run `cabal run example-nanopass`. Notice that `desugarStmt` **still compiles 
 ### Exercise 3: Inspect Compiler Diagnostics
 Deliberately misspell a field name in a record (e.g. `val_` instead of `val`) or omit a constructor handler in `ppCore`. Observe how the `Polytropos.Plugin` intercepts the unsolved constraint and outputs a custom human-centric diagnostic suggesting the correct name.
 
-### Exercise 4: Add String Literals to the Resilient AST
+### Exercise 4: Add String Literals to the Resilient AST (Addendum B)
 Open [`examples/resilient/src/Main.hs`](../examples/resilient/src/Main.hs) and extend `ExprRow e` with a string literal:
 ```haskell
 , "str" := '[ "val" := String ]
 ```
 Update the tokenizer and `parseResilientExpr` to recognize double-quoted strings (e.g. `"hello"`). Notice how `collectSymbols`, `collectDiagnostics`, and the compilation gate adapt with minimal edits!
+
+### Exercise 5: Add a Timestamp Column to the Database Schema (Addendum C)
+Open [`examples/database/src/Main.hs`](../examples/database/src/Main.hs) and add an `"updated_at" ':= Text` column to `UserRow`. Notice how:
+1. `litRecord` automatically incorporates the new column into Rel8 expressions.
+2. `toPersistFieldsRecord` and `fromPersistValuesRecord` automatically adjust their payload arities without changing any typeclasses or instances.
+3. `projectRecord @UserSummaryRow` continues to compile without changes.
+
+### Exercise 6: Add an In-Memory Cache Strand (Addendum D)
+Open [`examples/effects/src/Main.hs`](../examples/effects/src/Main.hs) and define a `CacheStrand` storing key-value pairs in an `IORef (Map Text Text)`. Insert `"cache" ':= CacheStrand` into `AppMantle`, create a `cacheLookupStep`, and compose it with `fetchAccountStep >>> chargeFeeStep`. Notice how `SubRow` verifies capability requirements statically.
+
+### Exercise 7: Add a Git Diff Tool to the MCP Server (Addendum E)
+Open [`examples/mcp-server/src/Main.hs`](../examples/mcp-server/src/Main.hs) and add a new tool:
+```haskell
+type GitDiffArgs =
+  '[ "commit_a" ':= Text
+   , "commit_b" ':= Text
+   ]
+```
+Add `"git_diff" ':= GitDiffArgs` to `ServerTools`, register it with `recordToTool @"git_diff"`, and supply the handler in `eliminateUniform`. Test calling the new tool over JSON-RPC!
+

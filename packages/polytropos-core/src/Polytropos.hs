@@ -221,6 +221,10 @@ module Polytropos
   , type RecordF
   , type Variant
   , type VariantF
+    -- * Row Vocabulary & Types
+  , type Row
+  , type SumRow
+  , type ProductRow
 #if __GLASGOW_HASKELL__ >= 914
   , data Variant
   , data VariantF
@@ -263,6 +267,7 @@ module Polytropos
   , matchVariant
     -- * Re-exports
   , Pair(..)
+  , HasField(..)
   , RowEq(..)
   , RowShow(..)
   , RowFlavour(..)

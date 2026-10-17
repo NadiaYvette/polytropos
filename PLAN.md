@@ -66,8 +66,13 @@ Design note §6, in order:
 
 - [x] Candidate tutorial examples evaluation matrix (`docs/notes/TUTORIAL_EXAMPLES_EVALUATION.md`)
 - [x] Worked live Nanopass and Resilient Parsing tutorial executables in `examples/nanopass/` and `examples/resilient/` (`cabal run example-nanopass`, `cabal run example-resilient`)
+- [x] Part II Worked Real-World Case Studies and Companion Executables:
+  - [x] Addendum C: Relational Database Models & Persistent Schemas (`examples/database/`, `cabal run example-database`)
+  - [x] Addendum D: Extensible Algebraic Effects & Higher-Kinded Ropes (`examples/effects/`, `cabal run example-effects`)
+  - [x] Addendum E: Federated Context & Memory MCP Server Capstone (`examples/mcp-server/`, `cabal run example-mcp-server`)
+  - [x] Dedicated satellite package `packages/polytropos-mcp` (Model Context Protocol JSON-RPC 2.0 server)
 - [ ] Four-Audience documentation agenda overhaul:
-  - [x] Audience 1: Foundational 5-Lesson Plan + Nanopass & Resilient Parsing Addenda (`docs/TUTORIAL.md`) and refreshed `docs/NEWBIE_GUIDE.md`
+  - [x] Audience 1: Foundational 5-Lesson Plan + Addenda A, B, C, D, E (`docs/TUTORIAL.md`) and refreshed `docs/NEWBIE_GUIDE.md`
   - [x] Audience 2: Systematic Haddock audit & polish across `Polytropos` and `Polytropos.Core`
   - [x] Audience 3: Authoritative architectural guide & maintenance recipes (`docs/MAINTAINER_GUIDE.md`)
   - [x] Audience 4: AI context projections & agentic governance (`AGENTS.md`, `.agents/rules/`)
@@ -76,3 +81,4 @@ Design note §6, in order:
 - [x] Milestone T4: HLS / IDE autocompletion and hover integration (`Development.IDE.Plugin.Completions.Logic`, `AtPoint`)
 - [x] Milestone T9: Multi-GHC Backward Compatibility Matrix (GHC 9.6.7 LTS through 9.14.1 with `Polytropos.Plugin.Compat` shim and universal SIMD `copySmallArray` fallback)
 - [ ] Collaborative human review and polish of revised documentation tiers
+

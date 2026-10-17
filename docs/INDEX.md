@@ -7,7 +7,7 @@ Status: LIVING DOCUMENT · v0.1 · 2026-10-05
 | Path | Genre | Stage | Tier | Flags |
 |---|---|---|---|---|
 | `NEWBIE_GUIDE.md` | guide | live | cross-cutting | — |
-| `TUTORIAL.md` | tutorial | live | cross-cutting | Live compilable Nanopass tutorial (`cabal run example-nanopass`) |
+| `TUTORIAL.md` | tutorial | live | cross-cutting | Hands-on tutorial with 5 live executables (`example-nanopass`, `example-resilient`, `example-database`, `example-effects`, `example-mcp-server`) |
 | `MAINTAINER_GUIDE.md` | guide | live | cross-cutting | — |
 | `notes/POLYTROPOS_DESIGN.md` | design | draft | cross-cutting | §4 answered; §7 Q1–Q3 closed; §7 Q4 nuanced; §7 Q5 open |
 | `notes/DESIGN_REVIEW_CLAUDE-OPUS-4.6.md` | review | draft | cross-cutting | — |
