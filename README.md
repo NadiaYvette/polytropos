@@ -211,7 +211,11 @@ Package roles, directory conventions, and reuse rules are documented in
 
 ## Documentation & Reading Paths
 
-- **Newcomer / Contributor**: Start with [`docs/NEWBIE_GUIDE.md`](docs/NEWBIE_GUIDE.md)
+- **Hands-on Tutorial**: Start with [`docs/TUTORIAL.md`](docs/TUTORIAL.md)
+  for the foundational 5-lesson curriculum and real-world worked case studies
+  (Nanopass compilers, resilient parsing, relational databases, algebraic effect ropes,
+  and the federated Context & Memory MCP Server capstone).
+- **Newcomer / Contributor**: See [`docs/NEWBIE_GUIDE.md`](docs/NEWBIE_GUIDE.md)
   for token-conservation workflows, symbol navigation, and build commands.
 - **Maintainer / Lead**: See [`docs/MAINTAINER_GUIDE.md`](docs/MAINTAINER_GUIDE.md)
   for engineering governance, plugin invariants, and the zero-contamination doctrine.
