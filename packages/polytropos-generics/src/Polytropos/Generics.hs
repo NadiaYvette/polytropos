@@ -97,65 +97,60 @@ over 'Data.Primitive.SmallArray.SmallArray' with literal dictionary dispatch.
 Open records and variants already provide built-in instances of 'Generic' and
 'GInstances' via the typechecker plugin's 'AllFields' evidence synthesis:
 
-@
-import Polytropos
-import Polytropos.Generics
-
--- Create an open record
-person :: Record '["name" ':= String, "age" ':= Int]
-person = insertField (Field \@"name") "Alice"
-       $ insertField (Field \@"age")  (30 :: Int)
-       $ emptyRecord
-
--- 1. Structural equality:
-isEqual :: Bool
-isEqual = geq person person  -- True
-
--- 2. Uniform type-directed mapping:
--- Double every numeric field in a record:
-doubled :: Record '["x" ':= Int, "y" ':= Int]
-doubled = gmap \@Num (* 2)
-        $ insertField (Field \@"x") (10 :: Int)
-        $ insertField (Field \@"y") (20 :: Int)
-        $ emptyRecord
-
--- 3. Folding across heterogeneous fields:
-summary :: String
-summary = gfoldMap \@Show (\\x -> show x ++ "; ") person
--- Evaluates to: "\"Alice\"; 30; "
-@
+> {-# LANGUAGE DataKinds #-}
+>
+> import Polytropos
+> import Polytropos.Generics
+>
+> -- Create an open record using idiomatic REC syntax:
+> person :: Record '["name" ':= String, "age" ':= Int]
+> person = REC { name = "Alice", age = 30 }
+>
+> -- 1. Structural equality:
+> isEqual :: Bool
+> isEqual = geq person person  -- True
+>
+> -- 2. Uniform type-directed mapping:
+> -- Double every numeric field in a record:
+> doubled :: Record '["x" ':= Int, "y" ':= Int]
+> doubled = gmap @Num (* 2) (REC { x = 10, y = 20 })
+>
+> -- 3. Folding across heterogeneous fields:
+> summary :: String
+> summary = gfoldMap @Show (\x -> show x ++ "; ") person
+> -- Evaluates to: "\"Alice\"; 30; "
 
 == Mode B: Bridging Nominal ADTs
 
 Nominal Haskell types can implement 'Generic' and 'GInstances' to participate in
 flat array-based generic routines:
 
-@
-import Polytropos.Core
-import Polytropos.Generics
-import Data.Primitive.SmallArray
-import Unsafe.Coerce (unsafeCoerce)
-
-data Shape = Circle Double | Rectangle Double Double
-  deriving (Show, Eq)
-
-instance Generic Shape where
-  type RepOf Shape = Rep I Shape
-  from (Circle r)        = Rep 0 (smallArrayFromList [I (unsafeCoerce r)])
-  from (Rectangle w h)   = Rep 1 (smallArrayFromList [I (unsafeCoerce w), I (unsafeCoerce h)])
-  to (Rep 0 arr)         = let I r = indexSmallArray arr 0 in Circle (unsafeCoerce r)
-  to (Rep 1 arr)         = let I w = indexSmallArray arr 0; I h = indexSmallArray arr 1 in Rectangle (unsafeCoerce w) (unsafeCoerce h)
-  to _                   = error "invalid constructor tag"
-
-instance GInstances Eq Shape where
-  gdicts = smallArrayFromList
-    [ smallArrayFromList [mkDictAny \@Eq \@Double]
-    , smallArrayFromList [mkDictAny \@Eq \@Double, mkDictAny \@Eq \@Double]
-    ]
-
--- Usage:
--- geq (Circle 5.0) (Circle 5.0) == True
-@
+> {-# LANGUAGE TypeApplications #-}
+>
+> import Polytropos.Core
+> import Polytropos.Generics
+> import Data.Primitive.SmallArray
+> import Unsafe.Coerce (unsafeCoerce)
+>
+> data Shape = Circle Double | Rectangle Double Double
+>   deriving (Show, Eq)
+>
+> instance Generic Shape where
+>   type RepOf Shape = Rep I Shape
+>   from (Circle r)        = Rep 0 (smallArrayFromList [I (unsafeCoerce r)])
+>   from (Rectangle w h)   = Rep 1 (smallArrayFromList [I (unsafeCoerce w), I (unsafeCoerce h)])
+>   to (Rep 0 arr)         = let I r = indexSmallArray arr 0 in Circle (unsafeCoerce r)
+>   to (Rep 1 arr)         = let I w = indexSmallArray arr 0; I h = indexSmallArray arr 1 in Rectangle (unsafeCoerce w) (unsafeCoerce h)
+>   to _                   = error "invalid constructor tag"
+>
+> instance GInstances Eq Shape where
+>   gdicts = smallArrayFromList
+>     [ smallArrayFromList [mkDictAny @Eq @Double]
+>     , smallArrayFromList [mkDictAny @Eq @Double, mkDictAny @Eq @Double]
+>     ]
+>
+> -- Usage:
+> -- geq (Circle 5.0) (Circle 5.0) == True
 -}
 module Polytropos.Generics (
     -- * Generic Conversion Class

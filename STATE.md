@@ -46,8 +46,8 @@ All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
   Documented with high-level architectural exposition explaining the role of homogeneity
   reflection witnesses (`AllFieldsAre`, `AllCtorsHom`, `FieldNames`, `RowField`, `SumField`)
   in enabling direct flat `Rep` unrolling without intermediate binary trees or plugin resolution.
-- `polytropos-beam-test` passes 6 tests (30-column `Beamable` table: skeleton arity, lockstep
-  `zipBeamFieldsM`, `allBeamValues`, row-symbol column names; compiles in a fraction of a second).
+- `polytropos-beam-test` passes 8 tests (30-column `Beamable` table: skeleton arity, lockstep
+  `zipBeamFieldsM`, `allBeamValues`, row-symbol column names, and table construction/updates via `REC`, `REC_UPD`, `REC_F`, and `REC_UPD_F`; compiles in a fraction of a second).
 - `polytropos-openapi3-test` passes 7 tests (record object schemas with properties/required in row
   order, variant `oneOf` tagged unions, JSON roundtrip of the generated schemas).
 - `polytropos-cbor-test` passes 9 tests (heterogeneous open record codecs via `AllSerialise`,

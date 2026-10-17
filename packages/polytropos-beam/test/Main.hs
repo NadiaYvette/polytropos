@@ -18,9 +18,9 @@ import Data.Functor.Identity (Identity (..))
 import Data.Proxy            (Proxy (..))
 import Database.Beam.Schema.Tables (Beamable (..), Columnar' (..), Ignored,
                                     allBeamValues, tableValuesNeeded)
-import Polytropos            (Record)
+import Polytropos
 import Polytropos.Beam
-import Polytropos.Core       (Pair (..), RowRep (..), productRep)
+import Polytropos.Core       (RowRep (..), productRep)
 import Unsafe.Coerce         (unsafeCoerce)
 
 type Row30 =
@@ -78,4 +78,17 @@ main = defaultMain $ testGroup "Beam Integration"
                                (toBeamTable rec30)
       vals @?= (7 : 14 : 21 : 28 : replicate 26 (0 :: Int))
       fromBeamTable (toBeamTable rec30) `seq` () @?= ()
+  , testCase "beam table constructed with REC and updated with REC_UPD" $ do
+      let u1 :: Record '[ "id" ':= Int, "username" ':= String ]
+          u1 = REC { id = 1, username = "Alice" }
+          u2 = (REC_UPD u1) { username = "Bob" }
+          tbl = toBeamTable u2
+          vals = allBeamValues (\(Columnar' _) -> ()) tbl
+      length vals @?= 2
+      fromBeamTable tbl @?= u2
+  , testCase "HKD record updated with REC_UPD_F" $ do
+      let p1 :: RecordF Maybe '[ "id" ':= Maybe Int, "username" ':= Maybe String ]
+          p1 = REC_F { id = Just 1, username = Nothing }
+          p2 = (REC_UPD_F p1) { username = Just "Bob" }
+      p2 @?= REC_F { id = Just 1, username = Just "Bob" }
   ]

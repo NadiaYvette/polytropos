@@ -130,54 +130,88 @@ indexing, linear \(O(N)\) compile times, and human-readable compiler error diagn
 
 == 1. Open Records (Structural Products)
 
+With the @polytropos-plugin@ enabled in your project, open records are constructed,
+accessed, and functionally updated using native record syntax desugared at compile time:
+
+> {-# LANGUAGE DataKinds #-}
+> {-# LANGUAGE OverloadedRecordDot #-}
+>
 > import Polytropos
 >
-> -- Define an open record with fields "x" and "y":
+> -- 1a. Idiomatic construction using REC syntax:
 > myRec :: Record '["x" ':= Int, "y" ':= Bool]
-> myRec = insertField (Field @"x") (10 :: Int)
->       $ insertField (Field @"y") True
->       $ emptyRecord
+> myRec = REC { x = 10, y = True }
 >
-> -- Reading fields:
+> -- 1b. Reading fields via OverloadedRecordDot (or getField):
 > valX :: Int
-> valX = getField (Field @"x") myRec  -- 10
+> valX = myRec.x  -- 10
 >
-> -- Updating fields:
+> -- 1c. Functional record update using REC_UPD (or setField):
 > myRec' :: Record '["x" ':= Int, "y" ':= Bool]
-> myRec' = setField (Field @"x") 42 myRec
+> myRec' = (REC_UPD myRec) { x = 42 }
+>
+> -- 1d. Record pattern matching with field punning:
+> formatRec :: Record '["x" ':= Int, "y" ':= Bool] -> String
+> formatRec (REC { x, y }) = "x=" ++ show x ++ ", y=" ++ show y
+>
+> -- 1e. Underlying combinator fallback (usable without plugins):
+> myRecFallback :: Record '["x" ':= Int, "y" ':= Bool]
+> myRecFallback = insertField (Field @"x") (10 :: Int)
+>               $ insertField (Field @"y") True
+>               $ emptyRecord
 
 == 2. Open Variants (Structural Sums)
 
+Extensible variants represent open coproducts and are injected and pattern matched
+using idiomatic v'VAR' syntax:
+
+> {-# LANGUAGE DataKinds #-}
+>
 > import Polytropos
 >
 > type Event = Variant '["Click" ':= '["x" ':= Int, "y" ':= Int], "Quit" ':= '[]]
 >
-> -- Injecting into a variant:
+> -- 2a. Injecting into an open variant using VAR syntax:
 > clickEvent :: Event
-> clickEvent = Variant (Field @"Click")
->            $ insertField (Field @"x") 100
->            $ insertField (Field @"y") 200
->            $ emptyRecord
+> clickEvent = VAR { Click = REC { x = 100, y = 200 } }
 >
 > quitEvent :: Event
-> quitEvent = Variant (Field @"Quit") emptyRecord
+> quitEvent = VAR { Quit = emptyRecord }
 >
-> -- Pattern matching on a variant:
+> -- 2b. Pattern matching with VAR view patterns:
 > handleEvent :: Event -> String
-> handleEvent (Variant (Field @"Click") r) =
->   "Clicked at: " ++ show (getField (Field @"x") r) ++ "," ++ show (getField (Field @"y") r)
-> handleEvent (Variant (Field @"Quit") _) =
+> handleEvent (VAR { Click = REC { x, y } }) =
+>   "Clicked at: " ++ show x ++ "," ++ show y
+> handleEvent (VAR { Quit = _ }) =
 >   "Exiting application"
+>
+> -- 2c. Underlying combinator fallback:
+> clickEventFallback :: Event
+> clickEventFallback = injectVariant (Field @"Click") (insertField (Field @"x") 100 (insertField (Field @"y") 200 emptyRecord))
 
 == 3. Higher-Kinded Records (HKD)
 
+Polytropos provides first-class support for functorial / Higher-Kinded Data rows,
+where every field type @a@ is parameterized by an outer type constructor @f a@
+(e.g. 'Maybe' for partial forms or 'Identity' for validated domain entities):
+
+> {-# LANGUAGE DataKinds #-}
+>
 > import Polytropos
 >
-> -- A partial record where every field is wrapped in 'Maybe':
 > type PartialConfig = RecordF Maybe '["host" ':= String, "port" ':= Int]
 >
+> -- 3a. Constructing HKD records using REC_F:
 > configTemplate :: PartialConfig
-> configTemplate = insertFieldF (Field @"host") (Just "localhost")
+> configTemplate = REC_F { host = Just "localhost", port = Nothing }
+>
+> -- 3b. Functional updates on HKD records using REC_UPD_F:
+> activeConfig :: PartialConfig
+> activeConfig = (REC_UPD_F configTemplate) { port = Just 8080 }
+>
+> -- 3c. Underlying HKD combinator fallback:
+> configFallback :: PartialConfig
+> configFallback = insertFieldF (Field @"host") (Just "localhost")
 >                $ insertFieldF (Field @"port") Nothing
 >                $ emptyRecordF
 -}

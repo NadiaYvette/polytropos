@@ -45,21 +45,17 @@ field's own type, allowing heterogeneous column rows.
 * When executing high-throughput PostgreSQL queries with @hasql@ where rows have
   many columns or where open records are used as query results.
 
-= Worked Example
-
-@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeApplications #-}
-
-import qualified Hasql.Decoders as HD
-import Polytropos
-import Polytropos.Hasql
-
-type UserRow = Record '["id" ':= Int64, "age" ':= Int32]
-
-userDecoder :: HD.Row UserRow
-userDecoder = recordRow \@UserRow
-@
+> {-# LANGUAGE DataKinds #-}
+> {-# LANGUAGE TypeApplications #-}
+>
+> import qualified Hasql.Decoders as HD
+> import Polytropos
+> import Polytropos.Hasql
+>
+> type UserRow = Record '["id" ':= Int64, "age" ':= Int32]
+>
+> userDecoder :: HD.Row UserRow
+> userDecoder = recordRow @UserRow
 -}
 module Polytropos.Hasql
   ( -- * Row Decoder Construction

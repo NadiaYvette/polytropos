@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 module Main (main) where
 
 import Test.Tasty

@@ -49,23 +49,19 @@ constructor branch that triggered the property failure.
 
 * When property-testing systems that use @polytropos@ open records and variants.
 
-= Worked Example
-
-@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeApplications #-}
-
-import Test.QuickCheck
-import Polytropos
-import Polytropos.QuickCheck
-
-type User = Record '["id" ':= Int, "active" ':= Bool]
-
-prop_userPositiveId :: Property
-prop_userPositiveId = forAll (arbitrary \@User) $ \u ->
-  let uid = getField (Field \@"id") u
-  in uid == uid
-@
+> {-# LANGUAGE DataKinds #-}
+> {-# LANGUAGE OverloadedRecordDot #-}
+> {-# LANGUAGE TypeApplications #-}
+>
+> import Test.QuickCheck
+> import Polytropos
+> import Polytropos.QuickCheck
+>
+> type User = Record '["id" ':= Int, "active" ':= Bool]
+>
+> prop_userPositiveId :: Property
+> prop_userPositiveId = forAll (arbitrary @User) $ \u ->
+>   u.id == u.id
 -}
 module Polytropos.QuickCheck
   ( -- * Row and Sum Constraint Walks

@@ -45,26 +45,34 @@ In @polytropos-beam@, a table is backed by a single flat 'Data.Primitive.SmallAr
 
 = Worked Example
 
-@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeApplications #-}
-
-import Database.Beam
-import Polytropos
-import Polytropos.Beam
-
-type UserRow = '["id" ':= Int, "username" ':= String]
-type UserTable f = BeamTable UserRow f
-
--- Convert an open record into a Beam table:
-rec :: Record UserRow
-rec = insertField (Field \@"id") (1 :: Int)
-    $ insertField (Field \@"username") "Alice"
-    $ emptyRecord
-
-tbl :: UserTable Identity
-tbl = toBeamTable rec
-@
+> {-# LANGUAGE DataKinds #-}
+> {-# LANGUAGE OverloadedRecordDot #-}
+>
+> import Database.Beam
+> import Polytropos
+> import Polytropos.Beam
+>
+> type UserRow = '["id" ':= Int, "username" ':= String]
+> type UserTable f = BeamTable UserRow f
+>
+> -- 1. Construct an open record using idiomatic REC syntax:
+> userRec :: Record UserRow
+> userRec = REC { id = 1, username = "Alice" }
+>
+> -- 2. Convert to a Beam database table (zero-cost unwrap):
+> userTable :: UserTable Identity
+> userTable = toBeamTable userRec
+>
+> -- 3. Functional updates using REC_UPD prior to database serialization:
+> updatedUser :: Record UserRow
+> updatedUser = (REC_UPD userRec) { username = "Bob" }
+>
+> -- 4. Higher-Kinded Data (HKD) partial table with REC_F and REC_UPD_F:
+> partialUser :: RecordF Maybe UserRow
+> partialUser = REC_F { id = Just 1, username = Nothing }
+>
+> populatedUser :: RecordF Maybe UserRow
+> populatedUser = (REC_UPD_F partialUser) { username = Just "Bob" }
 -}
 module Polytropos.Beam
   ( -- * Beam Tables over Polytropos Rows

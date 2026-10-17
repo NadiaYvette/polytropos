@@ -66,21 +66,25 @@ library
 Once the plugin is enabled in your @.cabal@ file, field projections and constructor
 injections work seamlessly without manual instance declarations:
 
-@
-import Polytropos
-
--- The plugin computes literal index 0 for "name" and 1 for "age"
-type User = Record '["name" ':= String, "age" ':= Int]
-
-mkUser :: String -> Int -> User
-mkUser n a = insertField (Field \@"name") n
-           $ insertField (Field \@"age")  a
-           $ emptyRecord
-
--- Reading fields is compiled to direct O(1) array index lookup:
-userName :: User -> String
-userName = getField (Field \@"name")
-@
+> {-# LANGUAGE DataKinds #-}
+> {-# LANGUAGE OverloadedRecordDot #-}
+>
+> import Polytropos
+>
+> -- The plugin computes literal index 0 for "name" and 1 for "age"
+> type User = Record '["name" ':= String, "age" ':= Int]
+>
+> -- Idiomatic record construction via REC syntax:
+> mkUser :: String -> Int -> User
+> mkUser n a = REC { name = n, age = a }
+>
+> -- Reading fields is compiled to direct O(1) array index lookup:
+> userName :: User -> String
+> userName u = u.name
+>
+> -- Functional record updates desugar to setField:
+> updateUser :: User -> User
+> updateUser u = (REC_UPD u) { age = 31 }
 -}
 module Polytropos.Plugin
   ( -- * GHC Plugin Entry Point
