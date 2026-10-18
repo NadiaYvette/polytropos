@@ -13,8 +13,9 @@ All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
 - `polytropos-core` passes 45 tests (primitive SmallArray CoW updates, `setFieldsAt` batch updates,
   `MRep` transient builders, `Polytropos` consumer surface, `Record`, `Variant`, `peel`, `peelF`,
   `eliminateUniform`, `eliminateUniformM`, `eliminate`, `matchVariant`, SIMD CoW 64/100-field record scaling).
-- `polytropos-plugin-smoke` passes 54 tests with `-fplugin=Polytropos.Plugin` (`RowEq`, `RowShow`,
-  `RowEqSum`, `RowShowSum`, native `OverloadedRecordDot` on bare and `RecordF Maybe` records,
+- `polytropos-plugin-smoke` passes 55 tests with `-fplugin=Polytropos.Plugin` (`RowEq`, `RowShow`,
+  `RowEqSum`, `RowShowSum`, native `OverloadedRecordDot` on bare and `RecordF Maybe` records including
+  polymorphic inferred type variables with nominal equality constraint emission preventing GHCi RTS defaulting aborts,
   `AllFields` generic dictionary supply across standard and HKD product rows, `FieldIndex`/`ConstructorIndex` on HKD rows,
   compile-time `Refl` type equality rewriting for `FieldNames`, `SimpleFieldTypes`, and `FieldTypes`,
   `SubRow`/`SubSum` projection, injection, and narrowing evidence with `projectRecord`, `widenVariant`, and `narrowVariant`,
