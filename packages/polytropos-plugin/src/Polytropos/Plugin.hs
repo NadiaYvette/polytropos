@@ -84,7 +84,7 @@ injections work seamlessly without manual instance declarations:
 >
 > -- Functional record updates desugar to setField:
 > updateUser :: User -> User
-> updateUser u = (REC_UPD u) { age = 31 }
+> updateUser u = REC_UPD u { age = 31 }
 -}
 module Polytropos.Plugin
   ( -- * GHC Plugin Entry Point

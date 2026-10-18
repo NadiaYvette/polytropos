@@ -165,3 +165,73 @@ Orchestrated-by: <Engine>
 - `Assisted-by: Freebuff`
 
 **Inviolable rule:** Never use `Co-authored-by:` or `Signed-off-by:` for AI assistants. Only human developers can certify the DCO.
+
+---
+
+## 8. Interactive REPL Workflows (`cabal repl`, `ghci`, `stack repl`)
+
+Because `polytropos` uses a compiler plugin (`-fplugin=Polytropos.Plugin`) to resolve row constraints and lower syntactic sugar (`REC`, `VAR`, `REC_UPD`), the plugin must be active in your REPL session.
+
+### 8.1 In-Tree REPL (`cabal repl`)
+The fastest way to test code interactively in this repository:
+```bash
+# Start GHCi with polytropos and example components preloaded:
+cabal repl example-resilient
+
+# Or start a test suite target:
+cabal repl polytropos-plugin-smoke
+```
+Targets with `ghc-options: -fplugin=Polytropos.Plugin` declared in their `.cabal` stanza load the plugin automatically without manual `:set` commands.
+
+### 8.2 Ad-Hoc / Standalone `ghci`
+To launch GHCi outside of a preconfigured cabal target:
+```bash
+# Pass the plugin flag on invocation:
+ghci -package-env . -fplugin=Polytropos.Plugin
+```
+Or start a bare `ghci` and configure it dynamically:
+```haskell
+ghci> :set -package polytropos-core -package polytropos-plugin
+ghci> :set -fplugin=Polytropos.Plugin
+ghci> :set -XDataKinds -XTypeOperators -XOverloadedRecordDot -XTypeApplications
+ghci> import Polytropos
+ghci> r = REC { name = "Alice", age = 30 :: Int }
+ghci> r.name
+"Alice"
+ghci> REC_UPD r { age = 31 }
+REC { age = 31, name = "Alice" }
+```
+
+### 8.3 Downstream Projects (`cabal` & `stack`)
+- **Cabal:** In your `.cabal` file, add:
+  ```cabal
+  build-depends: polytropos-core, polytropos-plugin
+  ghc-options:   -fplugin=Polytropos.Plugin
+  ```
+  Then run `cabal repl`.
+- **Stack:** Launch the REPL with the plugin flag:
+  ```bash
+  stack repl --ghci-options="-fplugin=Polytropos.Plugin"
+  ```
+
+---
+
+## 9. IDE Setup & Upstream Toolchain Integrations
+
+For full editor intelligence, row completions, and formal verification:
+
+1. **Haskell Language Server (HLS):**
+   Standard HLS does not recognize row-polymorphic dot access (`rec.`). Use the official `polytropos` HLS fork from branch `polytropos-row-completions`:
+   - Hosted across 4 public git mirrors and Radicle (see [`docs/developer/UPSTREAM_REPOSITORIES_AND_INTEGRATIONS.md`](developer/UPSTREAM_REPOSITORIES_AND_INTEGRATIONS.md)).
+   - Features: full tab autocompletions for record fields and variant constructors, readable hover types (e.g. `Record { name :: String }`), `REC { .. }` wildcard expansion, and typo QuickFixes.
+   - Build and install:
+     ```bash
+     git clone https://github.com/NadiaYvette/haskell-language-server.git -b polytropos-row-completions
+     cd haskell-language-server && cabal build exe:haskell-language-server
+     ```
+2. **Formal Verification & Synthesis:**
+   - **LiquidHaskell:** Used out-of-process to verify refinement contracts and memory bounds in `verification/liquid/`.
+   - **Synquid:** Used for type-directed synthesis of record adapters in `synthesis/synquid/`.
+   - See [`docs/developer/LIQUIDHASKELL_AND_SYNQUID_GUIDE.md`](developer/LIQUIDHASKELL_AND_SYNQUID_GUIDE.md).
+3. **Source Formatters (Fourmolu, Ormolu, Brittany, Floskell):**
+   No formatter forks are needed. Standard formatters parse `polytropos` code out of the box using configuration profiles in [`rules/formatters/`](../rules/formatters/).

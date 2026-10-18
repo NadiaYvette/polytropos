@@ -18,6 +18,27 @@ Comprehensive `Control.Lens` optics integration for [polytropos](https://github.
   ```
 - **OverloadedLabels**: Native `#fieldName` lens syntax via `LabelOptic` integration.
 
+## Quick Example
+
+```haskell
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE OverloadedLabels #-}
+{-# OPTIONS_GHC -fplugin=Polytropos.Plugin #-}
+
+import Control.Lens
+import Polytropos
+import Polytropos.Lens
+
+type Account = Record '[ "id" := Int, "balance" := Double ]
+
+main :: IO ()
+main = do
+  let acc = REC { id = 101, balance = 500.0 }
+  -- Access and update with standard lens operators:
+  let acc' = acc & fieldLens @"balance" +~ 50.0
+  print (acc' ^. fieldLens @"balance")
+```
+
 ## License
 
 Dual-licensed under `EUPL-1.2 OR Apache-2.0`.

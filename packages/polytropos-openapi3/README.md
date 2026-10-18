@@ -14,6 +14,28 @@ Automatic OpenAPI 3.0 specification and JSON Schema generation for [polytropos](
 - **Full OpenAPI 3.0 Compliance**: Emits schemas directly consumed by Swagger UI, Redoc, and OpenAPI code generators.
 - **Customizable Schemas**: Combine with custom descriptions, examples, and formats.
 
+## Quick Example
+
+```haskell
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeApplications #-}
+{-# OPTIONS_GHC -fplugin=Polytropos.Plugin #-}
+
+import Data.OpenApi (toSchema, Schema)
+import Data.Proxy (Proxy (..))
+import Polytropos
+import Polytropos.OpenApi
+
+type User = Record '["id" ':= Int, "name" ':= String]
+
+user :: User
+user = REC { id = 1, name = "Alice" }
+
+-- Generate OpenAPI 3.0 schema directly from the row specification
+userSchema :: Schema
+userSchema = toSchema (Proxy @User)
+```
+
 ## License
 
 Dual-licensed under `EUPL-1.2 OR Apache-2.0`.

@@ -135,7 +135,7 @@ Why desugar at the parsed AST level:
    Developers write natural record syntax:
      @REC { name = "Alice", age = 30 }@
      @VAR { Ok = 200 }@
-     @(REC_UPD user) { age = 31 }@
+     @REC_UPD user { age = 31 }@
    without requiring language extensions that modify the lexical grammar or external
    preprocessors (like CPP or Template Haskell quotes).
 2. Elimination of Downstream Complexity:
@@ -355,7 +355,7 @@ extractAndCleanDeclarations decls =
 --    @VAR { Ok = 200 }@ or @VARIANT { Err = "msg" }@
 --    Lowered into @injectVariant #Tag val@.
 -- 4. Functional Record Update:
---    @(REC_UPD r) { x = 42 }@ or @REC_UPD (r { x = 42 })@
+--    @REC_UPD r { x = 42 }@ (or @REC_UPD (r { x = 42 })@ or @(REC_UPD r) { x = 42 }@)
 --    Lowered into chained @setField #x 42 r@ calls.
 -- 5. Open Variant Constructor Application:
 --    - Record payload: @Success { val = 200 }@ ==> @injectVariant #Success (REC { val = 200 })@
@@ -380,7 +380,7 @@ transformExpr knownRecs knownVars expr = case expr of
     , conStr == "VAR" || conStr == "VARIANT"
     -> desugarVariantCon flds
 
-  -- 4. Record Update: (REC_UPD r) { x = 42 } or REC_UPD (r { x = 42 }) or REC_UPD_F
+  -- 4. Record Update: REC_UPD r { x = 42 } or REC_UPD (r { x = 42 }) or (REC_UPD r) { x = 42 } or REC_UPD_F
   (matchRecordUpd -> Just (stripHsPar -> L _ (HsApp _ (stripHsPar -> L _ (HsVar _ (L _ nm))) r), flds))
     | let nmStr = occNameString (rdrNameOcc nm)
     , nmStr == "REC_UPD" || nmStr == "REC_UPD_F"

@@ -17,20 +17,32 @@ Row-polymorphic / open algebraic data types (ADTs) and high-performance matching
 ```haskell
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedRecordDot #-}
+{-# OPTIONS_GHC -fplugin=Polytropos.Plugin #-}
 
 import Polytropos
 
 type UserRow = '[ "id" := Int, "name" := String, "active" := Bool ]
 type User = Record UserRow
 
+-- 1. Construction without ($) grouping:
 alice :: User
-alice = insertField @"id" 42
-      $ insertField @"name" "Alice"
-      $ insertField @"active" True
-      $ emptyRecord
+alice = REC { id = 42, name = "Alice", active = True }
 
+-- 2. Direct field access via record dot syntax:
 userId :: Int
-userId = getField @"id" alice
+userId = alice.id
+
+-- 3. Functional record update without parentheses:
+alicePromoted :: User
+alicePromoted = REC_UPD alice { active = False }
+
+-- 4. Passing record expressions without ($):
+describeUser :: User -> String
+describeUser u = u.name ++ " (ID: " ++ show u.id ++ ")"
+
+summary :: String
+summary = describeUser REC { id = 101, name = "Bob", active = True }
 ```
 
 ## Documentation & Repository

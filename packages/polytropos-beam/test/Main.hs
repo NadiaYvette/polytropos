@@ -81,7 +81,7 @@ main = defaultMain $ testGroup "Beam Integration"
   , testCase "beam table constructed with REC and updated with REC_UPD" $ do
       let u1 :: Record '[ "id" ':= Int, "username" ':= String ]
           u1 = REC { id = 1, username = "Alice" }
-          u2 = (REC_UPD u1) { username = "Bob" }
+          u2 = REC_UPD u1 { username = "Bob" }
           tbl = toBeamTable u2
           vals = allBeamValues (\(Columnar' _) -> ()) tbl
       length vals @?= 2
@@ -89,6 +89,6 @@ main = defaultMain $ testGroup "Beam Integration"
   , testCase "HKD record updated with REC_UPD_F" $ do
       let p1 :: RecordF Maybe '[ "id" ':= Maybe Int, "username" ':= Maybe String ]
           p1 = REC_F { id = Just 1, username = Nothing }
-          p2 = (REC_UPD_F p1) { username = Just "Bob" }
+          p2 = REC_UPD_F p1 { username = Just "Bob" }
       p2 @?= REC_F { id = Just 1, username = Just "Bob" }
   ]

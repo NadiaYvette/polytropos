@@ -41,6 +41,70 @@ The executable companion source code is located under [`examples/`](../examples/
 - [`examples/effects/src/Main.hs`](../examples/effects/src/Main.hs) (Addendum D)
 - [`examples/mcp-server/src/Main.hs`](../examples/mcp-server/src/Main.hs) (Addendum E)
 
+### Interactive REPL Exploration (`cabal repl`, `ghci`, `stack repl`)
+
+Because `polytropos` uses a compiler plugin (`-fplugin=Polytropos.Plugin`) to solve row constraints (`FieldIndex`, `ConstructorIndex`, `SubRow`, `SubSum`) and desugar syntactic sugar (`REC`, `VAR`, `REC_UPD`), running an interactive REPL requires activating the plugin in your session.
+
+#### 1. Inside the Repository with `cabal repl` (Easiest)
+Any test or example target in this repository already has the plugin enabled in its `.cabal` file:
+```bash
+# Start GHCi with polytropos and example components preloaded:
+cabal repl example-resilient
+# or test suites:
+cabal repl polytropos-plugin-smoke
+```
+Once inside the REPL, type declarations, `REC`, `r.field` dot syntax, and unparenthesized `REC_UPD` work immediately!
+
+#### 2. Standalone `ghci` (Ad-Hoc Exploration)
+If launching GHCi directly outside a configured project:
+```bash
+# Launch GHCi with the plugin loaded from the current environment:
+ghci -package-env . -fplugin=Polytropos.Plugin
+```
+Or start a bare `ghci` and activate the plugin and extensions dynamically at the prompt:
+```haskell
+ghci> :set -package polytropos-core -package polytropos-plugin
+ghci> :set -fplugin=Polytropos.Plugin
+ghci> :set -XDataKinds -XTypeOperators -XOverloadedRecordDot -XTypeApplications
+ghci> import Polytropos
+```
+
+#### 3. In Downstream Projects with `cabal` or `stack`
+- **In `cabal` projects:** Add the plugin to your component's stanza in `.cabal`:
+  ```cabal
+  build-depends: polytropos-core, polytropos-plugin
+  ghc-options:   -fplugin=Polytropos.Plugin
+  ```
+  Then simply run `cabal repl`.
+- **In `stack` projects:** Add `polytropos-core` and `polytropos-plugin` to `extra-deps` / `package.yaml`, and start the REPL with:
+  ```bash
+  stack repl --ghci-options="-fplugin=Polytropos.Plugin"
+  ```
+
+#### 4. Live REPL Walkthrough
+Here is an actual interactive session you can follow step-by-step:
+```haskell
+ghci> :set -fplugin=Polytropos.Plugin -XDataKinds -XTypeOperators -XOverloadedRecordDot -XTypeApplications
+ghci> import Polytropos
+
+-- 1. Construct an open record:
+ghci> u1 = REC { name = "Alice", age = 30 :: Int, active = True }
+ghci> u1.name
+"Alice"
+ghci> u1.age
+30
+
+-- 2. Update a field with unparenthesized REC_UPD:
+ghci> u2 = REC_UPD u1 { age = 31 }
+ghci> u2.age
+31
+
+-- 3. Construct an open variant:
+ghci> v1 = VAR { ok = REC { code = 200 :: Int, message = "Success" } }
+ghci> :type v1
+v1 :: Variant '[ "ok" ':= '[ "code" ':= Int, "message" ':= [Char] ] ]
+```
+
 ### Standard GHC Extensions & Setup
 
 To use `polytropos`, your modules typically require the typechecker plugin and a standard set of GHC language extensions:
@@ -165,6 +229,22 @@ partialUser :: PartialUser
 partialUser = REC_F { name = Just "Alice", age = Nothing }
 ```
 
+> [!TIP] Syntactic Ergonomics: Eliding `$` for Record Expressions and `BlockArguments`
+> In Haskell grammar, record construction `REC { ... }` and `VAR { ... }` parses as an atomic expression (`aexp`). This means function application does not need infix `$` grouping:
+> ```haskell
+> -- Clean function application without '$' or extra parentheses:
+> encode REC { name = "Alice", age = 30 }
+> handleCall VAR { search = REC { query = "polytropos", limit = 10 } }
+> ```
+> Combining this with `{-# LANGUAGE BlockArguments #-}` allows clean, modern Haskell idioms without `$` before blocks:
+> ```haskell
+> when (user.age >= 18) do
+>   notifyAdmin user
+>
+> forM users \u -> do
+>   processAccount u
+> ```
+
 ---
 
 ## Lesson 2: Accessing and Updating Fields
@@ -183,8 +263,11 @@ You can update fields functionally using `setField` or the `REC_UPD` syntax:
 -- Primitive update:
 let olderUser = setField (Field @"age") 31 user
 
--- Ergonomic record update syntax:
-let olderUser = (REC_UPD user) { age = 31 }
+-- Ergonomic unparenthesized record update syntax:
+let olderUser = REC_UPD user { age = 31 }
+
+-- Functorial/HKD partial record update:
+let updatedPartial = REC_UPD_F partialUser { age = Just 31 }
 ```
 
 ### 2.3 Update Performance: Copy-on-Write vs Batch Updates

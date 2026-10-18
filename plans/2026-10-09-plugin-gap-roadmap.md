@@ -158,7 +158,7 @@ constructable or constructable-with-pain.
 `Polytropos.Plugin` (`parsedResultAction`). Desugars:
 1. Record construction: `REC { x = 1, y = True }` (bare) and `REC_F { x = Just 1 }` (HKD) with field punning.
 2. Variant injection: `VAR { ok = ... }` / `VARIANT { err = ... }`.
-3. Record updates: `(REC_UPD r) { x = 42 }` and `REC_UPD (r { x = 42 })` into `setField` chains, and `REC_UPD_F` into `setFieldF` chains.
+3. Record updates: `REC_UPD r { x = 42 }` (and `REC_UPD (r { x = 42 })` or `(REC_UPD r) { x = 42 }`) into `setField` chains, and `REC_UPD_F` into `setFieldF` chains.
 4. Record pattern matching: `REC { a, b }` into view patterns using `recordField`.
 5. Variant pattern matching: `VAR { ok = p }` into view patterns using `projectVariant`.
 6. Open declaration forms: `data Person = Person { ... } deriving OpenRecord` and `data Status = Success { ... } | Failure { ... } deriving OpenVariant`, providing nominal syntax that operates over structural row-polymorphic records and variants.

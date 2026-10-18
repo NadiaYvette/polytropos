@@ -148,7 +148,7 @@ accessed, and functionally updated using native record syntax desugared at compi
 >
 > -- 1c. Functional record update using REC_UPD (or setField):
 > myRec' :: Record '["x" ':= Int, "y" ':= Bool]
-> myRec' = (REC_UPD myRec) { x = 42 }
+> myRec' = REC_UPD myRec { x = 42 }
 >
 > -- 1d. Record pattern matching with field punning:
 > formatRec :: Record '["x" ':= Int, "y" ':= Bool] -> String
@@ -207,7 +207,7 @@ where every field type @a@ is parameterized by an outer type constructor @f a@
 >
 > -- 3b. Functional updates on HKD records using REC_UPD_F:
 > activeConfig :: PartialConfig
-> activeConfig = (REC_UPD_F configTemplate) { port = Just 8080 }
+> activeConfig = REC_UPD_F configTemplate { port = Just 8080 }
 >
 > -- 3c. Underlying HKD combinator fallback:
 > configFallback :: PartialConfig

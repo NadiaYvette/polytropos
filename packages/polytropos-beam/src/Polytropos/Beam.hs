@@ -65,14 +65,14 @@ In @polytropos-beam@, a table is backed by a single flat 'Data.Primitive.SmallAr
 >
 > -- 3. Functional updates using REC_UPD prior to database serialization:
 > updatedUser :: Record UserRow
-> updatedUser = (REC_UPD userRec) { username = "Bob" }
+> updatedUser = REC_UPD userRec { username = "Bob" }
 >
 > -- 4. Higher-Kinded Data (HKD) partial table with REC_F and REC_UPD_F:
 > partialUser :: RecordF Maybe UserRow
 > partialUser = REC_F { id = Just 1, username = Nothing }
 >
 > populatedUser :: RecordF Maybe UserRow
-> populatedUser = (REC_UPD_F partialUser) { username = Just "Bob" }
+> populatedUser = REC_UPD_F partialUser { username = Just "Bob" }
 -}
 module Polytropos.Beam
   ( -- * Beam Tables over Polytropos Rows

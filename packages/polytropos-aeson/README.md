@@ -17,6 +17,7 @@ Unlike `GHC.Generics` which builds intermediate binary tree nodes (`(:*:)`, `(:+
 ```haskell
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedRecordDot #-}
 {-# OPTIONS_GHC -fplugin=Polytropos.Plugin #-}
 
 import Data.Aeson (encode, decode)
@@ -27,8 +28,13 @@ type Config = Record '[ "host" := String, "port" := Int ]
 
 main :: IO ()
 main = do
+  -- Direct serialization without ($) grouping:
   let cfg = REC { host = "localhost", port = 8080 } :: Config
   print (encode cfg)
+
+  -- Functional record update without parentheses:
+  let prodCfg = REC_UPD cfg { host = "prod.internal" }
+  print (encode prodCfg)
 ```
 
 ## License

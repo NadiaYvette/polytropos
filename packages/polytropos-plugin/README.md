@@ -22,6 +22,29 @@ build-depends:
 ghc-options: -fplugin=Polytropos.Plugin
 ```
 
+## Quick Example
+
+```haskell
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedRecordDot #-}
+{-# OPTIONS_GHC -fplugin=Polytropos.Plugin #-}
+
+import Polytropos
+
+type User = Record '[ "name" := String, "score" := Int ]
+
+main :: IO ()
+main = do
+  -- The plugin lowers REC into flat array construction:
+  let user = REC { name = "Alice", score = 100 }
+  putStrLn ("User: " ++ user.name)
+
+  -- The plugin solves REC_UPD into O(1) setField without parentheses:
+  let updated = REC_UPD user { score = 150 }
+  print updated.score
+```
+
 ## Features
 
 - **Literal Offset Resolution**: Solves `FieldIndex @"foo" r` directly to integer slot literals.

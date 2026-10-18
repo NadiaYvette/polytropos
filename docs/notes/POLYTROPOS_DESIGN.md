@@ -279,7 +279,7 @@ Plugin obligations, in order (design note §6):
 7. source-plugin syntactic devices & open declaration forms (`Polytropos.Plugin.Source`):
    - Anonymous record construction & punning: `REC { x = 1, y = True }` / `REC_F { msg = Just "ok" }`.
    - Anonymous variant injection: `VAR { ok = ... }` / `VARIANT { err = ... }`.
-   - Record update desugaring: `(REC_UPD r) { x = 42 }` into `setField` chains, `REC_UPD_F` for HKD.
+   - Record update desugaring: `REC_UPD r { x = 42 }` into `setField` chains, `REC_UPD_F` for HKD.
    - Record & variant pattern matching: desugars into view patterns (`recordField`, `projectVariant`).
    - Open declaration forms: `data Person = Person { ... } deriving OpenRecord` and
      `data Status = Success { ... } | Failure { ... } deriving OpenVariant`, providing ergonomic

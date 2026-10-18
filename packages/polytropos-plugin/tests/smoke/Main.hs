@@ -229,12 +229,12 @@ main = defaultMain $ testGroup "plugin RowEq/RowShow smoke"
             Nothing -> error "expected Just in projectVariant"
       , testCase "REC_UPD bare record update" $ do
           let r1 = REC { a = (10 :: Int), b = True }
-              r2 = (REC_UPD r1) { a = (42 :: Int) }
+              r2 = REC_UPD r1 { a = (42 :: Int) }
           r2.a @?= Identity (42 :: Int)
           r2.b @?= Identity True
       , testCase "REC_UPD_F HKD record update" $ do
           let r1 = REC_F { msg = Just ("hi" :: String), code = (Nothing :: Maybe Int) }
-              r2 = (REC_UPD_F r1) { code = (Just 200 :: Maybe Int) }
+              r2 = REC_UPD_F r1 { code = (Just 200 :: Maybe Int) }
           r2.msg @?= Just "hi"
           r2.code @?= Just (200 :: Int)
       , testCase "REC pattern matching (single and multiple fields)" $ do

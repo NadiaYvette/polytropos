@@ -246,6 +246,37 @@ Package roles, directory conventions, and reuse rules are documented in
     Pre-tested downstream configuration library (Fourmolu, Brittany, Floskell, Ormolu, Stan, HLint, Retrie, Tricorder).
 - **Corpus Map**: See [`docs/INDEX.md`](docs/INDEX.md) for full document inventory and reading paths.
 
+## Upstream Toolchain & IDE Integrations
+
+To deliver a fast, frictionless development workflow, `polytropos` integrates with the broader Haskell developer ecosystem:
+
+- **Haskell Language Server (HLS):**
+  Standard HLS does not recognize row-polymorphic dot access (`rec.field`). We maintain an upstream HLS fork branch [`polytropos-row-completions`](https://github.com/NadiaYvette/haskell-language-server/tree/polytropos-row-completions) (mirrored across GitHub, GitCode, Disroot, Framagit, and Radicle `rad:z2PsuDALqgWmYqoc978SgpPTVNT5o`) providing:
+  - Context-aware autocompletion for row fields and variant constructors.
+  - Readable hover type summaries (e.g. `Record { name :: String, age :: Int }` instead of raw compiler type families).
+  - Code actions for `REC { .. }` / `VAR { .. }` wildcard expansion and typo QuickFixes.
+  - To install:
+    ```bash
+    git clone https://github.com/NadiaYvette/haskell-language-server.git -b polytropos-row-completions
+    cd haskell-language-server && cabal build exe:haskell-language-server
+    ```
+- **Interactive REPL Exploration (`cabal repl`, `ghci`, `stack repl`):**
+  Launch interactive REPL sessions with compiler plugin support preloaded:
+  ```bash
+  # Inside repo:
+  cabal repl example-resilient
+  # Standalone ghci:
+  ghci -package-env . -fplugin=Polytropos.Plugin
+  ```
+  See [`docs/TUTORIAL.md`](docs/TUTORIAL.md#interactive-repl-exploration-cabal-repl-ghci-stack-repl) and [`docs/NEWBIE_GUIDE.md`](docs/NEWBIE_GUIDE.md#8-interactive-repl-workflows-cabal-repl-ghci-stack-repl) for step-by-step guides.
+- **Formal Verification & Synthesis:**
+  - **LiquidHaskell:** Out-of-process formal verification of array bounds and memory safety ([`docs/developer/LIQUIDHASKELL_AND_SYNQUID_GUIDE.md`](docs/developer/LIQUIDHASKELL_AND_SYNQUID_GUIDE.md)).
+  - **Synquid:** Out-of-process type-directed synthesis of row eliminators and adapters.
+- **Source Code Formatters:**
+  No formatter forks needed. Upstream formatters parse `polytropos` code out of the box using curated profiles in [`rules/formatters/`](rules/formatters/) (Fourmolu, Ormolu, Brittany, Floskell).
+- **Authoritative Integration Catalog:**
+  See [`docs/developer/UPSTREAM_REPOSITORIES_AND_INTEGRATIONS.md`](docs/developer/UPSTREAM_REPOSITORIES_AND_INTEGRATIONS.md) for full branch listings, commit hashes, and ecosystem port architecture.
+
 ## Build & Test
 
 Toolchain: GHC 9.14.1 / Cabal 3.18.

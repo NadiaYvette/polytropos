@@ -12,6 +12,24 @@ High-performance PostgreSQL row decoding and statement encoding integrating [pol
 - **Statement Encoders**: Encodes heterogeneous open records into query parameters.
 - **Arity Freedom**: Decodes wide database tables (e.g., >30 columns) beyond standard Haskell 62-tuple limits.
 
+## Quick Example
+
+```haskell
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -fplugin=Polytropos.Plugin #-}
+
+import qualified Hasql.Decoders as D
+import Polytropos
+import Polytropos.Hasql
+
+type MetricRow = '[ "metric" := String, "value" := Double ]
+
+-- Decode PostgreSQL columns directly into flat SmallArray slots:
+metricDecoder :: D.Row (Record MetricRow)
+metricDecoder = recordRow
+```
+
 ## License
 
 Dual-licensed under `EUPL-1.2 OR Apache-2.0`.
