@@ -268,6 +268,8 @@ import GHC.TcPlugin.API
   , mkNonCanonical
   , ctLoc
   , Role(..)
+  , mkEqPredRole
+  , splitAppTy_maybe
   , TcPluginRewriteResult(..)
   , mkTyFamAppReduction
   )
@@ -1761,20 +1763,30 @@ solveHasField state ct cls tys = do
                           getFieldExpr = mkCoreLams (tyVars ++ [rVar]) val
                           dictExpr = evDataConApp (classDataCon cls) tys [getFieldExpr]
 
-                      if isClosedType fieldTy && not validTy
-                        then do
-                          -- Field exists but context requested incompatible type: emit diagnostic
-                          let diagLines =
-                                [ "Polytropos Record Error:"
-                                , "  Field '" ++ unpackFS fieldName ++ "' in record has type:"
-                                , "    " ++ showSDocUnsafe (ppr actualFieldTy)
-                                , "  but context expected:"
-                                , "    " ++ showSDocUnsafe (ppr fieldTy)
-                                ]
-                          errCt <- mkTypeErrorCt state loc diagLines
-                          pure $ Left ((EvExpr dictExpr, ct), [errCt])
-                        else
+                      if validTy
+                        then
                           pure $ Left ((EvExpr dictExpr, ct), [])
+                        else if isClosedType fieldTy
+                          then do
+                            -- Field exists but context requested incompatible type: emit diagnostic
+                            let diagLines =
+                                  [ "Polytropos Record Error:"
+                                  , "  Field '" ++ unpackFS fieldName ++ "' in record has type:"
+                                  , "    " ++ showSDocUnsafe (ppr actualFieldTy)
+                                  , "  but context expected:"
+                                  , "    " ++ showSDocUnsafe (ppr fieldTy)
+                                  ]
+                            errCt <- mkTypeErrorCt state loc diagLines
+                            pure $ Left ((EvExpr dictExpr, ct), [errCt])
+                          else do
+                            -- Context type is not closed (e.g. unbound type variable alpha in GHCi):
+                            -- Emit nominal equality constraint to determine the result type
+                            -- and prevent GHCi defaulting alpha to ().
+                            let targetTy = case splitAppTy_maybe fieldTy of
+                                  Just (h, _) | h `eqType` fTy -> fFieldTy
+                                  _                            -> actualFieldTy
+                            eqEv <- newWanted loc (mkEqPredRole Nominal fieldTy targetTy)
+                            pure $ Left ((EvExpr dictExpr, ct), [mkNonCanonical eqEv])
                     Nothing -> do
                       -- Field not found: emit fuzzy typo suggestions and dummy HasField dictionary
                       case walkRowWithTypes_maybe rowTy of

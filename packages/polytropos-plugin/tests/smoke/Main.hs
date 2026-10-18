@@ -92,6 +92,9 @@ main = defaultMain $ testGroup "plugin RowEq/RowShow smoke"
           rHKD.msg @?= Just ("ok" :: String)
       , testCase "rHKD.code == Nothing on RecordF Maybe" $
           rHKD.code @?= (Nothing :: Maybe Int)
+      , testCase "bare Record dot projection with inferred type variable" $ do
+          let u = insertField (Field @"name") ("Alice" :: String) emptyRecord
+          show u.name @?= "\"Alice\""
       ]
   , testGroup "AllFields generic dictionary supply"
       [ testCase "supplies Show dictionaries for homogeneous product row" $
