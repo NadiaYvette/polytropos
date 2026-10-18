@@ -82,27 +82,54 @@ ghci> import Polytropos
   ```
 
 #### 4. Live REPL Walkthrough
-Here is an actual interactive session you can follow step-by-step:
+
+> [!IMPORTANT] GHC Interactive Prompt vs. Loaded Modules
+> In GHC's plugin architecture, **source plugins** (`parsedResultAction` lowering `REC`, `VAR`, `REC_UPD`) only run when compiling **modules** (`.hs` files, `:load`, `cabal repl`). Interactive statements typed directly at the `ghci>` prompt bypass the source plugin.
+> - **At the `ghci>` prompt:** Use the core combinators with `#labels` (`insertField`, `recordField`, `setField`, `injectVariant`).
+> - **In loaded modules (`:load Scratch.hs`):** Full syntactic sugar (`REC { ... }`, `VAR { ... }`, `REC_UPD`) is active!
+
+**Interactive Prompt Exploration:**
 ```haskell
-ghci> :set -fplugin=Polytropos.Plugin -XDataKinds -XTypeOperators -XOverloadedRecordDot -XTypeApplications
+ghci> :set -XDataKinds -XTypeApplications -XOverloadedLabels -XOverloadedRecordDot
 ghci> import Polytropos
 
--- 1. Construct an open record:
-ghci> u1 = REC { name = "Alice", age = 30 :: Int, active = True }
-ghci> u1.name
+-- 1. Construct an open record at the prompt:
+ghci> u1 = insertField #name "Alice" (insertField #age (30 :: Int) (insertField #active True emptyRecord))
+ghci> recordField #name u1
 "Alice"
-ghci> u1.age
+ghci> recordField #age u1
 30
 
--- 2. Update a field with unparenthesized REC_UPD:
-ghci> u2 = REC_UPD u1 { age = 31 }
-ghci> u2.age
+-- 2. Update a field functionally:
+ghci> u2 = setField #age 31 u1
+ghci> recordField #age u2
 31
 
 -- 3. Construct an open variant:
-ghci> v1 = VAR { ok = REC { code = 200 :: Int, message = "Success" } }
+ghci> v1 = injectVariant #ok (insertField #code (200 :: Int) emptyRecord)
 ghci> :type v1
-v1 :: Variant '[ "ok" ':= '[ "code" ':= Int, "message" ':= [Char] ] ]
+v1 :: Variant '[ "ok" ':= '[ "code" ':= Int ] ]
+```
+
+**Using `REC` and `VAR` interactively via a scratch file (`Scratch.hs`):**
+```haskell
+-- In Scratch.hs:
+{-# LANGUAGE DataKinds #-}
+{-# OPTIONS_GHC -fplugin=Polytropos.Plugin #-}
+module Scratch where
+import Polytropos
+
+u1 = REC { name = "Alice", age = 30 :: Int, active = True }
+u2 = REC_UPD u1 { age = 31 }
+```
+```haskell
+ghci> :load Scratch.hs
+[1 of 1] Compiling Scratch ( Scratch.hs, interpreted )
+Ok, one module loaded.
+ghci> u1.name
+"Alice"
+ghci> u2.age
+31
 ```
 
 ### Standard GHC Extensions & Setup

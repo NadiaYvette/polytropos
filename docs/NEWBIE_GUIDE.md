@@ -170,7 +170,12 @@ Orchestrated-by: <Engine>
 
 ## 8. Interactive REPL Workflows (`cabal repl`, `ghci`, `stack repl`)
 
-Because `polytropos` uses a compiler plugin (`-fplugin=Polytropos.Plugin`) to resolve row constraints and lower syntactic sugar (`REC`, `VAR`, `REC_UPD`), the plugin must be active in your REPL session.
+Because `polytropos` uses a dual-hook compiler plugin (`-fplugin=Polytropos.Plugin`), it is important to understand how GHC interacts with plugins in REPL sessions:
+
+> [!IMPORTANT] GHC Plugin Invariant: Module Compilation vs. Interactive Prompt
+> - **Source Plugin (`parsedResultAction`):** Desugars syntactic sugar (`REC { ... }`, `VAR { ... }`, `REC_UPD`) into core combinators. **GHC only executes source plugins when compiling modules (`.hs` files, `:load`, `:reload`).**
+> - **Interactive Prompt (`ghci>`):** Statements typed directly at the interactive prompt (`ghci> ...`) bypass GHC's source plugin hook. Therefore, at the `ghci>` prompt, use the core combinators with `#label` syntax (`insertField #name ...`, `recordField #name ...`, `setField #name ...`), OR define records inside a loaded module (`Scratch.hs`).
+> - **Typechecker Plugin (`tcPlugin`):** Runs everywhere—both in modules and at the `ghci>` prompt—solving all row constraints (`FieldIndex`, `ConstructorIndex`, `SubRow`, `SubSum`, `RowEq`, `RowShow`).
 
 ### 8.1 In-Tree REPL (`cabal repl`)
 The fastest way to test code interactively in this repository:
@@ -181,28 +186,62 @@ cabal repl example-resilient
 # Or start a test suite target:
 cabal repl polytropos-plugin-smoke
 ```
-Targets with `ghc-options: -fplugin=Polytropos.Plugin` declared in their `.cabal` stanza load the plugin automatically without manual `:set` commands.
+Targets with `ghc-options: -fplugin=Polytropos.Plugin` declared in their `.cabal` stanza load the plugin and all modules automatically.
 
-### 8.2 Ad-Hoc / Standalone `ghci`
-To launch GHCi outside of a preconfigured cabal target:
-```bash
-# Pass the plugin flag on invocation:
-ghci -package-env . -fplugin=Polytropos.Plugin
-```
-Or start a bare `ghci` and configure it dynamically:
+### 8.2 Interactive Prompt Walkthrough (`ghci>`)
+At the prompt, use the core combinators with `#labels` (`OverloadedLabels`):
 ```haskell
-ghci> :set -package polytropos-core -package polytropos-plugin
-ghci> :set -fplugin=Polytropos.Plugin
-ghci> :set -XDataKinds -XTypeOperators -XOverloadedRecordDot -XTypeApplications
+ghci> :set -XDataKinds -XTypeApplications -XOverloadedLabels -XOverloadedRecordDot
 ghci> import Polytropos
-ghci> r = REC { name = "Alice", age = 30 :: Int }
-ghci> r.name
+
+-- 1. Construct an open record using insertField:
+ghci> u1 = insertField #name "Alice" (insertField #age (30 :: Int) (insertField #active True emptyRecord))
+ghci> :type u1
+u1 :: Record '["name" := [Char], "age" := Int, "active" := Bool]
+
+-- 2. Access fields via recordField or dot syntax:
+ghci> recordField #name u1
 "Alice"
-ghci> REC_UPD r { age = 31 }
-REC { age = 31, name = "Alice" }
+ghci> recordField #age u1
+30
+
+-- 3. Functional updates via setField:
+ghci> u2 = setField #age 31 u1
+ghci> recordField #age u2
+31
+
+-- 4. Construct open variants via injectVariant:
+ghci> v1 = injectVariant #ok (insertField #code (200 :: Int) emptyRecord)
+ghci> :type v1
+v1 :: Variant '["ok" := '["code" := Int]]
 ```
 
-### 8.3 Downstream Projects (`cabal` & `stack`)
+### 8.3 Using Native `REC` / `VAR` / `REC_UPD` via Scratch Modules
+If you prefer writing the high-level `REC { ... }` and `VAR { ... }` syntax interactively, place your definitions in a scratch file (e.g. `Scratch.hs`):
+```haskell
+{-# LANGUAGE DataKinds #-}
+{-# OPTIONS_GHC -fplugin=Polytropos.Plugin #-}
+module Scratch where
+
+import Polytropos
+
+u1 = REC { name = "Alice", age = 30 :: Int, active = True }
+u2 = REC_UPD u1 { age = 31 }
+v1 = VAR { ok = REC { code = 200 :: Int, message = "Success" } }
+```
+Then load it into GHCi:
+```haskell
+ghci> :load Scratch.hs
+[1 of 1] Compiling Scratch ( Scratch.hs, interpreted )
+Ok, one module loaded.
+ghci> u1.name
+"Alice"
+ghci> u2.age
+31
+```
+Because `Scratch.hs` is compiled as a module, GHC invokes the source plugin, lowering all syntactic sugar seamlessly!
+
+### 8.4 Downstream Projects (`cabal` & `stack`)
 - **Cabal:** In your `.cabal` file, add:
   ```cabal
   build-depends: polytropos-core, polytropos-plugin
