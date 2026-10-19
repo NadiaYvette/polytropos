@@ -337,6 +337,11 @@ Milestone T9 has been implemented, tested, and deterministically verified across
 - `docs/developer/UPSTREAM_REPOSITORIES_AND_INTEGRATIONS.md` — authoritative catalog of upstream repositories modified for polytropos (`haskell-language-server`, `effectful`, `polysemy`, `kernmantle`, `synquid`, `stan` [branch `polytropos-compat`], `retrie`, `tricorder`), explaining modification rationale, branches, and why formatters need no forks
 - `rules/` — downstream developer rules & tool configuration library (`rules/formatters/`, `rules/hlint/`, `rules/retrie/`, `rules/stan/`, `rules/tricorder/`, `rules/README.md`)
 - `.agents/rules/` — subdivided AI coding assistant operational rules
+- `packages/polytropos-docrecords` and `packages/polytropos-reader-soup` — satellite packages ported from `porcupine`, providing documentation metadata on open records and $O(1)$ multi-context reader environments backed by flat `Record` representations.
+- Downstream algebraic effect systems ports (`effectful`, `polysemy`, `kernmantle`):
+  * `effectful` (`30a10ea`): `Effectful.Soup`, `Effectful.ReaderSoup`, and `Effectful.Labeled` backed by flat Polytropos records; 95/95 test suite passing; pushed to 5 remotes.
+  * `polysemy` (`830f3ec`): `Polysemy.ReaderSoup` with `HasSoup` fundep class, `Polysemy.Labeled` with `type (:::)` (fixity `infixr 6 :::`) and OverloadedLabels combinators; 102/102 test suite passing; pushed to 5 remotes.
+  * `kernmantle` (`96d4370`): `Control.Kernmantle.Rope.ReaderSoup` with `ReaderSoupEff`, `exSoup` executable, pure/Kleisli arrow weaving and `filteringSoup` sub-row projection; all targets building cleanly with zero warnings; pushed to 5 remotes.
 
 ## What is deliberately missing
 
