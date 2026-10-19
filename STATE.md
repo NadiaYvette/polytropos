@@ -62,6 +62,8 @@ All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
   `toRecord`/`fromRecord` and `columnsToRow`/`rowToColumns` roundtrips, and columnar combinators
   `hfield`, `hfieldAt`, `htabulate`, `hmap`, `htraverse`, `hzipWith`).
 - `polytropos-quickcheck-test` passes 9 tests (record and variant arbitrary generation and convergence shrinking).
+- `polytropos-docrecords-test` passes 5 tests (self-documenting extensible records with tri-state missing value semantics, multi-tier provenance tracking with deterministic precedence overriding, Markdown schema generation, partial JSON/YAML decoding with `YamlSource`, and `optparse-applicative` CLI parser synthesis). Re-architected from Yves Parès's `docrecords` package.
+- `polytropos-reader-soup-test` passes 6 tests (flat single-layer multi-context Reader environment, O(1) context retrieval via `askSoup`, O(K) sub-soup narrowing via `filtering` with compile-time `SubRow` evidence, `Spoon` with standard `MonadReader` instance and `local` modifications, modular context peeling with `pickTopping`/`eatTopping`/`finishBroth`, `consumeSoup` runner composition, and turnkey `ResourceT` integration via `Polytropos.ReaderSoup.Resource`). Re-architected from Yves Parès's `reader-soup` package.
 - **Model Context Protocol & Capstone Satellite (`polytropos-mcp`):**
   * Created native satellite package `packages/polytropos-mcp` implementing the MCP JSON-RPC 2.0 protocol over open rows.
   * Provides `recordToTool` for automatic OpenAPI 3.0 schema generation from open product rows (`Proxy r`), `toolCallToVariant` for JSON argument parsing into open variants (`Variant s`), and `dispatchToolCall` with $O(1)$ jump-table dispatch via `eliminateUniform`.

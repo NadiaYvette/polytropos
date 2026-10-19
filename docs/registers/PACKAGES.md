@@ -44,6 +44,8 @@ not used: `../notes/PROVENANCE.md`.
 | `packages/polytropos-optics` | `polytropos-optics` | native | — | EUPL-1.2 OR Apache-2.0 | Optics library lenses and affine traversals for open rows. |
 | `packages/polytropos-persistent` | `polytropos-persistent` | native | — | EUPL-1.2 OR Apache-2.0 | Yesod Persistent PersistValue marshalling and entity schemas for open rows. |
 | `packages/polytropos-quickcheck` | `polytropos-quickcheck` | native | — | EUPL-1.2 OR Apache-2.0 | Arbitrary and CoArbitrary instances for property testing open rows. |
+| `packages/polytropos-docrecords` | `polytropos-docrecords` | native | Yves Parès (`docrecords` / Porcupine) | EUPL-1.2 OR Apache-2.0 | Self-documenting extensible records with provenance tracking and optparse-applicative CLI synthesis. |
+| `packages/polytropos-reader-soup` | `polytropos-reader-soup` | native | Yves Parès (`reader-soup` / Porcupine) | EUPL-1.2 OR Apache-2.0 | Composable multi-context Reader monad with zero-overhead row polymorphism and ResourceT integration. |
 | `packages/polytropos-rel8` | `polytropos-rel8` | native | — | EUPL-1.2 OR Apache-2.0 | Rel8 Rel8able table schemas and SQL query expressions over open rows. |
 | `examples/nanopass` | `example-nanopass` | native | — | EUPL-1.2 OR Apache-2.0 | Worked Nanopass compiler tutorial executable (Addendum A). |
 | `examples/resilient` | `example-resilient` | native | — | EUPL-1.2 OR Apache-2.0 | Worked Resilient Parsing and Error Tolerance tutorial executable (Addendum B). |
