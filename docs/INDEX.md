@@ -26,6 +26,7 @@ Status: LIVING DOCUMENT · v0.1 · 2026-10-05
 | `notes/ADOPTION_BARRIERS_AND_MITIGATIONS.md` | design | draft | cross-cutting | — |
 | `notes/RELATED_WORK_AND_PRIOR_ART.md` | design | draft | cross-cutting | Comprehensive landscape survey of Haskell row/variant libraries, generics, and effect systems |
 | `notes/TUTORIAL_EXAMPLES_EVALUATION.md` | strategy | live | cross-cutting | — |
+| `notes/GHC_PLUGIN_REPL_INVESTIGATION.md` | notes | live | cross-cutting | GHC plugin mechanics, GHCi REPL interactive pipeline, CorePlugin limitations, and upstream contribution roadmap |
 | `tools/MODERNIZER_AND_LINTER_GUIDE.md` | guide | live | cross-cutting | HLint rules, Retrie rewrites, Stan inspections, and modernization CLI |
 | `tools/FORMAL_VERIFICATION_AND_SYNTHESIS_GUIDE.md` | guide | live | cross-cutting | LiquidHaskell formal verification, Synquid synthesis, and Tricorder continuous diagnostics |
 | `tools/SOURCE_FORMATTERS_AND_LAYOUT_GUIDE.md` | guide | live | cross-cutting | Fourmolu, Ormolu, Brittany, and Floskell configurations, fixtures, and runner |
