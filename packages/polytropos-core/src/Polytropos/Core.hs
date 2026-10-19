@@ -113,8 +113,11 @@ module Polytropos.Core (
   , setFieldsAt
   , setFieldSumAt
   , projectRep
+  , projectRepList
   , matchRep
+  , matchRepArr
   , peelRep
+  , peelRepList
     -- * Evidence classes
   , RowEq(..)
   , RowShow(..)
@@ -282,7 +285,8 @@ A critical challenge in extensible sum types (variants) is how to deconstruct th
 
    Polytropos achieves O(1) constructor peeling with ZERO heap reallocation:
    Given a variant Rep t arr and a target constructor tag targetTag:
-     - If t == targetTag: Match succeeds! Return Right containing the payload arr.
+     - If t == targetTag: Match succeeds! Return Right (Rep 0 arr) representing the
+       constructor payload directly as a product record.
      - If t < targetTag: The active constructor preceded the target constructor.
        In the narrowed row (where targetTag is deleted), its relative tag index is
        unchanged. Return Left (Rep t arr).
@@ -291,9 +295,10 @@ A critical challenge in extensible sum types (variants) is how to deconstruct th
        Return Left (Rep (t - 1) arr).
 
    Notice the critical invariant:
-   In both Left branches, the underlying SmallArray pointer arr is REUSED DIRECTLY.
-   Not a single field pointer is copied or moved. The constructor peeling operation
-   is a pure, instantaneous integer comparison and decrement!
+   In ALL branches (both Left and Right), the underlying SmallArray pointer arr
+   is REUSED DIRECTLY. Not a single field pointer is copied or moved. The
+   constructor peeling operation is a pure, instantaneous integer comparison,
+   tag overwrite, and pointer hand-off!
 -}
 
 {-------------------------------------------------------------------------------
@@ -774,12 +779,17 @@ setFieldSumAt expectedTag idx !val r@(Rep t _)
 
 -- | Project a constructor, or 'Nothing' if the tag does not match.
 --
--- A sum over a /superset/ of the row can therefore be narrowed, but only
--- observably: the failure is a 'Nothing', not a type error. See note §3, D8 for
--- why widening is total and narrowing is not.
-projectRep :: Word -> Rep f a -> Maybe [f Any]
+-- When matching, returns the constructor payload wrapped as a product representation
+-- (@Rep 0 v@) in \(\mathcal{O}(1)\) time with zero payload copying.
+projectRep :: Word -> Rep f a -> Maybe (Rep f b)
 projectRep t (Rep t' v)
-  | t == t'  = Just (toListSlots v)
+  | t == t'   = Just (Rep 0 v)
+  | otherwise = Nothing
+
+-- | Convenience helper returning constructor payload slots as a list.
+projectRepList :: Word -> Rep f a -> Maybe [f Any]
+projectRepList t (Rep t' v)
+  | t == t'   = Just (toListSlots v)
   | otherwise = Nothing
 
 -- | Eliminate a sum: hand the tag and the selected payload to a continuation.
@@ -790,16 +800,28 @@ projectRep t (Rep t' v)
 matchRep :: (Word -> [f Any] -> a) -> Rep f a -> a
 matchRep k r = k (repTag r) (toListSlots (repVals r))
 
+-- | Eliminate a sum passing the payload as a flat 'SmallArray' without list allocation.
+matchRepArr :: (Word -> SmallArray (f Any) -> a) -> Rep f a -> a
+matchRepArr k r = k (repTag r) (repVals r)
+
 -- | Peel a target tag from a sum representation in \(\mathcal{O}(1)\) time.
 --
 -- [ref:note-peeling-elimination]
--- If @repTag r == targetTag@, returns @Right (toListSlots (repVals r))@.
+-- If @repTag r == targetTag@, returns @Right (Rep 0 v)@ representing the payload
+-- as a product representation.
 -- Otherwise, returns @Left r'@ where the remaining tag is preserved if
 -- @repTag r < targetTag@, or decremented by 1 if @repTag r > targetTag@.
 --
 -- Complexity: \(\mathcal{O}(1)\) time, requiring zero array payload copying or allocations.
-peelRep :: Word -> Rep f a -> Either (Rep f a) [f Any]
+peelRep :: Word -> Rep f a -> Either (Rep f a) (Rep f b)
 peelRep targetTag (Rep t v)
+  | t == targetTag = Right (Rep 0 v)
+  | t < targetTag  = Left (Rep t v)
+  | otherwise      = Left (Rep (t - 1) v)
+
+-- | Convenience helper returning matching constructor payload as a list.
+peelRepList :: Word -> Rep f a -> Either (Rep f a) [f Any]
+peelRepList targetTag (Rep t v)
   | t == targetTag = Right (toListSlots v)
   | t < targetTag  = Left (Rep t v)
   | otherwise      = Left (Rep (t - 1) v)

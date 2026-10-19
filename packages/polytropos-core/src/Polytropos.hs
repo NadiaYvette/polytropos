@@ -310,8 +310,8 @@ module Polytropos
 import Polytropos.Core
 import Data.Functor.Identity (Identity(..))
 import Data.Kind (Type)
-import Data.Primitive.SmallArray (indexSmallArray, sizeofSmallArray, thawSmallArray, writeSmallArray, runSmallArray)
-import GHC.Exts (toList, Any)
+import Data.Primitive.SmallArray (copySmallArray, indexSmallArray, newSmallArray, runSmallArray, sizeofSmallArray, thawSmallArray, writeSmallArray)
+import GHC.Exts (Any)
 import GHC.Records (HasField(..))
 import GHC.TypeLits (Symbol)
 import Unsafe.Coerce (unsafeCoerce)
@@ -478,9 +478,15 @@ emptyRecordF :: RecordF f '[]
 emptyRecordF = RowRep (productRep [])
 
 -- | Insert a new field wrapped in @f@ into an HKD record.
-insertFieldF :: Field n -> f a -> RecordF f r -> RecordF f ((n ':= f a) ': r)
-insertFieldF _ fa (RowRep r) =
-  RowRep (productRep (unsafeCoerce fa : toList (repVals r)))
+insertFieldF :: forall n f a r. Field n -> f a -> RecordF f r -> RecordF f ((n ':= f a) ': r)
+insertFieldF _ fa (RowRep (Rep _ v)) =
+  let !n = sizeofSmallArray v
+      !val = unsafeCoerce fa
+      !v' = runSmallArray $ do
+        m <- newSmallArray (n + 1) val
+        copySmallArray m 1 v 0 n
+        pure m
+  in RowRep (Rep 0 v')
 
 -- | Construct an empty record.
 --
@@ -491,14 +497,21 @@ emptyRecord = RowRep (productRep [])
 -- | Insert a new field at the beginning of a record.
 --
 -- This extends the record's row type by prepending the new field. At runtime,
--- this copies the underlying array and adds the new value.
+-- this copies the underlying array using vectorized block copy and adds the new value
+-- with zero intermediate list allocations.
 --
 -- /Invariant/: This function expects the type-level field list to match the
 -- runtime representation. Using it sequentially correctly builds up a record
 -- in standard layout format.
-insertField :: Field n -> a -> Record r -> Record ((n ':= a) ': r)
-insertField _ a (RowRep r) =
-  RowRep (productRep (Identity (unsafeCoerce a) : toList (repVals r)))
+insertField :: forall n a r. Field n -> a -> Record r -> Record ((n ':= a) ': r)
+insertField _ a (RowRep (Rep _ v)) =
+  let !n = sizeofSmallArray v
+      !val = Identity (unsafeCoerce a)
+      !v' = runSmallArray $ do
+        m <- newSmallArray (n + 1) val
+        copySmallArray m 1 v 0 n
+        pure m
+  in RowRep (Rep 0 v')
 
 -- | Compute the payload product row of a constructor @n@ in a sum row @s@.
 type family ConstructorPayload (n :: Symbol) (s :: SumRow) :: Row where
@@ -513,17 +526,17 @@ type family ConstructorPayloadHKD (f :: Type -> Type) (n :: Symbol) (s :: SumRow
 -- | Inject an HKD record into an HKD variant for a specific constructor.
 injectVariantF :: forall (n :: Symbol) (f :: Type -> Type) (s :: SumRowHKD f) (fs :: ProductRow f).
                   ConstructorIndex n s => Field n -> RecordF f fs -> VariantF f s
-injectVariantF _ (RowRep r) =
-  RowRep (injectRep (constructorIndex @_ @n @s) (toList (repVals r)))
+injectVariantF _ (RowRep (Rep _ v)) =
+  RowRep (Rep (constructorIndex @_ @n @s) v)
 
--- | Project an HKD record from an HKD variant.
+-- | Project an HKD record from an HKD variant in \(\mathcal{O}(1)\) time.
 projectVariantF :: forall (n :: Symbol) (f :: Type -> Type) (s :: SumRowHKD f).
                    ConstructorIndex n s
                 => Field n -> VariantF f s -> Maybe (RecordF f (ConstructorPayloadHKD f n s))
 projectVariantF _ (RowRep r) =
   case projectRep (constructorIndex @_ @n @s) r of
-    Just vals -> Just (RowRep (productRep vals))
-    Nothing   -> Nothing
+    Just prodRep -> Just (RowRep prodRep)
+    Nothing      -> Nothing
 
 -- | Pattern synonym for matching and constructing HKD variants safely.
 --
@@ -534,19 +547,19 @@ pattern VariantF :: forall (n :: Symbol) (f :: Type -> Type) (s :: SumRowHKD f).
 pattern VariantF f r <- ( (\v -> (Field :: Field n, projectVariantF (Field :: Field n) v)) -> (f, Just r) )
   where VariantF f r = injectVariantF f r
 
--- | Inject a record of fields into a variant for a specific constructor.
+-- | Inject a record of fields into a variant for a specific constructor in \(\mathcal{O}(1)\) time.
 injectVariant :: forall n s fs. ConstructorIndex n s => Field n -> Record fs -> Variant s
-injectVariant _ (RowRep r) =
-  RowRep (injectRep (constructorIndex @_ @n @s) (toList (repVals r)))
+injectVariant _ (RowRep (Rep _ v)) =
+  RowRep (Rep (constructorIndex @_ @n @s) v)
 
--- | Project a specific constructor from a variant.
+-- | Project a specific constructor from a variant in \(\mathcal{O}(1)\) time.
 projectVariant :: forall (n :: Symbol) (s :: SumRow).
                   ConstructorIndex n s
                => Field n -> Variant s -> Maybe (Record (ConstructorPayload n s))
 projectVariant _ (RowRep r) =
   case projectRep (constructorIndex @_ @n @s) r of
-    Just vals -> Just (RowRep (productRep vals))
-    Nothing   -> Nothing
+    Just prodRep -> Just (RowRep prodRep)
+    Nothing      -> Nothing
 
 -- | A pattern synonym for matching and constructing variants safely.
 --
@@ -569,11 +582,18 @@ pattern Variant f r <- ( (\v -> (Field :: Field n, projectVariant (Field :: Fiel
 -- array of size @|sub|@ in a single linear pass.
 projectRecordF :: forall (f :: Type -> Type) (sub :: ProductRow f) (super :: ProductRow f).
                   SubRow sub super => RecordF f super -> RecordF f sub
-projectRecordF (RowRep rep) =
-  let vals = repVals rep
-      idxs = subRowIndices @sub @super
-      newSlots = [ indexSmallArray vals i | i <- idxs ]
-  in RowRep (productRep newSlots)
+projectRecordF (RowRep (Rep _ vals)) =
+  let idxs = subRowIndices @sub @super
+      !n = length idxs
+      !newArr = runSmallArray $ do
+        m <- newSmallArray n (error "projectRecordF: uninitialized slot")
+        let loop !_ [] = pure ()
+            loop !dst (src : rest) = do
+              writeSmallArray m dst (indexSmallArray vals src)
+              loop (dst + 1) rest
+        loop 0 idxs
+        pure m
+  in RowRep (Rep 0 newArr)
 
 -- | Project a sub-record from a super-record (bare).
 --
@@ -581,18 +601,25 @@ projectRecordF (RowRep rep) =
 --
 -- [ref:note-subtyping-combinators] [ref:note-subrow-subsum] [ref:note-subrow-subsum-mechanics]
 -- Complexity: \(\mathcal{O}(|sub|)\) array copy, with literal projection indices
--- precomputed at compile-time by the @Polytropos.Plugin@.
+-- precomputed at compile-time by the @Polytropos.Plugin@ and zero intermediate list allocations.
 --
 -- @
 -- let fullRec = REC { id = 1 :: Int, name = "Alice", role = "Admin" }
 --     subRec  = projectRecord @'["name" ':= String] fullRec
 -- @
 projectRecord :: forall sub super. SubRow sub super => Record super -> Record sub
-projectRecord (RowRep rep) =
-  let vals = repVals rep
-      idxs = subRowIndices @sub @super
-      newSlots = [ indexSmallArray vals i | i <- idxs ]
-  in RowRep (productRep newSlots)
+projectRecord (RowRep (Rep _ vals)) =
+  let idxs = subRowIndices @sub @super
+      !n = length idxs
+      !newArr = runSmallArray $ do
+        m <- newSmallArray n (error "projectRecord: uninitialized slot")
+        let loop !_ [] = pure ()
+            loop !dst (src : rest) = do
+              writeSmallArray m dst (indexSmallArray vals src)
+              loop (dst + 1) rest
+        loop 0 idxs
+        pure m
+  in RowRep (Rep 0 newArr)
 
 -- | Widen a variant from a sub-row to a super-row (HKD).
 --
@@ -687,8 +714,8 @@ peel :: forall (n :: Symbol) (s :: SumRow).
      -> Either (Variant (Delete n s)) (Record (ConstructorPayload n s))
 peel (RowRep r) =
   case peelRep (constructorIndex @_ @n @s) r of
-    Right vals -> Right (RowRep (productRep vals))
-    Left remR  -> Left (RowRep remR)
+    Right prodRep -> Right (RowRep prodRep)
+    Left remR     -> Left (RowRep remR)
 
 -- | Peel a constructor @n@ from an open HKD variant in \(\mathcal{O}(1)\) time.
 --
@@ -699,8 +726,8 @@ peelF :: forall (n :: Symbol) (f :: Type -> Type) (s :: SumRowHKD f).
       -> Either (VariantF f (Delete n s)) (RecordF f (ConstructorPayloadHKD f n s))
 peelF (RowRep r) =
   case peelRep (constructorIndex @_ @n @s) r of
-    Right vals -> Right (RowRep (productRep vals))
-    Left remR  -> Left (RowRep remR)
+    Right prodRep -> Right (RowRep prodRep)
+    Left remR     -> Left (RowRep remR)
 
 -- | Row of handler functions for a sum row @s@ returning a uniform result @res@.
 type family HandlerRecordRow (s :: SumRow) (res :: Type) :: Row where

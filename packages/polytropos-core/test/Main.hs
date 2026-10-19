@@ -196,19 +196,24 @@ sumTests = testGroup "sums"
       unslot (fieldAt 0 (injectRep 0 [slot (3 :: Int)])) @?= (3 :: Int)
   , testCase "projectRep succeeds on a matching tag" $
       (case projectRep 1 (injectRep 1 [slot True]) of
-         Just [_] -> True
-         _        -> False) @?= True
+         Just r  -> repArity r == 1
+         Nothing -> False) @?= True
   , testCase "projectRep fails on a mismatched tag" $
       (case projectRep 0 (injectRep 1 [slot True]) of
          Just _  -> False
          Nothing -> True) @?= True
   , testCase "projectRep round-trips the payload" $ do
       let got = case projectRep 0 (injectRep 0 [slot (42 :: Int)]) of
-                  Just [x] -> Just (unslot (x :: Identity Any) :: Int)
-                  _        -> Nothing
+                  Just r -> Just (unslot (fieldAt 0 r) :: Int)
+                  _      -> Nothing
       got @?= Just 42
   , testCase "projectRep round-trips at a non-zero tag" $ do
       let got = case projectRep 7 (injectRep 7 [slot (11 :: Int)]) of
+                  Just r -> Just (unslot (fieldAt 0 r) :: Int)
+                  _      -> Nothing
+      got @?= Just 11
+  , testCase "projectRepList round-trips payload as a list" $ do
+      let got = case projectRepList 7 (injectRep 7 [slot (11 :: Int)]) of
                   Just [x] -> Just (unslot (x :: Identity Any) :: Int)
                   _        -> Nothing
       got @?= Just 11

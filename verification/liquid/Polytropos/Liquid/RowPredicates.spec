@@ -75,9 +75,9 @@ assume eliminateUniformRep :: forall f res a.
 assume peelRep :: forall f a b.
      targetTag: {Word | targetTag >= 0}
   -> var: {Rep f a | repTag var >= 0}
-  -> {res: Either (f Any) (Rep f b) |
-       (isLeft res <=> repTag var == targetTag) &&
-       (isRight res <=> repTag var /= targetTag)}
+  -> {res: Either (Rep f a) (Rep f b) |
+       (isRight res <=> repTag var == targetTag) &&
+       (isLeft res <=> repTag var /= targetTag)}
 
 -- ============================================================================
 -- 5. Field Predicate Refinements

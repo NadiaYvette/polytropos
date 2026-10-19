@@ -284,5 +284,5 @@ prismVariant f = prism (injectVariant f) project
     project :: Variant s -> Either (Variant s) (Record fs)
     project (RowRep rep) =
       case projectRep (constructorIndex @_ @c @s) rep of
-        Just vals -> Right (RowRep (productRep vals))
-        Nothing   -> Left (RowRep rep)
+        Just prodRep -> Right (RowRep prodRep)
+        Nothing      -> Left (RowRep rep)

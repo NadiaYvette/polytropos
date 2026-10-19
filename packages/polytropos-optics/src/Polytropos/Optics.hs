@@ -110,5 +110,5 @@ ctorOptic f = prism' (injectVariant f) project
   where
     project :: Variant s -> Maybe (Record fs)
     project (RowRep r) = case projectRep (constructorIndex @_ @c @s) r of
-      Just vals -> Just (RowRep (productRep vals))
-      Nothing   -> Nothing
+      Just prodRep -> Just (RowRep prodRep)
+      Nothing      -> Nothing
