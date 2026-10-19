@@ -1112,11 +1112,17 @@ solveFieldIndex state ct cls tys
           -- Named field lookup by type-level Symbol
           case findFieldType fieldName rowTy of
             Just (i, actualTy)
-              -- Accept exact type match, or uninstantiated type variable awaiting unification
-              | actualTy `eqType` expectedATy || not (isClosedType expectedATy) -> do
+              -- Accept exact type match
+              | actualTy `eqType` expectedATy -> do
                   let iExpr = mkIntExpr i
                       dictExpr = evDataConApp (classDataCon cls) tys [iExpr]
                   pure $ Left ((EvExpr dictExpr, ct), [])
+              -- If either type is open / uninstantiated, emit nominal equality constraint to unify them
+              | not (isClosedType expectedATy) || not (isClosedType actualTy) -> do
+                  let iExpr = mkIntExpr i
+                      dictExpr = evDataConApp (classDataCon cls) tys [iExpr]
+                  eqEv <- newWanted loc (mkEqPredRole Nominal expectedATy actualTy)
+                  pure $ Left ((EvExpr dictExpr, ct), [mkNonCanonical eqEv])
               -- Terminal type discrepancy: emit diagnostic and safe dummy evidence
               | otherwise -> do
                   let dummyExpr = mkIntExpr 0
