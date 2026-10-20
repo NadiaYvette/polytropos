@@ -1,6 +1,6 @@
 cabal-version: 3.0
 name: polytropos-rel8
-version: 0.1.0.0
+version: 0.1.0.1
 synopsis: rel8 Rel8able table schemas and queries over polytropos open rows
 description:
   High-level type-safe PostgreSQL database mapping connecting <https://hackage.haskell.org/package/polytropos polytropos> open rows

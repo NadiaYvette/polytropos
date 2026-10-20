@@ -1,5 +1,10 @@
 # Changelog for polytropos-core
 
+## 0.1.0.1 — 2026-10-20
+
+- Performance optimization: eliminate lingering list conversions in peeling, projection and injection.
+- Repertoire expansion: coordinate release with `polytropos-profunctors` and `polytropos-reader-soup`.
+
 ## 0.1.0.0 — Initial Release
 
 - Core row vocabulary: `Row`, `SumRow`, `ProductRow`, `Pair((:=))`

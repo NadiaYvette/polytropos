@@ -1,6 +1,6 @@
 cabal-version: 3.0
 name: polytropos-quickcheck
-version: 0.1.0.0
+version: 0.1.0.1
 synopsis: QuickCheck generators and slot-indexed shrinkers for polytropos open rows
 description:
   Property-based testing integration connecting <https://hackage.haskell.org/package/polytropos polytropos> open records and variants

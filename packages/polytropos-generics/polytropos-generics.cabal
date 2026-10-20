@@ -1,6 +1,6 @@
 cabal-version: 3.0
 name: polytropos-generics
-version: 0.1.0.0
+version: 0.1.0.1
 synopsis: Structural datatype generics, representation bridging, and whole-data traversal
 description:
   Generic deriving, representation bridging, and structural traversal engine for <https://hackage.haskell.org/package/polytropos polytropos>.

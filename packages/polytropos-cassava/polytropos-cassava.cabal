@@ -1,6 +1,6 @@
 cabal-version: 3.0
 name: polytropos-cassava
-version: 0.1.0.0
+version: 0.1.0.1
 synopsis: Fast CSV codecs for polytropos open records via cassava
 description:
   CSV tabular serialization and deserialization connecting <https://hackage.haskell.org/package/polytropos polytropos> open records

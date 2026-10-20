@@ -1,6 +1,6 @@
 cabal-version: 3.14
 name: example-effects
-version: 0.1.0.0
+version: 0.1.0.1
 synopsis: Worked tutorial example of Extensible Algebraic Effects & Higher-Kinded Ropes
 description:
   Interactive tutorial companion executable demonstrating extensible arrow pipelines

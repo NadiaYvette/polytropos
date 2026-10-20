@@ -1,6 +1,6 @@
 cabal-version: 3.0
 name: polytropos-persistent
-version: 0.1.0.0
+version: 0.1.0.1
 synopsis: persistent database marshalling and entity wrappers for polytropos
 description:
   Integration bridging <https://hackage.haskell.org/package/polytropos polytropos> open records

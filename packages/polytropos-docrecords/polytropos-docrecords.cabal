@@ -1,6 +1,6 @@
 cabal-version: 3.0
 name: polytropos-docrecords
-version: 0.1.0.0
+version: 0.1.0.1
 synopsis: Self-documenting extensible records with provenance tracking and CLI generation
 description:
   Self-documenting extensible records for <https://hackage.haskell.org/package/polytropos polytropos>,

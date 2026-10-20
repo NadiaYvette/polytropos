@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               polytropos-core
-version:            0.1.0.0
+version: 0.1.0.1
 synopsis:           Row-polymorphic / open ADTs: rows, generic representation, evidence
 description:
   Core engine and consumer surface of <https://hackage.haskell.org/package/polytropos polytropos>:

@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               polytropos-plugin
-version:            0.1.0.0
+version: 0.1.0.1
 synopsis:           TcPlugin that emits literal evidence for Polytropos row classes
 description:
   A GHC typechecker plugin for <https://hackage.haskell.org/package/polytropos polytropos>

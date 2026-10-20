@@ -1,6 +1,6 @@
 cabal-version: 3.0
 name: polytropos-optics
-version: 0.1.0.0
+version: 0.1.0.1
 synopsis: optics-core integration for polytropos open records and variants
 description:
   Integration between <https://hackage.haskell.org/package/polytropos polytropos> and the

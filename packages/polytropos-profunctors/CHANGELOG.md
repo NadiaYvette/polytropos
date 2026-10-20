@@ -1,6 +1,6 @@
 # Changelog for polytropos-profunctors
 
-## 0.1.0.0 — Initial Release
+## 0.1.0.1 — Initial Release (2026-10-20)
 
 - Integration with the `profunctors` ecosystem for open records and variants
 - Pure profunctor lenses and prisms (`Lens`, `Prism`, `view`, `preview`, `review`, `over`, `set`)
