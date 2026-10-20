@@ -42,6 +42,7 @@ not used: `../notes/PROVENANCE.md`.
 | `packages/polytropos-microlens` | `polytropos-microlens` | native | — | EUPL-1.2 OR Apache-2.0 | Lightweight MicroLens lenses and prisms for open rows. |
 | `packages/polytropos-openapi3` | `polytropos-openapi3` | native | — | EUPL-1.2 OR Apache-2.0 | OpenAPI 3.0 schema generation for open records and variants. |
 | `packages/polytropos-optics` | `polytropos-optics` | native | — | EUPL-1.2 OR Apache-2.0 | Optics library lenses and affine traversals for open rows. |
+| `packages/polytropos-profunctors` | `polytropos-profunctors` | native | — | EUPL-1.2 OR Apache-2.0 | Pure profunctor optics (Strong lenses, Choice prisms) over flat SmallArray memory layout. |
 | `packages/polytropos-persistent` | `polytropos-persistent` | native | — | EUPL-1.2 OR Apache-2.0 | Yesod Persistent PersistValue marshalling and entity schemas for open rows. |
 | `packages/polytropos-quickcheck` | `polytropos-quickcheck` | native | — | EUPL-1.2 OR Apache-2.0 | Arbitrary and CoArbitrary instances for property testing open rows. |
 | `packages/polytropos-docrecords` | `polytropos-docrecords` | native | Yves Parès (`docrecords` / Porcupine) | EUPL-1.2 OR Apache-2.0 | Self-documenting extensible records with provenance tracking and optparse-applicative CLI synthesis. |

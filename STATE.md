@@ -39,6 +39,7 @@ All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
   and `RowRep`, `geq`, `gcompare`, `gshowsPrec`, `gmap`, `gfoldMap` over product and sum ADTs and plugin-solved rows,
   including HKD `RecordF Maybe`).
 - `polytropos-optics-test` passes 6 tests (`optics-core` + `LabelOptic` `#field` lenses and variant prisms).
+- `polytropos-profunctors-test` passes 8 tests (pure profunctor `Strong` lenses, `Choice` prisms, `view`/`preview`/`review`/`over`/`set`, compile-time `FieldIndex` `fieldLens`, `ConstructorIndex` `ctorPrism`, and `typedSlotLens`/`typedVariantPrism` over unboxed `SmallArray` memory).
 - `polytropos-microlens-test` passes 5 tests (homogeneous `each` traversal, plugin-indexed `fieldLens`).
 - `polytropos-lens-test` passes 14 tests (positional `_1`..`_9`, name-keyed `At`/`Ixed`, `each`,
   `fieldLens`, variant prisms).
