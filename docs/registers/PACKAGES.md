@@ -35,6 +35,7 @@ not used: `../notes/PROVENANCE.md`.
 | `packages/polytropos-beam` | `polytropos-beam` | native | — | EUPL-1.2 OR Apache-2.0 | Beam table and database entity bindings for open rows. |
 | `packages/polytropos-cassava` | `polytropos-cassava` | native | — | EUPL-1.2 OR Apache-2.0 | High-throughput CSV serialization via Cassava over open rows. |
 | `packages/polytropos-cbor` | `polytropos-cbor` | native | — | EUPL-1.2 OR Apache-2.0 | Binary CBOR encoding/decoding via Serialise for open rows. |
+| `packages/polytropos-dhall` | `polytropos-dhall` | native | — | EUPL-1.2 OR Apache-2.0 | Dhall configuration language codecs and generic adapters (GenericFromDhall/GenericToDhall) for open rows. |
 | `packages/polytropos-generics` | `polytropos-generics` | native | — | EUPL-1.2 OR Apache-2.0 | GHC.Generics Rep conversions between nominal types and open rows. |
 | `packages/polytropos-hasql` | `polytropos-hasql` | native | — | EUPL-1.2 OR Apache-2.0 | High-performance PostgreSQL row decoding and statement encoding via Hasql. |
 | `packages/polytropos-lens` | `polytropos-lens` | native | — | EUPL-1.2 OR Apache-2.0 | Control.Lens lenses, prisms, and traversals for open rows. |

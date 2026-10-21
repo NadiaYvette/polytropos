@@ -1,0 +1,49 @@
+# polytropos-dhall
+
+High-performance [Dhall](https://dhall-lang.org) configuration language codecs and generic adapters for [polytropos](https://github.com/NadiaYvette/polytropos) open records and variants.
+
+## Overview
+
+Unlike `GHC.Generics` which constructs intermediate binary tree representations (`(:*:)`, `(:+:)`) during serialization, `polytropos-dhall` unrolls the flat contiguous `SmallArray` payload directly into Dhall record and union AST expressions and back.
+
+In addition to first-class open row codecs, `polytropos-dhall` provides generic adapters around `Dhall.Marshal.Decode.GenericFromDhall` and `Dhall.Marshal.Encode.GenericToDhall`, enabling turnkey `DerivingVia` configuration decoding for nominal types and downstream substrates such as `gachi`.
+
+## Features
+
+- **Heterogeneous Record Codecs**: Automatic `ToDhall` and `FromDhall` instances for open records (`Record r`) via compile-time field dictionary unrolling.
+- **Tagged Variant Codecs**: High-performance constructor dispatch encoding variants into Dhall union expressions (`< Foo : { ... } | Bar : { ... } >`).
+- **Higher-Kinded Record Codecs**: Turnkey support for `RecordF f r` (such as `RecordF Maybe r` with automatic `Nothing` defaults on omitted fields).
+- **Generic Adapters**: Turnkey `GenericDhall` adapter for `deriving (FromDhall, ToDhall) via (GenericDhall MyType)` over GHC `Generic`.
+- **Homogeneous Fast Path**: Introspection and reflection helpers for uniform records and sum rows.
+
+## Quick Example
+
+```haskell
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -fplugin=Polytropos.Plugin #-}
+
+import Dhall (input, auto, embed, inject)
+import qualified Data.Text.IO as TIO
+import Polytropos
+import Polytropos.Dhall
+
+type ServerConfig = Record '["host" ':= Text, "port" ':= Natural, "active" ':= Bool]
+
+main :: IO ()
+main = do
+  -- Construct open record using idiomatic REC syntax:
+  let cfg = REC { host = "localhost", port = 8080, active = True } :: ServerConfig
+
+  -- Encode directly to Dhall expression:
+  let expr = embed inject cfg
+  print expr
+
+  -- Decode back from Dhall text:
+  cfg' <- input auto "{ host = \"0.0.0.0\", port = 9000, active = False }"
+  print (cfg' :: ServerConfig)
+```
+
+## License
+
+Dual-licensed under `EUPL-1.2 OR Apache-2.0`.

@@ -191,6 +191,7 @@ serve as an architectural foundation alongside:
 - [`packages/polytropos-hasql`](packages/polytropos-hasql): High-throughput PostgreSQL binary decoding via Hasql.
 - [`packages/polytropos-beam`](packages/polytropos-beam): Beam relational table and query integration.
 - [`packages/polytropos-cbor`](packages/polytropos-cbor): Binary CBOR serialization via `serialise`.
+- [`packages/polytropos-dhall`](packages/polytropos-dhall): Dhall configuration language codecs and generic adapters (`GenericFromDhall`/`GenericToDhall`) for open records, variants, HKD, and nominal data types.
 - [`packages/polytropos-cassava`](packages/polytropos-cassava): High-throughput CSV encoding/decoding via `cassava`.
 - [`packages/polytropos-generics`](packages/polytropos-generics): `GHC.Generics` bidirectional mappings between nominal types and open rows.
 - [`packages/polytropos-lens`](packages/polytropos-lens), [`polytropos-optics`](packages/polytropos-optics), [`polytropos-profunctors`](packages/polytropos-profunctors), [`polytropos-microlens`](packages/polytropos-microlens): Optics, prisms, and traversals.

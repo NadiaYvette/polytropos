@@ -57,6 +57,11 @@ All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
   heterogeneous variant codecs via `AllCtorsSerialise`, homogeneous fast paths, 3- and 20-field record roundtrips,
   variant roundtrips, byte-level format assertions: length header + flat payload, tag + payload).
 - `polytropos-cassava-test` passes 4 tests (heterogeneous CSV named record codecs, 12-field roundtrips).
+- `polytropos-dhall-test` passes 18 tests (heterogeneous open record codecs via `AllToDhall`/`AllFromDhall`,
+  heterogeneous variant codecs via `AllCtorsToDhall`/`AllCtorsFromDhall`, Higher-Kinded Data codecs
+  `RecordF Maybe` with `DhallFieldFallback` optional field semantics, generic `DerivingVia` adapters
+  via `GenericDhall` / `GenericFromDhall` / `GenericToDhall`, permissive single-field constructor payload
+  decoding, 20-field roundtrips, and homogeneity reflection witnesses `AllFieldsAre`/`AllCtorsHom`/`FieldNames`).
 - `polytropos-persistent-test` passes 10 tests (PersistRow marshalling, 20-field roundtrips,
   row-order serialization, PersistField bridge, and Entity wrapper).
 - `polytropos-rel8-test` passes 13 tests (Rel8 `Rel8able (PolyRow r)` instance, `RowHTable` right-nested
@@ -345,6 +350,7 @@ Milestone T9 has been implemented, tested, and deterministically verified across
 - `rules/` — downstream developer rules & tool configuration library (`rules/formatters/`, `rules/hlint/`, `rules/retrie/`, `rules/stan/`, `rules/tricorder/`, `rules/README.md`)
 - `.agents/rules/` — subdivided AI coding assistant operational rules
 - `packages/polytropos-docrecords` and `packages/polytropos-reader-soup` — satellite packages ported from `porcupine`, providing documentation metadata on open records and $O(1)$ multi-context reader environments backed by flat `Record` representations.
+- `packages/polytropos-dhall` — satellite package providing Dhall configuration language codecs (`FromDhall`, `ToDhall`) for open records, variants, HKD `RecordF`, and generic adapters (`GenericDhall` / `GenericFromDhall` / `GenericToDhall`) for nominal data structures (e.g. `gachi`). All 18 tests passing.
 - Downstream algebraic effect systems ports (`effectful`, `polysemy`, `kernmantle`):
   * `effectful` (`30a10ea`): `Effectful.Soup`, `Effectful.ReaderSoup`, and `Effectful.Labeled` backed by flat Polytropos records; 95/95 test suite passing; pushed to 5 remotes.
   * `polysemy` (`830f3ec`): `Polysemy.ReaderSoup` with `HasSoup` fundep class, `Polysemy.Labeled` with `type (:::)` (fixity `infixr 6 :::`) and OverloadedLabels combinators; 102/102 test suite passing; pushed to 5 remotes.

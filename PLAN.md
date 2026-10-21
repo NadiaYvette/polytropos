@@ -46,7 +46,7 @@ Design note §6, in order:
 ## Milestone 5 — ecosystem satellite interfaces
 
 - [x] Optics integration (`task-08` `polytropos-optics`, `task-09` `polytropos-microlens`, `task-10` `polytropos-lens`)
-- [x] Serialization & codecs (`task-11` `polytropos-aeson`, `task-12` `polytropos-cbor`, `task-13` `polytropos-cassava`)
+- [x] Serialization & codecs (`task-11` `polytropos-aeson`, `task-12` `polytropos-cbor`, `task-13` `polytropos-cassava`, `polytropos-dhall`)
 - [x] Database & relational models (`task-14` `polytropos-beam`, `task-15` `polytropos-hasql`, `task-16` `polytropos-rel8`, `task-17` `polytropos-persistent`)
 - [x] Schema generation & testing (`task-18` `polytropos-openapi3`, `task-19` `polytropos-quickcheck`)
 - [x] Self-documenting records & multi-context reader environments: `polytropos-docrecords` and `polytropos-reader-soup` (re-architected from Yves Parès's Porcupine ecosystem with zero-overhead row polymorphism)

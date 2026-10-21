@@ -16,11 +16,11 @@ write-ghc-environment-files: always
 -- ships base 4.22 and the packages compile unchanged against it; the bound
 -- predates the release and is metadata-only. Scoped to these two packages
 -- so every other dependency's base bound stays enforced.
-allow-newer: cborg:base, serialise:base, serialise:time, serialise:containers, serialise:bytestring, cborg:bytestring, cborg:containers, cborg:primitive, cborg:text
+allow-newer: cborg:base, cborg-json:base, serialise:base, serialise:time, serialise:containers, serialise:bytestring, cborg:bytestring, cborg:containers, cborg:primitive, cborg:text
 -- Same metadata-only situation, from the other side: persistent 2.18.1.0
--- caps template-haskell < 2.24 and aeson < 2.3, but compiles unchanged
+-- and dhall 1.42.3 cap template-haskell < 2.24 and aeson < 2.3, but compile unchanged
 -- against the template-haskell 2.24 / aeson 2.2.5.1 pair GHC 9.14 ships.
-allow-newer: persistent:template-haskell
+allow-newer: persistent:template-haskell, dhall:template-haskell, dhall:time
 constraints: any.aeson ==2.2.5.1
 -- rel8 1.8 (and its rel8-internal / opaleye / postgresql-simple / hasql
 -- dependency cone) predates GHC 9.14's base 4.22; all compile unchanged
@@ -34,3 +34,9 @@ constraints: any.hasql ==1.9.3.2, any.postgresql-binary ==0.14.2
 
 package *
   haddock-options: -w
+
+source-repository-package
+  type: git
+  location: https://github.com/dhall-lang/dhall-haskell
+  tag: 45c000f730b846b1e66fe6fa8e95854776641aee
+  subdir: dhall
