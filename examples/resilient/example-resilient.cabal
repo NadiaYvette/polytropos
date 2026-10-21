@@ -1,6 +1,6 @@
 cabal-version: 3.14
 name: example-resilient
-version: 0.1.0.1
+version: 0.1.0.2
 synopsis: Worked tutorial example of resilient parsing and error ASTs with polytropos
 description:
   Interactive tutorial example demonstrating the "stope and winze" architecture

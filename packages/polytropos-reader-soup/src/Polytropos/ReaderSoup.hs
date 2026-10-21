@@ -55,6 +55,61 @@
 --   'Control.Monad.Trans.Resource.ResourceT') using 'picking', 'scooping', and 'pouring'.
 -- * __Modular Consumption__: 'ContextRunner' and 'consumeSoup' allow contexts to be peeled
 --   and evaluated in dependency order until the base broth is reached.
+--
+-- = When to Use This Module
+--
+-- * When developing modular services requiring access to multiple independent
+--   subsystems (databases, loggers, metrics, config handles) without monolithic
+--   environment records.
+-- * When avoiding quadratic $O(N^2)$ instance boilerplate of classic MTL typeclass
+--   hierarchies across multiple transformer layers.
+-- * When composing sub-routines that require only a localized subset of capabilities,
+--   narrowing environments via zero-cost structural sub-row projections ('filtering').
+--
+-- = Worked Example
+--
+-- Managing multi-capability application environments and narrowing to sub-actions:
+--
+-- > {-# LANGUAGE DataKinds #-}
+-- > {-# LANGUAGE OverloadedStrings #-}
+-- > {-# OPTIONS_GHC -fplugin=Polytropos.Plugin #-}
+-- >
+-- > import Control.Monad.Reader.Class (ask, local)
+-- > import Polytropos
+-- > import Polytropos.ReaderSoup
+-- >
+-- > data DBConn = DBConn String deriving (Eq, Show)
+-- >
+-- > type AppCtx =
+-- >   '[ "db"       ':= DBConn
+-- >    , "port"     ':= Int
+-- >    , "greeting" ':= String
+-- >    ]
+-- >
+-- > mkAppEnv :: DBConn -> Int -> String -> Record AppCtx
+-- > mkAppEnv db p g =
+-- >   insertField (Field @"db") db
+-- >     $ insertField (Field @"port") p
+-- >     $ insertField (Field @"greeting") g
+-- >     $ emptyRecord
+-- >
+-- > -- A sub-worker declaring only the capabilities it actually needs:
+-- > subWorker :: ReaderSoup '[ "db" ':= DBConn, "greeting" ':= String ] String
+-- > subWorker = do
+-- >   db <- askSoup (Field @"db")
+-- >   g  <- askSoup (Field @"greeting")
+-- >   pure (g ++ " connected to " ++ show db)
+-- >
+-- > main :: IO ()
+-- > main = do
+-- >   let env = mkAppEnv (DBConn "pg://cluster") 8080 "Welcome"
+-- >   -- Run localized subWorker against full AppCtx via structural sub-row filtering:
+-- >   msg <- runReaderSoup (filtering subWorker) env
+-- >   putStrLn msg
+-- >
+-- >   -- Project a single context into standard MonadReader with ask and local:
+-- >   port <- runReaderSoup (dipping (Field @"port") (local (+ 100) ask)) env
+-- >   print port  -- 8180
 module Polytropos.ReaderSoup
   ( -- * Core ReaderSoup Monad
     ReaderSoupT(..)

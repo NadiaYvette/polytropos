@@ -1,6 +1,6 @@
 cabal-version: 3.0
 name: polytropos-cbor
-version: 0.1.0.1
+version: 0.1.0.2
 synopsis: Binary CBOR serialization for polytropos open records and variants
 description:
   Binary CBOR serialization and deserialization for <https://hackage.haskell.org/package/polytropos polytropos> open records

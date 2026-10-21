@@ -1,6 +1,6 @@
 cabal-version: 3.14
 name: example-mcp-server
-version: 0.1.0.1
+version: 0.1.0.2
 synopsis: Worked tutorial capstone: Federated Context & Memory MCP Server
 description:
   Interactive tutorial capstone executable demonstrating a Model Context Protocol (MCP)

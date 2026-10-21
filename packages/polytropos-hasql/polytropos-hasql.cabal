@@ -1,6 +1,6 @@
 cabal-version: 3.0
 name: polytropos-hasql
-version: 0.1.0.1
+version: 0.1.0.2
 synopsis: High-performance hasql PostgreSQL decoders for polytropos open records
 description:
   High-performance PostgreSQL row decoding integrating <https://hackage.haskell.org/package/polytropos polytropos> open records

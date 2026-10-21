@@ -1,5 +1,9 @@
 # Changelog for polytropos-dhall
 
+## 0.1.0.2 — 2026-10-21
+
+- Coordinated version bump across all Polytropos packages.
+
 ## 0.1.0.1 — Initial Release
 
 - High-performance Dhall `ToDhall` and `FromDhall` codecs for open records and variants

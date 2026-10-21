@@ -1,6 +1,6 @@
 cabal-version: 3.0
 name: polytropos-dhall
-version: 0.1.0.1
+version: 0.1.0.2
 synopsis: High-performance Dhall codecs and generic adapters for polytropos open rows
 description:
   Linear O(N) 'Dhall.Marshal.Decode.FromDhall' and 'Dhall.Marshal.Encode.ToDhall' codecs

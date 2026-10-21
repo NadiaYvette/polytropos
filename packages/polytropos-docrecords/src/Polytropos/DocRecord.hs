@@ -42,6 +42,56 @@
 -- 4. 'showDocumentation': Automated generation of formatted Markdown schema tables.
 -- 5. 'fromJSONAs' & 'fromYamlAs': Schema-guided JSON/YAML deserialization with source attribution.
 -- 6. 'parseRecFromCLI': Zero-boilerplate @optparse-applicative@ CLI option synthesis.
+--
+-- = When to Use This Module
+--
+-- * When building configuration layers combining default values, environment
+--   profiles (JSON/YAML), and CLI flags with deterministic priority precedence.
+-- * When generating automated, human-readable Markdown documentation tables of
+--   configuration schemas for manuals or repository documentation.
+-- * When synthesizing @optparse-applicative@ CLI argument parsers directly from
+--   open row definitions without manual flag boilerplate.
+--
+-- = Worked Example
+--
+-- Constructing a documented configuration record, extracting documentation,
+-- and merging with partial JSON:
+--
+-- > {-# LANGUAGE DataKinds #-}
+-- > {-# LANGUAGE OverloadedRecordDot #-}
+-- > {-# LANGUAGE OverloadedStrings #-}
+-- > {-# OPTIONS_GHC -fplugin=Polytropos.Plugin #-}
+-- >
+-- > import Data.Aeson (object, (.=))
+-- > import Polytropos
+-- > import Polytropos.DocRecord
+-- >
+-- > type ServerConfig =
+-- >   '[ "host"    ':= String
+-- >    , "port"    ':= Int
+-- >    , "verbose" ':= Bool
+-- >    ]
+-- >
+-- > defaultConfig :: DocRec ServerConfig
+-- > defaultConfig =
+-- >   consDoc (Field @"host") (docField "127.0.0.1" "Listening host IP")
+-- >     $ consDoc (Field @"port") (docField (8080 :: Int) "TCP listen port")
+-- >     $ consDoc (Field @"verbose") (docField False "Enable debug logs")
+-- >     $ emptyDocRec
+-- >
+-- > -- 1. Render Markdown documentation table:
+-- > docTable = showDocumentation defaultConfig
+-- >
+-- > -- 2. Merge partial JSON configuration (e.g. from a config file):
+-- > Right cfg = case fromJSONAs defaultConfig (object ["port" .= (9090 :: Int)]) of
+-- >   Data.Aeson.Success c -> Right c
+-- >   Data.Aeson.Error e   -> Left e
+-- >
+-- > -- 3. Inspect values and provenance using OverloadedRecordDot:
+-- > currentPort = getDocVal cfg.port       -- Just 9090
+-- > portSource  = diSource cfg.port        -- YamlSource
+-- > currentHost = getDocVal cfg.host       -- Just "127.0.0.1"
+-- > hostSource  = diSource cfg.host        -- DefaultSource
 module Polytropos.DocRecord
   ( -- * Core Documented Record Types
     DocRec

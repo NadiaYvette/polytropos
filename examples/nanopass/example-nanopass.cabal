@@ -1,6 +1,6 @@
 cabal-version: 3.14
 name: example-nanopass
-version: 0.1.0.1
+version: 0.1.0.2
 synopsis: Worked tutorial example of a Nanopass compiler pass using polytropos
 description:
   Interactive tutorial example demonstrating the Nanopass compiler pass architecture

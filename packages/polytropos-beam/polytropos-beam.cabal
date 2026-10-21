@@ -1,6 +1,6 @@
 cabal-version: 3.0
 name: polytropos-beam
-version: 0.1.0.1
+version: 0.1.0.2
 synopsis: beam database schema integration for polytropos open records
 description:
   Integration enabling <https://hackage.haskell.org/package/polytropos polytropos> open records to act as

@@ -1,6 +1,6 @@
 cabal-version: 3.0
 name: polytropos-lens
-version: 0.1.0.1
+version: 0.1.0.2
 synopsis: Comprehensive lens-suite integration for polytropos open records and variants
 description:
   Comprehensive optics integration between <https://hackage.haskell.org/package/polytropos polytropos> open records and variants

@@ -1,5 +1,11 @@
 # Changelog for polytropos-core
 
+## 0.1.0.2 — 2026-10-21
+
+- Coordinated release across all 20 Polytropos packages, benchmarks, and examples.
+- Comprehensive worked examples added to `polytropos-docrecords` and `polytropos-reader-soup`.
+- Inclusion of `polytropos-dhall` package in ecosystem release.
+
 ## 0.1.0.1 — 2026-10-20
 
 - Performance optimization: eliminate lingering list conversions in peeling, projection and injection.
