@@ -10,28 +10,32 @@ and verified through their deterministic gates. All milestones of `plans/2026-10
 §1.4 subrow/subsum projection evidence, §1.5 compile-time label hashing `KnownHash`, §1.6 source-plugin construction syntax & open declaration forms,
 and §1.7 generic instance layer over rows & dynamic dictionary emission) are implemented and verified.
 All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
-- `polytropos-core` passes 46 tests (primitive SmallArray CoW updates, `setFieldsAt` batch updates,
+- `polytropos-core` passes 52 tests (primitive SmallArray CoW updates, `setFieldsAt` batch updates,
   `MRep` transient builders, zero-copy `SmallArray` constructor peeling, injection, and projection without intermediate list allocations,
   `Polytropos` consumer surface, `Record`, `Variant`, `peel`, `peelF`,
-  `eliminateUniform`, `eliminateUniformM`, `eliminate`, `matchVariant`, SIMD CoW 64/100-field record scaling).
-- `polytropos-plugin-smoke` passes 55 tests with `-fplugin=Polytropos.Plugin` (`RowEq`, `RowShow`,
+  `eliminateUniform`, `eliminateUniformM`, `eliminate`, `matchVariant`, SIMD CoW 64/100-field record scaling,
+  and reified row morphisms `RowMorph`, `composeRowMorph`, `gatherRep`, `scatterRep`, `gatherRecord`, `scatterRecord`, `executeFrameScatter`).
+- `polytropos-plugin-smoke` passes 62 tests with `-fplugin=Polytropos.Plugin` (`RowEq`, `RowShow`,
   `RowEqSum`, `RowShowSum`, native `OverloadedRecordDot` on bare and `RecordF Maybe` records including
   polymorphic inferred type variables with nominal equality constraint emission preventing GHCi RTS defaulting aborts,
   `AllFields` generic dictionary supply across standard and HKD product rows, `FieldIndex`/`ConstructorIndex` on HKD rows,
   compile-time `Refl` type equality rewriting for `FieldNames`, `SimpleFieldTypes`, and `FieldTypes`,
   `SubRow`/`SubSum` projection, injection, and narrowing evidence with `projectRecord`, `widenVariant`, and `narrowVariant`,
+  `KnownRowMorph` compile-time slot permutation vector and unboxed array synthesis (`RowMorph`, `gatherRecord`, `scatterRecord`, `composeRowMorph`),
   `KnownHash` compile-time label hashing with literal FNV-1a 64-bit `Word` dictionaries,
   source-plugin syntactic devices (`REC`, `REC_F`, field punning, `VAR`, `VARIANT`, `REC_UPD`, `REC_UPD_F`,
   record & variant view pattern matching, and `deriving OpenRecord` / `deriving OpenVariant` declaration forms),
   $O(1)$ eliminator jump tables (`eliminateUniform`, `eliminateUniformM`, `eliminate`) and single-constructor peeling (`peel`),
   and human-centric `TypeError` diagnostics with Levenshtein-distance fuzzy suggestions and schema summaries
-  for missing fields, missing constructors, field type mismatches, and `SubRow`/`SubSum` structural discrepancies).
+  for missing fields, missing constructors, field type mismatches, `SubRow`/`SubSum` structural discrepancies,
+  and `RowMorph` missing field / type mismatch diagnostics).
 - **Extensive Internal Developer Commentary & GHC Notes Architecture:**
-  * Expanded internal non-Haddock developer commentary across all core and plugin modules (`Polytropos.Plugin`, `Polytropos.Plugin.Source`, `Polytropos.Core`, and `Polytropos`) to reach GHC-grade explanatory comment density (~43%+ on intricate algorithms).
-  * Formalized 19 GHC Notes cross-referenced with `tagref` (validating 19 tags, 126 references across 236 files with 0 errors):
+  * Expanded internal non-Haddock developer commentary across all core and plugin modules (`Polytropos.Plugin`, `Polytropos.Plugin.Source`, `Polytropos.Core`, `Polytropos.RowMorph`, and `Polytropos`) to reach GHC-grade explanatory comment density (~43%+ on intricate algorithms).
+  * Formalized 20 GHC Notes cross-referenced with `tagref` (validating 20 tags, 155 references across 319 files with 0 errors):
     - `Polytropos.Plugin`: Note 1 `[ref:note-row-anatomy]`, Note 2 `[ref:note-literal-evidence]`, Note 3 `[ref:note-subrow-subsum]`, Note 4 `[ref:note-metadata-rewriting]`, Note 5 `[ref:note-typeerror-diagnostics]`, Note 6 `[ref:note-ocaml-row-algebra]`, Note 7 `[ref:note-solving-pipeline]`, Note 8 `[ref:note-subrow-subsum-mechanics]`, Note 9 `[ref:note-diagnostic-prevention]`.
     - `Polytropos.Plugin.Source`: `[ref:note-source-plugin-arch]`, `[ref:note-open-declarations]`, `[ref:note-view-patterns]`.
     - `Polytropos.Core`: `[ref:note-rep-memory-physics]`, `[ref:note-transient-cow]`, `[ref:note-peeling-elimination]`.
+    - `Polytropos.RowMorph`: `[ref:note-row-morph-routing]`.
     - `Polytropos`: `[ref:note-consumer-facade]`, `[ref:note-patterns-view-patterns]`, `[ref:note-subtyping-combinators]`, `[ref:note-array-jump-table-elimination]`.
   * Deep local definition commentary covering constraint solving, dictionary array synthesis, Levenshtein fuzzy diagnostics, desugaring passes, transient `MRep` lifetimes, SIMD CoW block copying, and jump-table dispatch.
   * Resolved parallel smoke test race condition in `packages/polytropos-plugin/tests/smoke/Main.hs` by switching to thread-isolated temporary files.
@@ -259,13 +263,18 @@ Milestone T9 has been implemented, tested, and deterministically verified across
   `setFieldsAt` (batch update), `MRep`, `thawRep`, `freezeRep`, `writeFieldAt`, `modifyRep` (ST transients),
   `setFieldSumAt`, `projectRep`, `matchRep`, `RowEq`, `RowShow`, `RowEqSum`, `RowShowSum`, `FieldIndex`,
   `ConstructorIndex`, `Field(..)`, `IsLabel`, `DictAny`, `AllFields`, `noInlineUnsafeCo`
+- `packages/polytropos-core/src/Polytropos/RowMorph.hs` — Reified unboxed row morphisms and routing primitives:
+  `RowMorph(..)`, `KnownRowMorph(..)`, `unsafeMkRowMorph`, `composeRowMorph`, `indexRowMorph`,
+  `gatherRep`, `scatterRep`, `FramePlan(..)`, `FrameWire(..)`, `unsafeMkFramePlan`, `executeFrameScatter`
 - `packages/polytropos-core/src/Polytropos.hs` — Human-facing consumer module:
   `Record`, `RecordF`, `Variant`, `VariantF`, `emptyRecord`, `emptyRecordF`, `insertField`, `insertFieldF`,
   `injectVariant`, `injectVariantF`, `projectVariant`, `projectVariantF`, `projectRecord`, `projectRecordF`,
-  `widenVariant`, `widenVariantF`, `narrowVariant`, `narrowVariantF`, pattern synonyms, and re-exports
+  `widenVariant`, `widenVariantF`, `narrowVariant`, `narrowVariantF`, `RowMorph(..)`, `KnownRowMorph(..)`,
+  `composeRowMorph`, `indexRowMorph`, `gatherRep`, `scatterRep`, `gatherRecord`, `scatterRecord`,
+  `FramePlan(..)`, `FrameWire(..)`, `executeFrameScatter`, pattern synonyms, and re-exports
   (`KnownHash`, `labelHash`, `hashVal`, `fnv1a64`)
-- `packages/polytropos-core/test/Main.hs` — 32 unit tests verifying representations, batch mutations,
-  transients, and consumer API
+- `packages/polytropos-core/test/Main.hs` — 52 unit tests verifying representations, batch mutations,
+  transients, consumer API, SIMD CoW updates, and reified row morphisms (`RowMorph`, `gatherRep`, `scatterRep`, `composeRowMorph`)
 - `packages/polytropos-plugin/src/Polytropos/Plugin.hs` — TcPlugin structured with GHC Note architecture (`tagref`-validated, 6 comprehensive notes):
   * Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails]: Didier Rémy row calculus & open vs closed rows
   * Note [Literal Evidence Synthesis vs Type-Level Search]: O(1) literal index and tag evidence generation
@@ -280,12 +289,14 @@ Milestone T9 has been implemented, tested, and deterministically verified across
   * Solves `AllFields` generic field-class dictionary supply (solving wanteds and packing flat `SmallArray (DictAny c)`)
   * Type-level row metadata rewriter: reduces `FieldNames`, `SimpleFieldTypes`, and `FieldTypes` when product rows are closed
   * `SubRow` and `SubSum` evidence solver: emits literal projection slot indices `[Int]` for products, and literal injection tags `[Word]` / narrowing maps `[Maybe Word]` for sums
+  * `KnownRowMorph` evidence solver: computes compile-time slot permutation vectors and emits unboxed `RowMorph` arrays directly into Core AST with zero dictionary search
   * `KnownHash` compile-time label hashing: evaluates literal symbol names and synthesizes literal FNV-1a 64-bit `Word` dictionaries
   * Cleaned Core expression builders (`mkIntExpr` and `mkWordExpr`), abbreviated `polytroposInit` via `RecordWildCards` (`pure PluginState{..}`), and imported standard `Data.Either.partitionEithers`
-- `packages/polytropos-plugin/tests/smoke/Main.hs` — Smoke tests exercising plugin-solved dictionary synthesis,
+- `packages/polytropos-plugin/tests/smoke/Main.hs` — 62 smoke tests exercising plugin-solved dictionary synthesis,
   `AllFields` generic dictionary supply across homogeneous and heterogeneous rows, compile-time `Refl`
   equality reduction of metadata families, `SubRow`/`SubSum` widening, narrowing, and projection,
-  `KnownHash` compile-time symbol hashing matching `fnv1a64`, and 9 negative-compilation assertions
+  `KnownRowMorph` compile-time slot permutation vector and unboxed array synthesis (`RowMorph`, `gatherRecord`, `scatterRecord`, `composeRowMorph`),
+  `KnownHash` compile-time symbol hashing matching `fnv1a64`, and 11 negative-compilation assertions
   verifying human-centric compiler stderr diagnostics.
 - `packages/polytropos-generics/` — Datatype generics library unifying nominal Haskell ADTs with `polytropos`
   `Rep` with zero boxed intermediate tree representations
@@ -366,5 +377,7 @@ Milestone T9 has been implemented, tested, and deterministically verified across
 
 ## Next action
 
+- Milestone 1.2 within polytropos: Frame-Rule Unification Constraint Solver (`FrameWire`).
+- Milestone 1.3 within polytropos: Poly-Kinded Effect Row Indexing.
 - Expand HLS integrations beyond core completions (e.g. `hls-explicit-record-fields-plugin` open record wildcard expansion and `TypeError` code actions).
 - Human-in-the-loop review of the revised documentation tiers (Audience 1 `TUTORIAL.md` & `NEWBIE_GUIDE.md`, Audience 2 Haddock polish, Audience 3 `MAINTAINER_GUIDE.md`).

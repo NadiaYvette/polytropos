@@ -252,6 +252,18 @@ module Polytropos
   , widenVariantF
   , narrowVariant
   , narrowVariantF
+    -- * Reified Row Morphisms & Routing
+  , RowMorph(..)
+  , KnownRowMorph(..)
+  , composeRowMorph
+  , indexRowMorph
+  , gatherRep
+  , scatterRep
+  , gatherRecord
+  , scatterRecord
+  , FramePlan(..)
+  , FrameWire(..)
+  , executeFrameScatter
     -- * Elimination & Peeling
   , peel
   , peelF
@@ -308,6 +320,7 @@ module Polytropos
   ) where
 
 import Polytropos.Core
+import Polytropos.RowMorph
 import Data.Functor.Identity (Identity(..))
 import Data.Kind (Type)
 import Data.Primitive.SmallArray (copySmallArray, indexSmallArray, newSmallArray, runSmallArray, sizeofSmallArray, thawSmallArray, writeSmallArray)
@@ -678,6 +691,24 @@ narrowVariant (RowRep rep) =
   in case drop tag narrowMap of
     (Just subTag : _) -> Just (RowRep (Rep subTag (repVals rep)))
     _                 -> Nothing
+
+{-------------------------------------------------------------------------------
+  Reified Row Morphisms & Routing
+-------------------------------------------------------------------------------}
+
+-- | Contravariant gather for 'Record': extracts sub-record fields in \(\mathcal{O}(|sub|)\)
+-- using a reified 'RowMorph'.
+--
+-- See Note [Reified Row Morphisms and Gather-Scatter] [ref:note-row-morph-routing]
+gatherRecord :: RowMorph sub full -> Record full -> Record sub
+gatherRecord morph (RowRep rep) = RowRep (gatherRep morph rep)
+
+-- | Scatter updates for 'Record': overwrites sub-record fields into full record in \(\mathcal{O}(|full|)\)
+-- using a reified 'RowMorph'.
+--
+-- See Note [Reified Row Morphisms and Gather-Scatter] [ref:note-row-morph-routing]
+scatterRecord :: RowMorph sub full -> Record sub -> Record full -> Record full
+scatterRecord morph (RowRep sub) (RowRep full) = RowRep (scatterRep morph sub full)
 
 {-------------------------------------------------------------------------------
   Elimination & Peeling

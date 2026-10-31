@@ -21,6 +21,7 @@ import Control.Monad (forM_)
 import Data.Functor.Identity (Identity(..))
 import Data.Kind (Type)
 import Data.List (isInfixOf)
+import Data.Primitive.PrimArray (sizeofPrimArray)
 import Data.Primitive.SmallArray (SmallArray, sizeofSmallArray, indexSmallArray)
 import Data.Proxy (Proxy(..))
 import Data.Type.Equality ((:~:)(Refl))
@@ -187,6 +188,37 @@ main = defaultMain $ testGroup "plugin RowEq/RowShow smoke"
           case mNarrow of
             Nothing -> pure ()
             Just _  -> error "expected Nothing in narrowVariant"
+      ]
+  , testGroup "RowMorph compile-time synthesis"
+      [ testCase "KnownRowMorph solves for identity morphism" $ do
+          let m = rowMorph @BigProd @BigProd
+          sizeofPrimArray (unRowMorph m) @?= 3
+          indexRowMorph m 0 @?= 0
+          indexRowMorph m 1 @?= 1
+          indexRowMorph m 2 @?= 2
+      , testCase "KnownRowMorph solves for permutation and subrow projection" $ do
+          let m = rowMorph @SmallProd @BigProd
+          sizeofPrimArray (unRowMorph m) @?= 2
+          indexRowMorph m 0 @?= 2
+          indexRowMorph m 1 @?= 0
+      , testCase "gatherRecord with plugin-solved rowMorph" $ do
+          let full = REC { a = (100 :: Int), b = True, c = "test" } :: Record BigProd
+              sub = gatherRecord (rowMorph @SmallProd @BigProd) full
+          sub.c @?= Identity "test"
+          sub.a @?= Identity (100 :: Int)
+      , testCase "scatterRecord with plugin-solved rowMorph" $ do
+          let full = REC { a = (100 :: Int), b = True, c = "test" } :: Record BigProd
+              sub = REC { c = "updated", a = (999 :: Int) } :: Record SmallProd
+              full' = scatterRecord (rowMorph @SmallProd @BigProd) sub full
+          full'.a @?= Identity (999 :: Int)
+          full'.b @?= Identity True
+          full'.c @?= Identity "updated"
+      , testCase "composeRowMorph with plugin-solved rowMorphs" $ do
+          let m1 = rowMorph @'[ "c" := String ] @SmallProd
+              m2 = rowMorph @SmallProd @BigProd
+              mComposed = composeRowMorph m1 m2
+          sizeofPrimArray (unRowMorph mComposed) @?= 1
+          indexRowMorph mComposed 0 @?= 2
       ]
   , testGroup "Compile-time label hashing (KnownHash)"
       [ testCase "knownHash solves on literal symbols and matches fnv1a64" $ do
@@ -417,6 +449,30 @@ main = defaultMain $ testGroup "plugin RowEq/RowShow smoke"
             , "Cannot widen variant: constructor 'A' has different payload rows:"
             , "sub-variant payload:   { x :: Int }"
             , "super-variant payload: { x :: String }"
+            ]
+      , testCase "RowMorph missing field diagnostic" $
+          checkGhcDiag
+            (unlines
+              [ "{-# LANGUAGE DataKinds, TypeApplications, TypeOperators #-}"
+              , "module Test where"
+              , "import Polytropos"
+              , "t = rowMorph @'[ \"missing\" := Int ] @'[ \"a\" := Int, \"b\" := Bool ]"
+              ])
+            [ "Polytropos RowMorph Error:"
+            , "Cannot construct RowMorph: field 'missing' is missing in target row:"
+            , "{ a :: Int, b :: Bool }"
+            , "Available fields: 'a', 'b'"
+            ]
+      , testCase "RowMorph field type mismatch diagnostic" $
+          checkGhcDiag
+            (unlines
+              [ "{-# LANGUAGE DataKinds, TypeApplications, TypeOperators #-}"
+              , "module Test where"
+              , "import Polytropos"
+              , "t = rowMorph @'[ \"a\" := String ] @'[ \"a\" := Int, \"b\" := Bool ]"
+              ])
+            [ "Polytropos RowMorph Error:"
+            , "Field 'a' has incompatible types in source and target rows:"
             ]
       ]
   ]

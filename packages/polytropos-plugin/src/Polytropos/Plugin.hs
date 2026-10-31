@@ -665,6 +665,7 @@ data PluginState = PluginState
   , psTypeErrorTyCon        :: !TyCon -- ^ GHC.Internal.TypeError.TypeError
   , psPromotedText          :: !TyCon -- ^ promoted 'Text
   , psPromotedVcat          :: !TyCon -- ^ promoted ':$$:
+  , psUnsafeMkRowMorph      :: !Var   -- ^ Polytropos.RowMorph.unsafeMkRowMorph
   }
 
 -------------------------------------------------------------------------------
@@ -724,6 +725,9 @@ polytroposInit = do
 
   let psPromotedText = promoteDataCon textDataCon
       psPromotedVcat = promoteDataCon vcatDataCon
+
+  rowMorphMod <- findModule "Polytropos.RowMorph" (Just "polytropos-core")
+  psUnsafeMkRowMorph <- lookupIdInModule rowMorphMod "unsafeMkRowMorph"
 
   pure PluginState{..}
 
@@ -1057,6 +1061,8 @@ solveOne state ct
             -> solveSubSum state ct cls tys
             | nameOccName name == mkTcOcc "KnownHash"
             -> noNew <$> solveKnownHash ct cls tys
+            | nameOccName name == mkTcOcc "KnownRowMorph"
+            -> solveKnownRowMorph state ct cls tys
             | otherwise
             -> pure $ Right ()
       _ -> pure $ Right ()
@@ -1976,6 +1982,103 @@ solveSubRow state ct cls tys
               , "  in super-record."
               ]
           | otherwise -> findSubRowMismatch rest sFields
+
+-------------------------------------------------------------------------------
+-- KnownRowMorph solver
+--
+-- See Note [Reified Row Morphisms and Gather-Scatter] [ref:note-row-morph-routing]
+-- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
+-- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
+-- See Note [Diagnostic Recovery and Cascading Error Prevention] [ref:note-diagnostic-prevention]
+-------------------------------------------------------------------------------
+
+-- | Solves the 'KnownRowMorph r1 r2' constraint by synthesizing an unboxed 'RowMorph'
+-- permutation array directly into Core AST.
+--
+-- Algorithmic Mechanics:
+-- 1. Unpack Row Arguments:
+--    Extracts source row 'r1Ty' and target row 'r2Ty'.
+-- 2. Open-Tail Deferral:
+--    Inspects both rows using 'walkRowWithTypes_maybe'. If either row contains an unfixed
+--    type variable tail, returns 'Right ()' (defer), allowing GHC to ground row tails first.
+-- 3. Field Matching & Permutation Vector Synthesis:
+--    For each field in 'r1', searches 'r2' for a matching field name.
+--    - If field types match under 'eqType': emits the target slot index.
+--    - If field types differ and either is open: emits target slot index AND a new wanted
+--      nominal equality constraint to unify them.
+--    - If field types differ and both are closed: synthesizes custom 'TypeError' diagnostic
+--      and safe dummy evidence.
+--    - If field is missing: synthesizes custom 'TypeError' diagnostic with Levenshtein fuzzy
+--      typo suggestions and safe dummy evidence.
+-- 4. Direct Core AST Synthesis:
+--    Emits Core call to 'unsafeMkRowMorph @tys [i_0, i_1, ...]' wrapped in the 'KnownRowMorph'
+--    class dictionary constructor, producing an unboxed 'PrimArray Int' at runtime with
+--    zero dictionary search.
+solveKnownRowMorph
+  :: PluginState
+  -> Ct
+  -> Class
+  -> [Type]
+  -> TcPluginM 'Solve (Either ((EvTerm, Ct), [Ct]) ())
+solveKnownRowMorph state ct cls tys
+  | length tys >= 2
+  , let r1Ty = tys !! (length tys - 2)
+  , let r2Ty = last tys
+  , let loc  = ctLoc ct
+  , Just r1Fields <- walkRowWithTypes_maybe r1Ty
+  , Just r2Fields <- walkRowWithTypes_maybe r2Ty
+  = do
+      matchResult <- matchRowMorphFields loc r1Fields r2Fields
+      case matchResult of
+        Right (idxs, newWanteds) -> do
+          let idxExprs = map mkIntExpr idxs
+              idxList  = mkListExpr intTy idxExprs
+              evExpr   = mkCoreApps (Var (psUnsafeMkRowMorph state)) (map Type tys ++ [idxList])
+              dictExpr = evDataConApp (classDataCon cls) tys [evExpr]
+          pure $ Left ((EvExpr dictExpr, ct), newWanteds)
+        Left diagLines -> do
+          let dummyExpr = mkCoreApps (Var (psUnsafeMkRowMorph state)) (map Type tys ++ [mkListExpr intTy []])
+              dummyDict = evDataConApp (classDataCon cls) tys [dummyExpr]
+          errCt <- mkTypeErrorCt state loc diagLines
+          pure $ Left ((EvExpr dummyDict, ct), [errCt])
+  | otherwise = pure $ Right ()
+  where
+    matchRowMorphFields
+      :: CtLoc
+      -> [(Int, FastString, Type)]
+      -> [(Int, FastString, Type)]
+      -> TcPluginM 'Solve (Either [String] ([Int], [Ct]))
+    matchRowMorphFields _loc [] _ = pure $ Right ([], [])
+    matchRowMorphFields loc ((_, name, fieldTy) : rest) sFields =
+      case [ (j, sFieldTy) | (j, sName, sFieldTy) <- sFields
+                           , if nullFS name || nullFS sName then True else sName == name ] of
+        [] -> do
+          let sNames = [ unpackFS n | (_, n, _) <- sFields, not (nullFS n) ]
+              diag = [ "Polytropos RowMorph Error:"
+                     , "  Cannot construct RowMorph: field '" ++ unpackFS name ++ "' is missing in target row:"
+                     , "    " ++ formatRecordRow sFields
+                     , "  " ++ formatSuggestion (unpackFS name) sNames
+                     ]
+          pure $ Left diag
+        ((j, sFieldTy) : _)
+          | fieldTy `eqType` sFieldTy -> do
+              restRes <- matchRowMorphFields loc rest sFields
+              case restRes of
+                Right (idxs, wts) -> pure $ Right (j : idxs, wts)
+                Left diag -> pure $ Left diag
+          | not (isClosedType fieldTy) || not (isClosedType sFieldTy) -> do
+              eqEv <- newWanted loc (mkEqPredRole Nominal fieldTy sFieldTy)
+              restRes <- matchRowMorphFields loc rest sFields
+              case restRes of
+                Right (idxs, wts) -> pure $ Right (j : idxs, mkNonCanonical eqEv : wts)
+                Left diag -> pure $ Left diag
+          | otherwise -> do
+              let diag = [ "Polytropos RowMorph Error:"
+                         , "  Field '" ++ unpackFS name ++ "' has incompatible types in source and target rows:"
+                         , "    Source type: " ++ showSDocUnsafe (ppr fieldTy)
+                         , "    Target type: " ++ showSDocUnsafe (ppr sFieldTy)
+                         ]
+              pure $ Left diag
 
 -- | Solves the 'SubSum sub super' constraint by synthesizing literal injection and narrowing arrays.
 --

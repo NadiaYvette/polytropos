@@ -27,6 +27,7 @@ module Main (main) where
 
 import Control.Monad.ST             (runST)
 import Data.Functor.Identity        (Identity(..))
+import Data.Primitive.PrimArray     (sizeofPrimArray)
 import Data.Primitive.SmallArray    (indexSmallArray)
 import GHC.Exts                     (Any)
 import Test.Tasty                  (TestTree, defaultMain, testGroup)
@@ -34,6 +35,7 @@ import Test.Tasty.HUnit            (testCase, (@?=))
 
 import Polytropos.Core
 import Polytropos
+import Polytropos.RowMorph
 
 {-------------------------------------------------------------------------------
   Slot helpers
@@ -424,6 +426,66 @@ simdTests = testGroup "simd-cow (records > 32 fields)"
       unslot (fieldAt 9 res) @?= (290 :: Int)
   ]
 
+rowMorphTests :: TestTree
+rowMorphTests = testGroup "row-morph"
+  [ testCase "unsafeMkRowMorph and indexRowMorph round-trip" $ do
+      let m = unsafeMkRowMorph [2, 0, 1] :: RowMorph '[ "c" := Char, "a" := Int, "b" := Bool ] '[ "a" := Int, "b" := Bool, "c" := Char ]
+      sizeofPrimArray (unRowMorph m) @?= 3
+      indexRowMorph m 0 @?= 2
+      indexRowMorph m 1 @?= 0
+      indexRowMorph m 2 @?= 1
+
+  , testCase "composeRowMorph fuses morphisms in O(|r1|)" $ do
+      let m12 = unsafeMkRowMorph [1, 0] :: RowMorph '[ "b" := Bool, "a" := Int ] '[ "a" := Int, "b" := Bool ]
+          m23 = unsafeMkRowMorph [2, 0] :: RowMorph '[ "a" := Int, "b" := Bool ] '[ "b" := Bool, "x" := Char, "a" := Int ]
+          m13 = composeRowMorph m12 m23
+      sizeofPrimArray (unRowMorph m13) @?= 2
+      indexRowMorph m13 0 @?= 0
+      indexRowMorph m13 1 @?= 2
+
+  , testCase "gatherRep extracts sub-slots in specified order" $ do
+      let full = productRep [slot (10 :: Int), slot True, slot ("hello" :: String)]
+          m = unsafeMkRowMorph [2, 0] :: RowMorph '[ "c" := String, "a" := Int ] '[ "a" := Int, "b" := Bool, "c" := String ]
+          sub = gatherRep m full
+      repArity sub @?= 2
+      unslot (fieldAt 0 sub) @?= ("hello" :: String)
+      unslot (fieldAt 1 sub) @?= (10 :: Int)
+
+  , testCase "scatterRep overwrites sub-slots in existing rep" $ do
+      let full = productRep [slot (10 :: Int), slot True, slot ("hello" :: String)]
+          sub = productRep [slot (42 :: Int), slot ("world" :: String)]
+          m = unsafeMkRowMorph [0, 2] :: RowMorph '[ "a" := Int, "c" := String ] '[ "a" := Int, "b" := Bool, "c" := String ]
+          res = scatterRep m sub full
+      repArity res @?= 3
+      unslot (fieldAt 0 res) @?= (42 :: Int)
+      unslot (fieldAt 1 res) @?= True
+      unslot (fieldAt 2 res) @?= ("world" :: String)
+
+  , testCase "gatherRecord and scatterRecord over Record" $ do
+      let rFull = insertField (Field @"a") (10 :: Int)
+                $ insertField (Field @"b") True
+                $ insertField (Field @"c") ("polytropos" :: String)
+                $ emptyRecord
+          morph = unsafeMkRowMorph [1, 0] :: RowMorph '[ "b" := Bool, "a" := Int ] '[ "a" := Int, "b" := Bool, "c" := String ]
+          rSub = gatherRecord morph rFull
+      unslot (fieldAt 0 (unRowRep rSub)) @?= True
+      unslot (fieldAt 1 (unRowRep rSub)) @?= (10 :: Int)
+      let rSub' = insertField (Field @"b") False $ insertField (Field @"a") (99 :: Int) emptyRecord
+          rUpdated = scatterRecord morph rSub' rFull
+      unslot (fieldAt 0 (unRowRep rUpdated)) @?= (99 :: Int)
+      unslot (fieldAt 1 (unRowRep rUpdated)) @?= False
+      unslot (fieldAt 2 (unRowRep rUpdated)) @?= ("polytropos" :: String)
+
+  , testCase "executeFrameScatter merges base frame and operation outputs" $ do
+      let frameIn = productRep [slot (1 :: Int), slot ("old" :: String)]
+          opOut   = productRep [slot ("new" :: String)]
+          plan    = unsafeMkFramePlan 2 [0] [0, 1] [1] :: FramePlan '[ "id" := Int, "status" := String ] '[ "id" := Int ] '[ "status" := String ] '[ "id" := Int, "status" := String ]
+          frameOut = executeFrameScatter plan frameIn opOut
+      repArity frameOut @?= 2
+      unslot (fieldAt 0 frameOut) @?= (1 :: Int)
+      unslot (fieldAt 1 frameOut) @?= ("new" :: String)
+  ]
+
 main :: IO ()
 main = defaultMain $ testGroup "polytropos-core"
   [ productTests
@@ -431,4 +493,5 @@ main = defaultMain $ testGroup "polytropos-core"
   , evidenceTests
   , consumerTests
   , simdTests
+  , rowMorphTests
   ]
