@@ -86,7 +86,7 @@ Design note §6, in order:
 ## Milestone 9 — polycategorical effect system substrate (penelope)
 
 - [x] Milestone 1.1: Reified Row Morphisms (`RowMorph`): unboxed `PrimArray Int` permutation maps, `KnownRowMorph` TcPlugin solver emitting literal Core arrays, O(|r1|) category composition `composeRowMorph`, primitive gather/scatter loops over `Rep` (`gatherRep`, `scatterRep`), and high-level `Record` combinators (`gatherRecord`, `scatterRecord`).
-- [ ] Milestone 1.2: Frame-Rule Unification Constraint Solver (`FrameWire`): `FramePlan` gather/scatter wiring, automatic `frameOut` row overwrite synthesis, and open-tail unification variable deferral.
+- [x] Milestone 1.2: Frame-Rule Unification Constraint Solver (`FrameWire`): `FramePlan` gather/scatter wiring, automatic `frameOut` row overwrite synthesis, open-tail unification variable deferral, `executeFrameRecord` combinator, and custom `TypeError` diagnostics.
 - [ ] Milestone 1.3: Poly-Kinded Effect Row Indexing: generalize `FieldIndex` and `ConstructorIndex` for multi-sorted effect rows (`PolyEffect`, `PolyHEffect`).
 
 

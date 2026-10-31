@@ -34,6 +34,8 @@ contains the literal 0-based slot offset in the target row @r2@.
   in \(O(|full|)\) time via 'Data.Primitive.SmallArray.thawSmallArray'.
 * __Compile-Time Synthesis:__ The evidence class 'KnownRowMorph' is solved directly by
   @Polytropos.Plugin@, emitting literal index vectors into Core AST with zero runtime dictionary search.
+* __Frame-Rule Auto-Wiring:__ 'FramePlan' and 'FrameWire' generalize binary port routing
+  to stateful execution frames with automatic output row synthesis (see Note [Frame-Rule Automatic Wire Synthesis] [ref:note-frame-rule-wiring]).
 
 = Note [Reified Row Morphisms and Gather-Scatter] [tag:note-row-morph-routing]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -56,6 +58,51 @@ witnesses, 'RowMorph' reifies the mapping as a flat primitive array of integers.
    an operation @(opIn -> opOut)@ inside @(frameIn -> frameOut)@ executes by gathering @opIn@
    from @frameIn@, copying surviving @frameIn@ slots to @frameOut@, and scattering @opOut@ into @frameOut@
    in two tight branchless loops.
+   See Note [Frame-Rule Automatic Wire Synthesis] [ref:note-frame-rule-wiring].
+
+= Note [Frame-Rule Automatic Wire Synthesis] [tag:note-frame-rule-wiring]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In polycategorical and symmetric monoidal effect systems (such as Penelope),
+computation is organized into multi-input, multi-output arrows or pipeline stages
+executed against an ambient state/register frame:
+
+    stage :: Arrow p => p (Record opIn) (Record opOut)
+
+When executing @stage@ inside a wider frame @frameIn@, the categorical frame rule
+states that the ambient context survives unchanged except where explicitly modified:
+
+    frame :: FrameWire frameIn opIn opOut frameOut
+          => p (Record opIn) (Record opOut)
+          -> p (Record frameIn) (Record frameOut)
+
+1. Dual Gather-Scatter Lifecycle:
+   Execution proceeds in two phases coordinated by 'FramePlan':
+   a. Contravariant Port Gather:
+      Before the operation runs, its input ports @opIn@ are gathered from @frameIn@
+      via @fpGatherIn :: RowMorph opIn frameIn@.
+   b. Frame Merge & Output Scatter ('executeFrameScatter'):
+      After the operation produces @opOut@, the new frame @frameOut@ is synthesized:
+      - Surviving @frameIn@ slots are written to @frameOut@ via @fpBaseScatter@.
+      - Output ports @opOut@ are written to @frameOut@ via @fpOpScatter@, overwriting
+        matching input ports and appending any fresh ports in two tight loops.
+
+2. Compile-Time Synthesis by Polytropos.Plugin:
+   Rather than performing associative map lookups or recursive type-level list
+   rewriting at runtime, the evidence class 'FrameWire' is solved directly by
+   the typechecker plugin:
+   - Sub-Row & Type Verification: Asserts that every port in @opIn@ exists in @frameIn@.
+     If polymorphic port type variables are present, nominal equality constraints
+     (@inTy ~# fTy@) are emitted, driving bidirectional port inference across pipeline stages.
+   - Canonical Row Overwrite: Computes @RowOverwrite frameIn opOut@ where matching labels
+     in @frameIn@ receive updated types from @opOut@, untouched labels are preserved in
+     their original order, and new labels from @opOut@ are appended.
+   - Automatic Output Row Unification: Emits a wanted nominal equality constraint
+     @frameOut ~# synthOutTy@. When chaining stages @stage1 >&> stage2@, downstream
+     frame outputs are automatically inferred without manual type signatures.
+   - Literal Core AST Synthesis: Synthesizes a call to 'unsafeMkFramePlan' with
+     pre-computed integer lists for @gatherIdxs@, @baseIdxs@, and @opIdxs@,
+     which bake directly into unboxed 'PrimArray' arrays in the binary with zero
+     heap traversal.
 -}
 
 {-# LANGUAGE AllowAmbiguousTypes #-}
@@ -225,6 +272,7 @@ scatterRep (RowMorph morph) (Rep _ subArr) (Rep t fullArr) = Rep t $ runSmallArr
 -- inside a live register frame @(frameIn -> frameOut)@.
 --
 -- See Note [Reified Row Morphisms and Gather-Scatter] [ref:note-row-morph-routing]
+-- See Note [Frame-Rule Automatic Wire Synthesis] [ref:note-frame-rule-wiring]
 type FramePlan :: forall {k1} {k2} {k3} {k4}. k1 -> k2 -> k3 -> k4 -> Type
 data FramePlan frameIn opIn opOut frameOut = FramePlan
   { fpOutSize     :: {-# UNPACK #-} !Int
@@ -241,11 +289,15 @@ data FramePlan frameIn opIn opOut frameOut = FramePlan
 -- 1. Verifies @opIn@ is a subrow of @frameIn@ (unifying port types).
 -- 2. Synthesizes @frameOut ~ RowOverwrite frameIn opOut@.
 -- 3. Emits the 'FramePlan' dictionary.
+--
+-- See Note [Frame-Rule Automatic Wire Synthesis] [ref:note-frame-rule-wiring]
 type FrameWire :: forall {k1} {k2} {k3} {k4}. k1 -> k2 -> k3 -> k4 -> Constraint
 class FrameWire frameIn opIn opOut frameOut where
   framePlan :: FramePlan frameIn opIn opOut frameOut
 
 -- | Entry point called by Core expressions synthesized by @Polytropos.Plugin@ for 'FrameWire'.
+--
+-- See Note [Frame-Rule Automatic Wire Synthesis] [ref:note-frame-rule-wiring]
 unsafeMkFramePlan
   :: forall {k1} {k2} {k3} {k4} (frameIn :: k1) (opIn :: k2) (opOut :: k3) (frameOut :: k4).
      Int
@@ -263,6 +315,8 @@ unsafeMkFramePlan outSz gatherIdxs baseIdxs opIdxs = FramePlan
 
 -- | Merges the previous frame @frameIn@ and the operation output @opOut@
 -- into the next frame @frameOut@ in two tight, branchless loops.
+--
+-- See Note [Frame-Rule Automatic Wire Synthesis] [ref:note-frame-rule-wiring]
 executeFrameScatter
   :: FramePlan frameIn opIn opOut frameOut
   -> Rep f a

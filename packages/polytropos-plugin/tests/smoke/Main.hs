@@ -220,6 +220,36 @@ main = defaultMain $ testGroup "plugin RowEq/RowShow smoke"
           sizeofPrimArray (unRowMorph mComposed) @?= 1
           indexRowMorph mComposed 0 @?= 2
       ]
+  , testGroup "FrameWire compile-time auto-wiring and row overwrite"
+      [ testCase "FrameWire solves for concrete frames and computes correct slot maps" $ do
+          let plan = framePlan @FWFrameIn @FWOpIn @FWOpOut @FWFrameOut
+          fpOutSize plan @?= 3
+          indexRowMorph (fpGatherIn plan) 0 @?= 1
+          indexRowMorph (fpBaseScatter plan) 0 @?= 0
+          indexRowMorph (fpBaseScatter plan) 1 @?= 1
+          indexRowMorph (fpOpScatter plan) 0 @?= 1
+          indexRowMorph (fpOpScatter plan) 1 @?= 2
+      , testCase "FrameWire unifies uninstantiated frameOut type variable and runs executeFrameRecord" $ do
+          let baseRec = REC { x = (42 :: Int), y = False }
+              opRec   = REC { y = 'Z', z = (3.14 :: Double) }
+              outRec  = executeFrameRecord (framePlan @FWFrameIn @FWOpIn @FWOpOut)
+                                           baseRec
+                                           opRec
+          outRec.x @?= Identity (42 :: Int)
+          outRec.y @?= Identity 'Z'
+          outRec.z @?= Identity (3.14 :: Double)
+      , testCase "FrameWire with non-overlapping opOut appends new ports" $ do
+          let baseRec = REC { a = (10 :: Int), b = True }
+              opRec   = REC { c = "appended" }
+              outRec  = executeFrameRecord (framePlan @'[ "a" := Int, "b" := Bool ]
+                                                      @'[ "a" := Int ]
+                                                      @'[ "c" := String ])
+                                           baseRec
+                                           opRec
+          outRec.a @?= Identity (10 :: Int)
+          outRec.b @?= Identity True
+          outRec.c @?= Identity "appended"
+      ]
   , testGroup "Compile-time label hashing (KnownHash)"
       [ testCase "knownHash solves on literal symbols and matches fnv1a64" $ do
           knownHash @"x" @?= fnv1a64 "x"
@@ -474,6 +504,31 @@ main = defaultMain $ testGroup "plugin RowEq/RowShow smoke"
             [ "Polytropos RowMorph Error:"
             , "Field 'a' has incompatible types in source and target rows:"
             ]
+      , testCase "FrameWire missing input port diagnostic" $
+          checkGhcDiag
+            (unlines
+              [ "{-# LANGUAGE DataKinds, TypeApplications, TypeOperators #-}"
+              , "module Test where"
+              , "import Polytropos"
+              , "t = framePlan @'[ \"x\" := Int ] @'[ \"missing\" := Bool ] @'[ \"x\" := Int ]"
+              ])
+            [ "Polytropos FrameWire Error:"
+            , "Cannot wire operation: input port 'missing' is missing in frame:"
+            , "{ x :: Int }"
+            ]
+      , testCase "FrameWire input port type mismatch diagnostic" $
+          checkGhcDiag
+            (unlines
+              [ "{-# LANGUAGE DataKinds, TypeApplications, TypeOperators #-}"
+              , "module Test where"
+              , "import Polytropos"
+              , "t = framePlan @'[ \"x\" := Int ] @'[ \"x\" := Bool ] @'[ \"x\" := Int ]"
+              ])
+            [ "Polytropos FrameWire Error:"
+            , "Input port 'x' has incompatible types in operation and frame:"
+            , "Operation input type: Bool"
+            , "Frame port type:      Int"
+            ]
       ]
   ]
 
@@ -593,3 +648,9 @@ type SmallProd = '[ "c" := String, "a" := Int ]
 -- | Big sum and sub-sum for testing SubSum evidence.
 type BigSum = '[ "A" := '[], "B" := '[ "x" := Int ], "C" := '[ "y" := Bool ] ]
 type SmallSum = '[ "A" := '[], "C" := '[ "y" := Bool ] ]
+
+-- | Frames for testing FrameWire evidence.
+type FWFrameIn  = '[ "x" := Int, "y" := Bool ]
+type FWOpIn     = '[ "y" := Bool ]
+type FWOpOut    = '[ "y" := Char, "z" := Double ]
+type FWFrameOut = '[ "x" := Int, "y" := Char, "z" := Double ]

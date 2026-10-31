@@ -264,6 +264,7 @@ module Polytropos
   , FramePlan(..)
   , FrameWire(..)
   , executeFrameScatter
+  , executeFrameRecord
     -- * Elimination & Peeling
   , peel
   , peelF
@@ -709,6 +710,18 @@ gatherRecord morph (RowRep rep) = RowRep (gatherRep morph rep)
 -- See Note [Reified Row Morphisms and Gather-Scatter] [ref:note-row-morph-routing]
 scatterRecord :: RowMorph sub full -> Record sub -> Record full -> Record full
 scatterRecord morph (RowRep sub) (RowRep full) = RowRep (scatterRep morph sub full)
+
+-- | High-level record runner for 'FramePlan': merges the previous frame @frameIn@
+-- and the operation output @opOut@ into the next frame @frameOut@ in two tight loops.
+--
+-- See Note [Frame-Rule Automatic Wire Synthesis] [ref:note-frame-rule-wiring]
+executeFrameRecord
+  :: FramePlan frameIn opIn opOut frameOut
+  -> Record frameIn
+  -> Record opOut
+  -> Record frameOut
+executeFrameRecord plan (RowRep baseRep) (RowRep opRep) =
+  RowRep (executeFrameScatter plan baseRep opRep)
 
 {-------------------------------------------------------------------------------
   Elimination & Peeling

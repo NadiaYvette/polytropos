@@ -189,6 +189,10 @@ import GHC.Core.Class
   , classTyCon
   )
 
+import GHC.Core.TyCon
+  ( tyConDataCons
+  )
+
 import GHC.Core.Multiplicity
   ( scaledThing
   , scaledMult
@@ -305,6 +309,7 @@ Notes defined in this module:
   * Note [Solving Pipeline: Wanteds, Givens, and Staged Evidence Synthesis] [ref:note-solving-pipeline]
   * Note [SubRow and SubSum Interior Mechanics: Matchers and Witness Generation] [ref:note-subrow-subsum-mechanics]
   * Note [Diagnostic Recovery and Cascading Error Prevention] [ref:note-diagnostic-prevention]
+  * Note [Frame-Rule Automatic Wire Synthesis] [ref:note-frame-rule-wiring]
 
 External Canonical Design References:
   * docs/notes/POLYTROPOS_DESIGN.md (decisions D1–D10, open questions)
@@ -666,6 +671,9 @@ data PluginState = PluginState
   , psPromotedText          :: !TyCon -- ^ promoted 'Text
   , psPromotedVcat          :: !TyCon -- ^ promoted ':$$:
   , psUnsafeMkRowMorph      :: !Var   -- ^ Polytropos.RowMorph.unsafeMkRowMorph
+  , psUnsafeMkFrame         :: !Var   -- ^ Polytropos.RowMorph.unsafeMkFramePlan
+  , psPairTyCon             :: !TyCon -- ^ Polytropos.Core.Pair
+  , psPromotedPair          :: !TyCon -- ^ promoted '(:=)
   }
 
 -------------------------------------------------------------------------------
@@ -726,8 +734,15 @@ polytroposInit = do
   let psPromotedText = promoteDataCon textDataCon
       psPromotedVcat = promoteDataCon vcatDataCon
 
+  pairOcc <- lookupOrig coreMod (mkTcOcc "Pair")
+  psPairTyCon <- tcLookupTyCon pairOcc
+  let psPromotedPair = case tyConDataCons psPairTyCon of
+        (dc : _) -> promoteDataCon dc
+        []       -> error "Polytropos.Plugin: Pair tycon has no data constructors"
+
   rowMorphMod <- findModule "Polytropos.RowMorph" (Just "polytropos-core")
   psUnsafeMkRowMorph <- lookupIdInModule rowMorphMod "unsafeMkRowMorph"
+  psUnsafeMkFrame    <- lookupIdInModule rowMorphMod "unsafeMkFramePlan"
 
   pure PluginState{..}
 
@@ -1063,6 +1078,10 @@ solveOne state ct
             -> noNew <$> solveKnownHash ct cls tys
             | nameOccName name == mkTcOcc "KnownRowMorph"
             -> solveKnownRowMorph state ct cls tys
+            | nameOccName name == mkTcOcc "FrameWire"
+            -> solveFrameWire state ct cls tys
+            | nameOccName name == mkTcOcc "IsLabel"
+            -> pure $ Right ()
             | otherwise
             -> pure $ Right ()
       _ -> pure $ Right ()
@@ -2077,6 +2096,151 @@ solveKnownRowMorph state ct cls tys
                          , "  Field '" ++ unpackFS name ++ "' has incompatible types in source and target rows:"
                          , "    Source type: " ++ showSDocUnsafe (ppr fieldTy)
                          , "    Target type: " ++ showSDocUnsafe (ppr sFieldTy)
+                         ]
+              pure $ Left diag
+
+-------------------------------------------------------------------------------
+-- FrameWire solver
+--
+-- See Note [Frame-Rule Automatic Wire Synthesis] [ref:note-frame-rule-wiring]
+-- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
+-- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
+-- See Note [Diagnostic Recovery and Cascading Error Prevention] [ref:note-diagnostic-prevention]
+-------------------------------------------------------------------------------
+
+-- | Solves the 'FrameWire frameIn opIn opOut frameOut' constraint:
+-- 1. Checks open-tail deferral on 'frameIn', 'opIn', and 'opOut'.
+-- 2. Verifies 'opIn' is a sub-row of 'frameIn', mapping gather indices and
+--    emitting nominal equality constraints for polymorphic port types.
+-- 3. Computes the canonical overwritten row 'RowOverwrite frameIn opOut'.
+-- 4. Computes 'baseIdxs' and 'opIdxs'.
+-- 5. Synthesizes 'synthOutTy' and unifies with 'frameOutTy' via nominal equality.
+-- 6. Emits Core call to 'unsafeMkFramePlan' wrapped in the 'FrameWire' dictionary.
+solveFrameWire
+  :: PluginState
+  -> Ct
+  -> Class
+  -> [Type]
+  -> TcPluginM 'Solve (Either ((EvTerm, Ct), [Ct]) ())
+solveFrameWire state ct cls tys
+  | length tys >= 4
+  , let len         = length tys
+        frameInTy   = tys !! (len - 4)
+        opInTy      = tys !! (len - 3)
+        opOutTy     = tys !! (len - 2)
+        frameOutTy  = last tys
+        loc         = ctLoc ct
+  , Just fInFields  <- walkRowWithTypes_maybe frameInTy
+  , Just oInFields  <- walkRowWithTypes_maybe opInTy
+  , Just oOutFields <- walkRowWithTypes_maybe opOutTy
+  = do
+      matchResult <- matchFrameInPorts loc oInFields fInFields
+      case matchResult of
+        Right (gatherIdxs, inEqCts) -> do
+          -- Compute canonical overwritten row:
+          -- 1. Surviving frameIn fields updated with new types from opOut.
+          -- 2. New opOut fields appended to the end.
+          let updatedFIn =
+                [ case [ oTy | (_, oName, oTy) <- oOutFields
+                             , if nullFS fName || nullFS oName then True else oName == fName ] of
+                    (newTy : _) -> (fName, newTy)
+                    []          -> (fName, fTy)
+                | (_, fName, fTy) <- fInFields
+                ]
+              newOpOut =
+                [ (oName, oTy)
+                | (_, oName, oTy) <- oOutFields
+                , null [ () | (_, fName, _) <- fInFields
+                            , if nullFS fName || nullFS oName then True else fName == oName ]
+                ]
+              mergedList = updatedFIn ++ newOpOut
+              outSz      = length mergedList
+
+              baseIdxs   = [0 .. length fInFields - 1]
+              lookupSlot oName =
+                case [ idx | (idx, (mName, _)) <- zip [0..] mergedList
+                           , if nullFS oName || nullFS mName then True else mName == oName ] of
+                  (idx : _) -> idx
+                  []        -> error "Polytropos.Plugin: impossible missing merged label in FrameWire"
+              opIdxs     = [ lookupSlot oName | (_, oName, _) <- oOutFields ]
+
+              -- Reify the synthesized frameOut row type
+              kTy = case (fInFields, oOutFields) of
+                ((_, _, ty) : _, _) -> typeKind ty
+                (_, (_, _, ty) : _) -> typeKind ty
+                _                   -> liftedTypeKind
+              entryKind = mkTyConApp (psPairTyCon state) [typeSymbolKind, kTy]
+              entries =
+                [ mkTyConApp (psPromotedPair state)
+                             [ typeSymbolKind
+                             , typeKind ty
+                             , mkStrLitTy name
+                             , ty
+                             ]
+                | (name, ty) <- mergedList
+                ]
+              synthOutTy = mkPromotedListTy entryKind entries
+
+          -- Unify frameOut with synthesized row if not already syntactically equal
+          outEqCts <- if frameOutTy `eqType` synthOutTy
+            then pure []
+            else do
+              outEqEv <- newWanted loc (mkEqPredRole Nominal frameOutTy synthOutTy)
+              pure [mkNonCanonical outEqEv]
+
+          let outSzExpr     = mkIntExpr outSz
+              gatherExpr    = mkListExpr intTy (map mkIntExpr gatherIdxs)
+              baseExpr      = mkListExpr intTy (map mkIntExpr baseIdxs)
+              opExpr        = mkListExpr intTy (map mkIntExpr opIdxs)
+              evExpr        = mkCoreApps (Var (psUnsafeMkFrame state))
+                                (map Type tys ++ [outSzExpr, gatherExpr, baseExpr, opExpr])
+              dictExpr      = evDataConApp (classDataCon cls) tys [evExpr]
+
+          pure $ Left ((EvExpr dictExpr, ct), outEqCts ++ inEqCts)
+
+        Left diagLines -> do
+          -- Input port mismatch: synthesize custom diagnostic and dummy evidence
+          let dummyExpr = mkCoreApps (Var (psUnsafeMkFrame state))
+                            (map Type tys ++ [mkIntExpr 0, mkListExpr intTy [], mkListExpr intTy [], mkListExpr intTy []])
+              dummyDict = evDataConApp (classDataCon cls) tys [dummyExpr]
+          errCt <- mkTypeErrorCt state loc diagLines
+          pure $ Left ((EvExpr dummyDict, ct), [errCt])
+  | otherwise = pure $ Right () -- Open tail deferral: wait until frameIn, opIn, and opOut are grounded
+  where
+    matchFrameInPorts
+      :: CtLoc
+      -> [(Int, FastString, Type)]
+      -> [(Int, FastString, Type)]
+      -> TcPluginM 'Solve (Either [String] ([Int], [Ct]))
+    matchFrameInPorts _loc [] _ = pure $ Right ([], [])
+    matchFrameInPorts loc ((_, inName, inTy) : rest) fFields =
+      case [ (j, fTy) | (j, fName, fTy) <- fFields
+                      , if nullFS inName || nullFS fName then True else fName == inName ] of
+        [] -> do
+          let fNames = [ unpackFS n | (_, n, _) <- fFields, not (nullFS n) ]
+              diag = [ "Polytropos FrameWire Error:"
+                     , "  Cannot wire operation: input port '" ++ unpackFS inName ++ "' is missing in frame:"
+                     , "    " ++ formatRecordRow fFields
+                     , "  " ++ formatSuggestion (unpackFS inName) fNames
+                     ]
+          pure $ Left diag
+        ((j, fTy) : _)
+          | inTy `eqType` fTy -> do
+              restRes <- matchFrameInPorts loc rest fFields
+              case restRes of
+                Right (idxs, wts) -> pure $ Right (j : idxs, wts)
+                Left diag         -> pure $ Left diag
+          | not (isClosedType inTy) || not (isClosedType fTy) -> do
+              eqEv <- newWanted loc (mkEqPredRole Nominal inTy fTy)
+              restRes <- matchFrameInPorts loc rest fFields
+              case restRes of
+                Right (idxs, wts) -> pure $ Right (j : idxs, mkNonCanonical eqEv : wts)
+                Left diag         -> pure $ Left diag
+          | otherwise -> do
+              let diag = [ "Polytropos FrameWire Error:"
+                         , "  Input port '" ++ unpackFS inName ++ "' has incompatible types in operation and frame:"
+                         , "    Operation input type: " ++ showSDocUnsafe (ppr inTy)
+                         , "    Frame port type:      " ++ showSDocUnsafe (ppr fTy)
                          ]
               pure $ Left diag
 

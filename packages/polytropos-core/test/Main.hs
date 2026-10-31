@@ -484,6 +484,23 @@ rowMorphTests = testGroup "row-morph"
       repArity frameOut @?= 2
       unslot (fieldAt 0 frameOut) @?= (1 :: Int)
       unslot (fieldAt 1 frameOut) @?= ("new" :: String)
+
+  , testCase "executeFrameRecord merges base frame and operation outputs" $ do
+      let fIn = insertField (Field @"id") (1 :: Int)
+              $ insertField (Field @"status") ("old" :: String)
+              $ emptyRecord
+          opOut = insertField (Field @"status") ("new" :: String)
+                $ insertField (Field @"extra") True
+                $ emptyRecord
+          plan = unsafeMkFramePlan 3 [0] [0, 1] [1, 2]
+                   :: FramePlan '[ "id" := Int, "status" := String ]
+                                '[ "id" := Int ]
+                                '[ "status" := String, "extra" := Bool ]
+                                '[ "id" := Int, "status" := String, "extra" := Bool ]
+          fOut = executeFrameRecord plan fIn opOut
+      unslot (fieldAt 0 (unRowRep fOut)) @?= (1 :: Int)
+      unslot (fieldAt 1 (unRowRep fOut)) @?= ("new" :: String)
+      unslot (fieldAt 2 (unRowRep fOut)) @?= True
   ]
 
 main :: IO ()
