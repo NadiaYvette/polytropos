@@ -378,8 +378,10 @@ representation:
     data Rep = Rep {-# UNPACK #-} !Word {-# UNPACK #-} !(SmallArray Any)
 
 `Polytropos.Plugin` is a GHC typechecker plugin that intercepts evidence constraints:
-  - `FieldIndex label row a`: Computes the 0-based integer slot offset `i`.
-  - `ConstructorIndex con row`: Computes the 0-based constructor tag `t` (Word).
+  - `FieldIndex label row a`: Computes the 0-based integer slot offset `i` across
+    standard, HKD, and multi-sorted effect rows (see Note [Poly-Kinded Row Indexing for Multi-Sorted Effects] [ref:note-poly-kinded-indexing]).
+  - `ConstructorIndex con row`: Computes the 0-based constructor tag `t` (Word) across
+    variant and effect rows.
   - `RowEq` / `RowShow` / `RowEqSum` / `RowShowSum`: Directly synthesizes unrolled
     Core expressions comparing or showing each slot in sequence, using literal `Int`
     and `Word` constants (see `mkIntExpr` and `mkWordExpr`).
@@ -906,7 +908,11 @@ suggestSimilar target candidates =
 -- Unrolls GHC Core Types to human-readable strings via 'ppr' and 'showSDocUnsafe'.
 formatRecordRow :: [(Int, FastString, Type)] -> String
 formatRecordRow fields =
-  "{ " ++ intercalate ", " [ unpackFS n ++ " :: " ++ showSDocUnsafe (ppr ty) | (_, n, ty) <- fields ] ++ " }"
+  "{ " ++ intercalate ", " (map formatField fields) ++ " }"
+  where
+    formatField (_, n, ty)
+      | nullFS n  = showSDocUnsafe (ppr ty)
+      | otherwise = unpackFS n ++ " :: " ++ showSDocUnsafe (ppr ty)
 
 -- | Formats a sum row's schema for display in compiler diagnostics:
 -- "< Con1 RecordPayload | Con2 TypePayload | Con3 >"
@@ -917,11 +923,13 @@ formatVariantRow :: [(Int, FastString, Type)] -> String
 formatVariantRow ctors =
   "< " ++ intercalate " | " (map formatCtor ctors) ++ " >"
   where
-    formatCtor (_, n, conRowTy) =
-      case walkRowWithTypes conRowTy of
-        [] -> unpackFS n
-        [(_, fn, ty)] | nullFS fn -> unpackFS n ++ " :: " ++ showSDocUnsafe (ppr ty)
-        fs -> unpackFS n ++ " " ++ formatRecordRow fs
+    formatCtor (_, n, conRowTy)
+      | nullFS n  = showSDocUnsafe (ppr conRowTy)
+      | otherwise =
+          case walkRowWithTypes conRowTy of
+            [] -> unpackFS n
+            [(_, fn, ty)] | nullFS fn -> unpackFS n ++ " :: " ++ showSDocUnsafe (ppr ty)
+            fs -> unpackFS n ++ " " ++ formatRecordRow fs
 
 -- | Formats a field suggestion clause:
 -- - If close matches exist: "Did you mean: 'name' or 'age'?"
@@ -1099,6 +1107,7 @@ solveOne state ct
 -- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
 -- See Note [Human-Centric TypeError Diagnostics & Fuzzy Matching] [ref:note-typeerror-diagnostics]
 -- See Note [Diagnostic Recovery and Cascading Error Prevention] [ref:note-diagnostic-prevention]
+-- See Note [Poly-Kinded Row Indexing for Multi-Sorted Effects] [ref:note-poly-kinded-indexing]
 --
 -- Execution Phases:
 -- 1. Deconstruct Predicate Types:
@@ -1179,11 +1188,33 @@ solveFieldIndex state ct cls tys
                 Nothing -> pure $ Right () -- Row tail is still open/unfixed: defer solving
         Nothing -> do
           -- Anonymous/positional field lookup by payload Type
+          -- See Note [Poly-Kinded Row Indexing for Multi-Sorted Effects] [ref:note-poly-kinded-indexing]
           case findFieldIndexByType unwrapN rowTy of
-            Just i -> do
-              let iExpr = mkIntExpr i
-                  dictExpr = evDataConApp (classDataCon cls) tys [iExpr]
-              pure $ Left ((EvExpr dictExpr, ct), [])
+            Just i
+              -- Accept exact type match
+              | unwrapN `eqType` expectedATy -> do
+                  let iExpr = mkIntExpr i
+                      dictExpr = evDataConApp (classDataCon cls) tys [iExpr]
+                  pure $ Left ((EvExpr dictExpr, ct), [])
+              -- If either type is open / uninstantiated, emit nominal equality constraint to unify them
+              | not (isClosedType expectedATy) || not (isClosedType unwrapN) -> do
+                  let iExpr = mkIntExpr i
+                      dictExpr = evDataConApp (classDataCon cls) tys [iExpr]
+                  eqEv <- newWanted loc (mkEqPredRole Nominal expectedATy unwrapN)
+                  pure $ Left ((EvExpr dictExpr, ct), [mkNonCanonical eqEv])
+              -- Terminal type discrepancy: emit diagnostic and safe dummy evidence
+              | otherwise -> do
+                  let dummyExpr = mkIntExpr 0
+                      dummyDict = evDataConApp (classDataCon cls) tys [dummyExpr]
+                      diagLines =
+                        [ "Polytropos Record Error:"
+                        , "  Matched field type:"
+                        , "    " ++ showSDocUnsafe (ppr unwrapN)
+                        , "  but expected:"
+                        , "    " ++ showSDocUnsafe (ppr expectedATy)
+                        ]
+                  errCt <- mkTypeErrorCt state loc diagLines
+                  pure $ Left ((EvExpr dummyDict, ct), [errCt])
             Nothing -> do
               case walkRowWithTypes_maybe rowTy of
                 Just fields -> do
@@ -1209,6 +1240,7 @@ solveFieldIndex state ct cls tys
 -- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
 -- See Note [Human-Centric TypeError Diagnostics & Fuzzy Matching] [ref:note-typeerror-diagnostics]
 -- See Note [Diagnostic Recovery and Cascading Error Prevention] [ref:note-diagnostic-prevention]
+-- See Note [Poly-Kinded Row Indexing for Multi-Sorted Effects] [ref:note-poly-kinded-indexing]
 --
 -- Execution Phases:
 -- 1. Deconstruct Constructor Predicate:

@@ -75,6 +75,7 @@ module Polytropos.Core (
   , SumRow
   , SumRowHKD
   , SumRowF
+  , EffectRowOf
     -- * Type-level row metadata
   , FieldNames
   , SimpleFieldTypes
@@ -301,6 +302,41 @@ A critical challenge in extensible sum types (variants) is how to deconstruct th
    tag overwrite, and pointer hand-off!
 -}
 
+{- Note [Poly-Kinded Row Indexing for Multi-Sorted Effects]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[tag:note-poly-kinded-indexing]
+Algebraic effect systems such as Penelope model effectful computations via
+open polycategorical effect rows:
+  - First-order effect rows: `ef :: RowOf PolyEffect` (or `EffectRowOf PolyEffect`),
+    where `PolyEffect = Row Type -> Row (Row Type) -> Type`.
+  - Higher-order effect rows: `eh :: RowOf PolyHEffect` (or `EffectRowOf PolyHEffect`),
+    where `PolyHEffect = (PortSig -> Type) -> Row PortSig -> Row Type -> Row (Row Type) -> Type`.
+
+Historically, extensible effect engines (e.g. `polysemy` or `freer-simple`) used Peano-indexed
+typeclasses (`Member e r`) requiring O(N) recursive dictionary search at compile time,
+and linear type-directed unpacking at runtime.
+
+In Polytropos, effect rows are simply poly-kinded rows `[Pair Symbol k]` or unlabeled lists `[k]`:
+1. Dual Modality Lookup:
+   - Named symbol lookup: `ConstructorIndex "state" ef` or `FieldIndex "state" ef StateEff`
+     resolves the 0-based offset of the effect label in O(1) compile time.
+   - Type-indexed lookup: `ConstructorIndex StateEff ef` or `FieldIndex StateEff ef StateEff`
+     resolves by matching the higher-kinded effect type constructor `StateEff` via `eqType`.
+2. Anonymous and Unlabeled Effect Rows:
+   - When an effect row is specified without labels (e.g. `'[StateEff, LogEff]`), each entry
+     is parsed with an empty symbol label (`nilFS`). Type-indexed lookup locates the slot
+     matching `StateEff` directly.
+3. Inferred Effect Resolution:
+   - For `FieldIndex "label" ef a`, if the expected effect signature `a` is an uninstantiated
+     type variable, the TcPlugin synthesizes a nominal equality constraint (`a ~# StateEff`),
+     allowing call-site effect operations (e.g. `sendPolyF @"state"`) to infer the operation's
+     concrete effect signature automatically without redundant type annotations.
+4. Zero-Overhead Core Emission:
+   - `Polytropos.Plugin` emits literal unboxed `Word#` or `Int#` constants wrapped in the
+     corresponding dictionary constructor (`evDataConApp`), generating zero residual search loops
+     or dictionary lookups in Core.
+-}
+
 {-------------------------------------------------------------------------------
   §1  The row vocabulary
 -------------------------------------------------------------------------------}
@@ -378,6 +414,15 @@ type SumRowHKD (f :: Type -> Type) = SumRowOf (ProductRow f)
 
 -- | Synonym for 'SumRowHKD'.
 type SumRowF (f :: Type -> Type) = SumRowHKD f
+
+-- | A poly-kinded effect row whose effect specifications have kind @k@.
+--
+-- [ref:note-poly-kinded-indexing]
+-- Effect rows map effect identifier symbols (or types) to their effect operations.
+-- Typical kinds for @k@ include:
+--   * @PolyEffect = Row Type -> Row (Row Type) -> Type@ (first-order operations)
+--   * @PolyHEffect = (PortSig -> Type) -> Row PortSig -> Row Type -> Row (Row Type) -> Type@ (higher-order operations)
+type EffectRowOf k = [Pair Symbol k]
 
 {-------------------------------------------------------------------------------
   §1b  Type-level row metadata (rewritten by TcPlugin)
@@ -901,6 +946,8 @@ class RowFlavour r => RowShowSum (r :: RowType) (row :: k) where
 -- The plugin solves this by inspecting the row and emitting the index as a
 -- literal (obligation 1, design note §5).
 --
+-- [ref:note-literal-evidence]
+-- [ref:note-poly-kinded-indexing]
 -- Algorithmic Mechanics:
 -- When GHC encounters a wanted constraint `FieldIndex "foo" r a`, the plugin
 -- scans the type-level list `r` for the entry `"foo" ':= a`. It returns the
@@ -915,6 +962,8 @@ class FieldIndex (n :: kn) (row :: k) (a :: ka) where
 -- The plugin solves this by inspecting the row and emitting the tag as a
 -- literal (obligation 2, design note §5).
 --
+-- [ref:note-literal-evidence]
+-- [ref:note-poly-kinded-indexing]
 -- Algorithmic Mechanics:
 -- For wanted `ConstructorIndex "Bar" s`, the plugin locates `"Bar"` in the sum
 -- row `s` and produces an unboxed integer literal `Lit (MachWord t)`.

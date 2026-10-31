@@ -27,6 +27,7 @@ module Main (main) where
 
 import Control.Monad.ST             (runST)
 import Data.Functor.Identity        (Identity(..))
+import Data.Kind                    (Type)
 import Data.Primitive.PrimArray     (sizeofPrimArray)
 import Data.Primitive.SmallArray    (indexSmallArray)
 import GHC.Exts                     (Any)
@@ -503,6 +504,35 @@ rowMorphTests = testGroup "row-morph"
       unslot (fieldAt 2 (unRowRep fOut)) @?= True
   ]
 
+-- | Mock higher-kinded effect signatures for EffectRowOf testing.
+type MockPolyEffect = RowOf Type -> RowOf (RowOf Type) -> Type
+data MockStateEff (ins :: RowOf Type) (outs :: RowOf (RowOf Type))
+data MockLogEff   (ins :: RowOf Type) (outs :: RowOf (RowOf Type))
+
+type MockEffectRow = EffectRowOf MockPolyEffect
+type MyCoreEf = '[ "state" := MockStateEff, "log" := MockLogEff ] :: MockEffectRow
+
+instance FieldIndex "state" MyCoreEf MockStateEff where
+  fieldIndex = 0
+
+instance FieldIndex "log" MyCoreEf MockLogEff where
+  fieldIndex = 1
+
+instance ConstructorIndex "state" MyCoreEf where
+  constructorIndex = 0
+
+instance ConstructorIndex "log" MyCoreEf where
+  constructorIndex = 1
+
+effectRowTests :: TestTree
+effectRowTests = testGroup "poly-kinded effect rows"
+  [ testCase "FieldIndex and ConstructorIndex over EffectRowOf" $ do
+      fieldIndex @_ @"state" @MyCoreEf @MockStateEff @?= 0
+      fieldIndex @_ @"log" @MyCoreEf @MockLogEff @?= 1
+      constructorIndex @_ @"state" @MyCoreEf @?= 0
+      constructorIndex @_ @"log" @MyCoreEf @?= 1
+  ]
+
 main :: IO ()
 main = defaultMain $ testGroup "polytropos-core"
   [ productTests
@@ -511,4 +541,5 @@ main = defaultMain $ testGroup "polytropos-core"
   , consumerTests
   , simdTests
   , rowMorphTests
+  , effectRowTests
   ]

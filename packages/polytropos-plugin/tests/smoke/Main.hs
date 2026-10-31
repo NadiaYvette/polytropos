@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -249,6 +250,51 @@ main = defaultMain $ testGroup "plugin RowEq/RowShow smoke"
           outRec.a @?= Identity (10 :: Int)
           outRec.b @?= Identity True
           outRec.c @?= Identity "appended"
+      ]
+  , testGroup "Poly-Kinded Effect Row Indexing (PolyEffect, PolyHEffect)"
+      [ testCase "FieldIndex by symbol on RowOf PolyEffect" $ do
+          fieldIndex @_ @"state" @MyEf @StateEff @?= 0
+          fieldIndex @_ @"log" @MyEf @LogEff @?= 1
+          fieldIndex @_ @"http" @MyEf @HttpEff @?= 2
+      , testCase "FieldIndex by symbol on RowOf PolyHEffect" $ do
+          fieldIndex @_ @"async" @MyHEf @AsyncHEff @?= 0
+          fieldIndex @_ @"catch" @MyHEf @CatchHEff @?= 1
+      , testCase "ConstructorIndex by symbol on RowOf PolyEffect" $ do
+          constructorIndex @_ @"state" @MyEf @?= 0
+          constructorIndex @_ @"log" @MyEf @?= 1
+          constructorIndex @_ @"http" @MyEf @?= 2
+      , testCase "ConstructorIndex by symbol on RowOf PolyHEffect" $ do
+          constructorIndex @_ @"async" @MyHEf @?= 0
+          constructorIndex @_ @"catch" @MyHEf @?= 1
+      , testCase "FieldIndex by type on labeled RowOf PolyEffect" $ do
+          fieldIndex @_ @StateEff @MyEf @StateEff @?= 0
+          fieldIndex @_ @LogEff @MyEf @LogEff @?= 1
+          fieldIndex @_ @HttpEff @MyEf @HttpEff @?= 2
+      , testCase "ConstructorIndex by type on labeled RowOf PolyEffect" $ do
+          constructorIndex @_ @StateEff @MyEf @?= 0
+          constructorIndex @_ @LogEff @MyEf @?= 1
+          constructorIndex @_ @HttpEff @MyEf @?= 2
+      , testCase "ConstructorIndex by type on labeled RowOf PolyHEffect" $ do
+          constructorIndex @_ @AsyncHEff @MyHEf @?= 0
+          constructorIndex @_ @CatchHEff @MyHEf @?= 1
+      , testCase "FieldIndex by type on unlabeled [PolyEffect]" $ do
+          fieldIndex @_ @StateEff @MyAnonEf @StateEff @?= 0
+          fieldIndex @_ @LogEff @MyAnonEf @LogEff @?= 1
+          fieldIndex @_ @HttpEff @MyAnonEf @HttpEff @?= 2
+      , testCase "ConstructorIndex by type on unlabeled [PolyEffect]" $ do
+          constructorIndex @_ @StateEff @MyAnonEf @?= 0
+          constructorIndex @_ @LogEff @MyAnonEf @?= 1
+          constructorIndex @_ @HttpEff @MyAnonEf @?= 2
+      , testCase "ConstructorIndex by type on unlabeled [PolyHEffect]" $ do
+          constructorIndex @_ @AsyncHEff @MyAnonHEf @?= 0
+          constructorIndex @_ @CatchHEff @MyAnonHEf @?= 1
+      , testCase "Inferred effect type variable resolution via nominal equality" $ do
+          let idxState = getEffectIndex @"state" @MyEf
+              idxLog   = getEffectIndex @"log" @MyEf
+              idxHttp  = getEffectIndex @"http" @MyEf
+          idxState @?= 0
+          idxLog @?= 1
+          idxHttp @?= 2
       ]
   , testGroup "Compile-time label hashing (KnownHash)"
       [ testCase "knownHash solves on literal symbols and matches fnv1a64" $ do
@@ -529,6 +575,23 @@ main = defaultMain $ testGroup "plugin RowEq/RowShow smoke"
             , "Operation input type: Bool"
             , "Frame port type:      Int"
             ]
+      , testCase "missing constructor diagnostic on unlabeled effect row formats cleanly" $
+          checkGhcDiag
+            (unlines
+              [ "{-# LANGUAGE DataKinds, TypeApplications, TypeOperators #-}"
+              , "module Test where"
+              , "import Data.Kind (Type)"
+              , "import Polytropos"
+              , "import Polytropos.Core"
+              , "type PolyEffect = RowOf Type -> RowOf (RowOf Type) -> Type"
+              , "data StateEff (ins :: RowOf Type) (outs :: RowOf (RowOf Type))"
+              , "data LogEff   (ins :: RowOf Type) (outs :: RowOf (RowOf Type))"
+              , "t = constructorIndex @_ @\"missing\" @'[ StateEff, LogEff ]"
+              ])
+            [ "Polytropos Variant Error:"
+            , "Constructor 'missing' is not a member of variant:"
+            , "< StateEff | LogEff >"
+            ]
       ]
   ]
 
@@ -654,3 +717,29 @@ type FWFrameIn  = '[ "x" := Int, "y" := Bool ]
 type FWOpIn     = '[ "y" := Bool ]
 type FWOpOut    = '[ "y" := Char, "z" := Double ]
 type FWFrameOut = '[ "x" := Int, "y" := Char, "z" := Double ]
+
+-- | Poly-kinded effect signatures and rows for testing Milestone 1.3
+type PolyEffect = RowOf Type -> RowOf (RowOf Type) -> Type
+
+data StateEff (ins :: RowOf Type) (outs :: RowOf (RowOf Type))
+data LogEff   (ins :: RowOf Type) (outs :: RowOf (RowOf Type))
+data HttpEff  (ins :: RowOf Type) (outs :: RowOf (RowOf Type))
+
+data PortSig = PortSig (RowOf Type) (RowOf Type)
+type PolyHEffect = (PortSig -> Type) -> RowOf PortSig -> RowOf Type -> RowOf (RowOf Type) -> Type
+
+data AsyncHEff (m :: PortSig -> Type) (r :: RowOf PortSig) (ins :: RowOf Type) (outs :: RowOf (RowOf Type))
+data CatchHEff (m :: PortSig -> Type) (r :: RowOf PortSig) (ins :: RowOf Type) (outs :: RowOf (RowOf Type))
+
+type MyEffects = EffectRowOf PolyEffect
+type MyEf = '[ "state" := StateEff, "log" := LogEff, "http" := HttpEff ] :: MyEffects
+
+type MyHEffects = EffectRowOf PolyHEffect
+type MyHEf = '[ "async" := AsyncHEff, "catch" := CatchHEff ] :: MyHEffects
+
+type MyAnonEf = '[ StateEff, LogEff, HttpEff ]
+type MyAnonHEf = '[ AsyncHEff, CatchHEff ]
+
+-- | Helper function testing polymorphic type variable inference for FieldIndex
+getEffectIndex :: forall (l :: Symbol) ef a. FieldIndex l ef a => Int
+getEffectIndex = fieldIndex @_ @l @ef @a

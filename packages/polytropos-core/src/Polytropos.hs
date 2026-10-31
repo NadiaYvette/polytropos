@@ -222,9 +222,12 @@ module Polytropos
   , type Variant
   , type VariantF
     -- * Row Vocabulary & Types
+  , type RowOf
   , type Row
+  , type SumRowOf
   , type SumRow
   , type ProductRow
+  , type EffectRowOf
 #if __GLASGOW_HASKELL__ >= 914
   , data Variant
   , data VariantF
@@ -353,6 +356,9 @@ The role of this module is to provide a zero-cost, type-safe ergonomic facade:
   3. Safe Combinators:
      - Projection (`projectRecord`), widening (`widenVariant`), narrowing (`narrowVariant`),
        peeling (`peel`), and elimination (`eliminateUniform`).
+  4. Poly-Kinded Effect Rows:
+     - Supports multi-sorted effect rows (`EffectRowOf PolyEffect`, `EffectRowOf PolyHEffect`)
+       with literal zero-residual index solving (see Note [Poly-Kinded Row Indexing for Multi-Sorted Effects] [ref:note-poly-kinded-indexing]).
 All of these combinators maintain complete type safety, ensuring that raw memory
 coercions (`noInlineUnsafeCo`, `unsafeCoerce`) are strictly encapsulated inside
 proven plugin-driven invariants.
