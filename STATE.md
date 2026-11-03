@@ -10,12 +10,13 @@ and verified through their deterministic gates. All milestones of `plans/2026-10
 §1.4 subrow/subsum projection evidence, §1.5 compile-time label hashing `KnownHash`, §1.6 source-plugin construction syntax & open declaration forms,
 and §1.7 generic instance layer over rows & dynamic dictionary emission) are implemented and verified.
 All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
-- `polytropos-core` passes 54 tests (primitive SmallArray CoW updates, `setFieldsAt` batch updates,
+- `polytropos-core` passes 81 tests (primitive SmallArray CoW updates, `setFieldsAt` batch updates,
   `MRep` transient builders, zero-copy `SmallArray` constructor peeling, injection, and projection without intermediate list allocations,
   `Polytropos` consumer surface, `Record`, `Variant`, `peel`, `peelF`,
   `eliminateUniform`, `eliminateUniformM`, `eliminate`, `matchVariant`, SIMD CoW 64/100-field record scaling,
   reified row morphisms `RowMorph`, `composeRowMorph`, `gatherRep`, `scatterRep`, `gatherRecord`, `scatterRecord`,
-  frame-rule execution `executeFrameScatter`, `executeFrameRecord`, and poly-kinded effect rows `EffectRowOf`).
+  frame-rule execution `executeFrameScatter`, `executeFrameRecord`, poly-kinded effect rows `EffectRowOf`,
+  and full generic Sums of Products (SOP) combinators in `Polytropos.Core.SOP`: `hpure`, `hcpure`, `hmap`, `hcmap`, `hliftA2`, `hcliftA2`, `hliftA3`, `hproduct`, `hunzip`, `hapProduct`, `hapSum`, $O(1)$ `helim`, `hcollapse`, `hfoldMap`, `hcfoldMap`, `hsequence`, `htraverse`, $O(1)$ `hindex`, `hexpand`, `injections`, `apInjs`, `hcoerce`, and consumer facade bridges `htoRecord`/`hfromRecord`/`htoVariant`/`hfromVariant`).
 - `polytropos-plugin-smoke` passes 79 tests with `-fplugin=Polytropos.Plugin` (`RowEq`, `RowShow`,
   `RowEqSum`, `RowShowSum`, native `OverloadedRecordDot` on bare and `RecordF Maybe` records including
   polymorphic inferred type variables with nominal equality constraint emission preventing GHCi RTS defaulting aborts,
@@ -375,6 +376,8 @@ Milestone T9 has been implemented, tested, and deterministically verified across
 - `.agents/rules/` — subdivided AI coding assistant operational rules
 - `packages/polytropos-docrecords` and `packages/polytropos-reader-soup` — satellite packages ported from `porcupine`, providing documentation metadata on open records and $O(1)$ multi-context reader environments backed by flat `Record` representations.
 - `packages/polytropos-dhall` — satellite package providing Dhall configuration language codecs (`FromDhall`, `ToDhall`) for open records, variants, HKD `RecordF`, and generic adapters (`GenericDhall` / `GenericFromDhall` / `GenericToDhall`) for nominal data structures (e.g. `gachi`). All 18 tests passing.
+- `packages/polytropos-core/src/Polytropos/Core/SOP.hs` — full generic Sums of Products (SOP) combinators over flat `SmallArray` row representations (`Rep` and `RowRep`), supporting unconstrained and constrained mapping, folding, zipping, $O(1)$ sum elimination, injections, and zero-copy conversions. All 27 unit tests passing.
+- `docs/transcripts/gemini-polytropos-sop.pdf` — reference transcript and design specification for Polytropos SOP integration.
 - Downstream algebraic effect systems ports (`effectful`, `polysemy`, `kernmantle`):
   * `effectful` (`30a10ea`): `Effectful.Soup`, `Effectful.ReaderSoup`, and `Effectful.Labeled` backed by flat Polytropos records; 95/95 test suite passing; pushed to 5 remotes.
   * `polysemy` (`830f3ec`): `Polysemy.ReaderSoup` with `HasSoup` fundep class, `Polysemy.Labeled` with `type (:::)` (fixity `infixr 6 :::`) and OverloadedLabels combinators; 102/102 test suite passing; pushed to 5 remotes.

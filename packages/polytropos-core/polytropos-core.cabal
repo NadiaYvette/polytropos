@@ -48,6 +48,7 @@ library
   import:           warnings
   exposed-modules:  Polytropos
                   , Polytropos.Core
+                  , Polytropos.Core.SOP
                   , Polytropos.RowMorph
   hs-source-dirs:   src
   default-language: GHC2021

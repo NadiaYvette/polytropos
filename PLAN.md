@@ -89,4 +89,21 @@ Design note §6, in order:
 - [x] Milestone 1.2: Frame-Rule Unification Constraint Solver (`FrameWire`): `FramePlan` gather/scatter wiring, automatic `frameOut` row overwrite synthesis, open-tail unification variable deferral, `executeFrameRecord` combinator, and custom `TypeError` diagnostics.
 - [x] Milestone 1.3: Poly-Kinded Effect Row Indexing: generalize `FieldIndex` and `ConstructorIndex` for multi-sorted effect rows (`PolyEffect`, `PolyHEffect`), supporting dual named/type lookup modalities, inferred effect type unification via nominal equality emission, literal unboxed Core dictionary emission, and clean anonymous variant diagnostics.
 
+## Milestone 10 — sums of products (SOP) combinator engine
+
+- [x] Full generic SOP interface module in `packages/polytropos-core/src/Polytropos/Core/SOP.hs`
+- [x] Flat runtime memory execution over `Rep f a` and `RowRep f r row a` for products and sums
+- [x] Full suite of higher-order combinators matching `generics-sop` conventions:
+  - Universal constraints & reflection: `Top`, `ReifyFieldNames`
+  - Population: `hpure`, `hpureFromNames`, `hpureArity`, `hcpure`, `hcpure_`
+  - Mapping & zipping: `hmap`, `hliftA`, `hcmapProduct`, `hcmapSum`, `HCMap(..)`, `hcmap`, `hcmap_`, `hcliftA`, `hcliftA_`, `hliftA2`, `hzipWith`, `hliftA2Sum`, `hcliftA2`, `hczipWith`, `hcliftA2_`, `hcliftA2Sum`, `hliftA3`, `hzipWith3`, `hcliftA3`, `hczipWith3`, `hcliftA3_`, `hproduct`, `hunzip`
+  - Application & elimination: `hapProduct`, `hap`, `hapSum`, `helim` ($O(1)$ sum dispatch)
+  - Folding & collapsing: `hcollapse`, `hcollapseFold`, `hfoldMap`, `hcfoldMap`, `hcfoldMap_`, `hcfoldMapSum`
+  - Traversing & sequencing: `hsequence'`, `hsequence`, `htraverse`, `hctraverse`, `hctraverse_`
+  - Sum operations: `hindex` ($O(1)$ constructor tag retrieval), `hexpand`, `hexpandArity`, `injections`, `injectionsArity`, `apInjs`, `hhead`
+  - Zero-copy coercions & metadata: `hcoerce`, `htoI`, `hfromI`, `hunit`, `hdeunit`, `hfieldNames`
+  - Ergonomic consumer facade in `Polytropos`: `htoRecord`, `hfromRecord`, `htoVariant`, `hfromVariant`
+- [x] Comprehensive test coverage with 27 unit tests in `packages/polytropos-core/test/Main.hs` (81/81 test suite passing)
+- [x] 100% Haddock documentation coverage across all SOP combinators
+
 

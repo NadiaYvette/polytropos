@@ -185,9 +185,7 @@ import Polytropos.Core
   , AllFields(..)
   , noInlineUnsafeCo
   )
-
--- | Identity functor for use with t'Polytropos.Core.Rep'.
-newtype I a = I { unI :: a }
+import Polytropos.Core.SOP (I(..))
 
 -- | Generic conversion class. Bridges nominal ADTs to t'Polytropos.Core.Rep'.
 class Generic a where

@@ -321,9 +321,16 @@ module Polytropos
   , czipWithRecord
   , cmapRecordF
   , cfoldMapRecordF
+    -- * Sums of Products (SOP) Interface
+  , module Polytropos.Core.SOP
+  , htoRecord
+  , hfromRecord
+  , htoVariant
+  , hfromVariant
   ) where
 
 import Polytropos.Core
+import Polytropos.Core.SOP
 import Polytropos.RowMorph
 import Data.Functor.Identity (Identity(..))
 import Data.Kind (Type)
@@ -1125,5 +1132,25 @@ cfoldMapRecordF f (RowRep (Rep _ v)) =
                    let val = f (noInlineUnsafeCo vi :: Any)
                    in val <> loop (i + 1)
   in loop 0
+
+{-------------------------------------------------------------------------------
+  §1.8  SOP Record & Variant Coercions
+-------------------------------------------------------------------------------}
+
+-- | Coerce a 'RowRep' at 'Identity' to a 'Record' in \(\mathcal{O}(1)\) time.
+htoRecord :: RowRep Identity ProductRowT row a -> Record row
+htoRecord = unsafeCoerce
+
+-- | Coerce a 'Record' to a 'RowRep' in \(\mathcal{O}(1)\) time.
+hfromRecord :: Record row -> RowRep Identity ProductRowT row a
+hfromRecord = unsafeCoerce
+
+-- | Coerce a 'RowRep' at 'Identity' to a 'Variant' in \(\mathcal{O}(1)\) time.
+htoVariant :: RowRep Identity SumRowT row a -> Variant row
+htoVariant = unsafeCoerce
+
+-- | Coerce a 'Variant' to a 'RowRep' in \(\mathcal{O}(1)\) time.
+hfromVariant :: Variant row -> RowRep Identity SumRowT row a
+hfromVariant = unsafeCoerce
 
 

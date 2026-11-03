@@ -26,10 +26,13 @@
 module Main (main) where
 
 import Control.Monad.ST             (runST)
+import Data.Functor.Compose         (Compose(..))
+import Data.Functor.Const           (Const(..))
 import Data.Functor.Identity        (Identity(..))
 import Data.Kind                    (Type)
 import Data.Primitive.PrimArray     (sizeofPrimArray)
 import Data.Primitive.SmallArray    (indexSmallArray)
+import Data.Proxy                   (Proxy(..))
 import GHC.Exts                     (Any)
 import Test.Tasty                  (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit            (testCase, (@?=))
@@ -123,6 +126,12 @@ instance RowEqSum SumRowT '[ "neg" := '[ Int ] ] where
     repTag r1 == repTag r2
       && repArity r1 == repArity r2
       && intAt0 r1 == intAt0 r2
+
+instance AllFields ProductRowT R2 Top where
+  fieldDicts = evidenceAllFields [mkDictAny @Top @Int, mkDictAny @Top @Bool]
+
+instance AllFields ProductRowT R2 Show where
+  fieldDicts = evidenceAllFields [mkDictAny @Show @Int, mkDictAny @Show @Bool]
 
 {-------------------------------------------------------------------------------
   Fixtures
@@ -267,6 +276,9 @@ instance ConstructorIndex "Pos" '[ "Pos" ':= '[ "v" ':= Int ] ] where
 
 instance ConstructorIndex "Neg" '[ "Neg" ':= '[ "v" ':= Int ] ] where
   constructorIndex = 0
+
+instance AllFields SumRowT TwoSum Show where
+  fieldDicts = evidenceAllFields [mkDictAny @Show @Int, mkDictAny @Show @Int]
 
 consumerTests :: TestTree
 consumerTests = testGroup "consumer api (Polytropos)"
@@ -533,6 +545,247 @@ effectRowTests = testGroup "poly-kinded effect rows"
       constructorIndex @_ @"log" @MyCoreEf @?= 1
   ]
 
+sopTests :: TestTree
+sopTests = testGroup "sop combinators (Polytropos.Core.SOP)"
+  [ testCase "hcollapse extracts values from Const-wrapped product RowRep" $ do
+      let r = RowRep (productRep [Const (10 :: Int), Const (20 :: Int)]) :: RowRep (Const Int) ProductRowT R2 ()
+      hcollapse r @?= [10, 20]
+      hcollapseFold r @?= [10, 20]
+
+  , testCase "hcollapse extracts active constructor payload from Const-wrapped sum RowRep" $ do
+      let s = RowRep (injectRep 1 [Const (42 :: Int)]) :: RowRep (Const Int) SumRowT TwoSum ()
+      hcollapse s @?= [42]
+      hcollapseFold s @?= [42]
+
+  , testCase "hpure populates product RowRep using Top constraint" $ do
+      let p = hpure @R2 (Const (99 :: Int))
+      hcollapse p @?= [99, 99]
+
+  , testCase "hpureFromNames populates product RowRep using ReifyFieldNames" $ do
+      let p = hpureFromNames @R2 (Const (123 :: Int))
+      hcollapse p @?= [123, 123]
+
+  , testCase "hpureArity populates product RowRep with specified length" $ do
+      let p = hpureArity 4 (Const ("ok" :: String)) :: RowRep (Const String) ProductRowT R2 ()
+      hcollapse p @?= ["ok", "ok", "ok", "ok"]
+
+  , testCase "hcpure populates product RowRep using class constraint" $ do
+      let cp = hcpure @Show @R2 (Const ("shown" :: String))
+      hcollapse cp @?= ["shown", "shown"]
+      let cp_ = hcpure_ (Proxy @Show) (Const ("proxy" :: String)) :: RowRep (Const String) ProductRowT R2 ()
+      hcollapse cp_ @?= ["proxy", "proxy"]
+
+  , testCase "hmap and hliftA preserve tag and map over slots" $ do
+      let p = RowRep (productRep [slot (1 :: Int), slot (2 :: Int)]) :: RowRep Identity ProductRowT R2 ()
+          p' = hmap (\(Identity x) -> Identity (noInlineUnsafeCo ((noInlineUnsafeCo x :: Int) + 10))) p
+      unslot (fieldAt 0 (unRowRep p')) @?= (11 :: Int)
+      unslot (fieldAt 1 (unRowRep p')) @?= (12 :: Int)
+
+      let s = RowRep (injectRep 1 [slot (5 :: Int)]) :: RowRep Identity SumRowT TwoSum ()
+          s' = hliftA (\(Identity x) -> Identity (noInlineUnsafeCo ((noInlineUnsafeCo x :: Int) * 3))) s
+      repTag (unRowRep s') @?= 1
+      unslot (fieldAt 0 (unRowRep s')) @?= (15 :: Int)
+
+  , testCase "hcmapProduct and hcmapSum apply constrained mapping" $ do
+      let p = RowRep (productRep [slot (10 :: Int), slot True]) :: RowRep Identity ProductRowT R2 ()
+          shownP = hcmapProduct @Show (\(Identity x) -> Const (show x)) p
+      case hcollapse shownP of
+        [s0, _] -> s0 @?= "10"
+        _       -> error "Expected 2 items"
+
+      let s = RowRep (injectRep 1 [slot (99 :: Int)]) :: RowRep Identity SumRowT TwoSum ()
+          shownS = hcmapSum @Show (\(Identity x) -> Const (show x)) s
+      hcollapse shownS @?= ["99"]
+
+      let uP = hcmap @Show (\(Const str) -> Const (str ++ "!")) shownP
+      case hcollapse uP of
+        (s0 : _) -> s0 @?= "10!"
+        []       -> error "Expected non-empty list"
+      let uS = hcmap @Show (\(Const str) -> Const (str ++ "!")) shownS
+      hcollapse uS @?= ["99!"]
+
+  , testCase "hliftA2 and hzipWith pointwise zip product rows" $ do
+      let p1 = RowRep (productRep [slot (1 :: Int), slot (2 :: Int)]) :: RowRep Identity ProductRowT R2 ()
+          p2 = RowRep (productRep [slot (10 :: Int), slot (20 :: Int)]) :: RowRep Identity ProductRowT R2 ()
+          z = hliftA2 (\(Identity x) (Identity y) -> Identity (noInlineUnsafeCo ((noInlineUnsafeCo x :: Int) + (noInlineUnsafeCo y :: Int)))) p1 p2
+      unslot (fieldAt 0 (unRowRep z)) @?= (11 :: Int)
+      unslot (fieldAt 1 (unRowRep z)) @?= (22 :: Int)
+
+  , testCase "hliftA2Sum succeeds on matching tags and fails on mismatched tags" $ do
+      let s1 = RowRep (injectRep 1 [slot (5 :: Int)]) :: RowRep Identity SumRowT TwoSum ()
+          s2 = RowRep (injectRep 1 [slot (10 :: Int)]) :: RowRep Identity SumRowT TwoSum ()
+          sDiff = RowRep (injectRep 0 [slot (10 :: Int)]) :: RowRep Identity SumRowT TwoSum ()
+          zMatch = hliftA2Sum (\(Identity x) (Identity y) -> Identity (noInlineUnsafeCo ((noInlineUnsafeCo x :: Int) + (noInlineUnsafeCo y :: Int)))) s1 s2
+      case zMatch of
+        Just (RowRep r) -> do
+          repTag r @?= 1
+          unslot (fieldAt 0 r) @?= (15 :: Int)
+        Nothing -> error "Expected Just for matching tags"
+
+      let zMismatch = hliftA2Sum (\(Identity x) (Identity y) -> Identity (noInlineUnsafeCo ((noInlineUnsafeCo x :: Int) + (noInlineUnsafeCo y :: Int)))) s1 sDiff
+      case zMismatch of
+        Nothing -> pure ()
+        Just _  -> error "Expected Nothing for mismatched tags"
+
+  , testCase "hcliftA2 and hczipWith apply constrained binary zip" $ do
+      let p1 = RowRep (productRep [slot (1 :: Int), slot True]) :: RowRep Identity ProductRowT R2 ()
+          p2 = RowRep (productRep [slot (3 :: Int), slot False]) :: RowRep Identity ProductRowT R2 ()
+          cz = hcliftA2 @Show (\(Identity x) (Identity y) -> Const (show x ++ "+" ++ show y)) p1 p2
+      hcollapse cz @?= ["1+3", "True+False"]
+
+  , testCase "hliftA3 and hcliftA3 3-way zip product rows" $ do
+      let p1 = RowRep (productRep [slot (1 :: Int), slot (2 :: Int)]) :: RowRep Identity ProductRowT R2 ()
+          p2 = RowRep (productRep [slot (10 :: Int), slot (20 :: Int)]) :: RowRep Identity ProductRowT R2 ()
+          p3 = RowRep (productRep [slot (100 :: Int), slot (200 :: Int)]) :: RowRep Identity ProductRowT R2 ()
+          z3 = hliftA3 (\(Identity x) (Identity y) (Identity z) -> Identity (noInlineUnsafeCo ((noInlineUnsafeCo x :: Int) + (noInlineUnsafeCo y :: Int) + (noInlineUnsafeCo z :: Int)))) p1 p2 p3
+      unslot (fieldAt 0 (unRowRep z3)) @?= (111 :: Int)
+      unslot (fieldAt 1 (unRowRep z3)) @?= (222 :: Int)
+
+  , testCase "hproduct and hunzip roundtrip in single ST pass" $ do
+      let p1 = RowRep (productRep [slot (1 :: Int), slot (2 :: Int)]) :: RowRep Identity ProductRowT R2 ()
+          p2 = RowRep (productRep [slot ("hello" :: String), slot ("world" :: String)]) :: RowRep Identity ProductRowT R2 ()
+          prod = hproduct p1 p2
+          (u1, u2) = hunzip prod
+      unslot (fieldAt 0 (unRowRep u1)) @?= (1 :: Int)
+      unslot (fieldAt 1 (unRowRep u1)) @?= (2 :: Int)
+      unslot (fieldAt 0 (unRowRep u2)) @?= ("hello" :: String)
+      unslot (fieldAt 1 (unRowRep u2)) @?= ("world" :: String)
+
+  , testCase "hapProduct applies product of functions to product of values" $ do
+      let fn1 = Fn (\(Identity x) -> Identity (noInlineUnsafeCo ((noInlineUnsafeCo x :: Int) * 2)))
+          fn2 = Fn (\(Identity x) -> Identity (noInlineUnsafeCo ((noInlineUnsafeCo x :: Int) * 10)))
+          fns = RowRep (productRep [noInlineUnsafeCo fn1, noInlineUnsafeCo fn2])
+                  :: RowRep (Identity -.-> Identity) ProductRowT R2 ()
+          args = RowRep (productRep [slot (5 :: Int), slot (6 :: Int)]) :: RowRep Identity ProductRowT R2 ()
+          res = hapProduct fns args
+      unslot (fieldAt 0 (unRowRep res)) @?= (10 :: Int)
+      unslot (fieldAt 1 (unRowRep res)) @?= (60 :: Int)
+
+  , testCase "hapSum dispatches product of functions to sum in O(1)" $ do
+      let fn1 = Fn (\(Identity x) -> Identity (noInlineUnsafeCo ((noInlineUnsafeCo x :: Int) * 2)))
+          fn2 = Fn (\(Identity x) -> Identity (noInlineUnsafeCo ((noInlineUnsafeCo x :: Int) * 10)))
+          fns = RowRep (productRep [noInlineUnsafeCo fn1, noInlineUnsafeCo fn2])
+                  :: RowRep (Identity -.-> Identity) ProductRowT TwoSum ()
+          argS0 = RowRep (injectRep 0 [slot (7 :: Int)]) :: RowRep Identity SumRowT TwoSum ()
+          argS1 = RowRep (injectRep 1 [slot (7 :: Int)]) :: RowRep Identity SumRowT TwoSum ()
+          res0 = hapSum fns argS0
+          res1 = hapSum fns argS1
+      repTag (unRowRep res0) @?= 0
+      unslot (fieldAt 0 (unRowRep res0)) @?= (14 :: Int)
+      repTag (unRowRep res1) @?= 1
+      unslot (fieldAt 0 (unRowRep res1)) @?= (70 :: Int)
+
+  , testCase "helim eliminates sum variant using handler product in O(1)" $ do
+      let h1 = Fn (\(Identity x) -> Const (-(noInlineUnsafeCo x :: Int)))
+          h2 = Fn (\(Identity x) -> Const ((noInlineUnsafeCo x :: Int) * 100))
+          handlers = RowRep (productRep [noInlineUnsafeCo h1, noInlineUnsafeCo h2])
+                       :: RowRep (Identity -.-> Const Int) ProductRowT TwoSum ()
+          argS0 = RowRep (injectRep 0 [slot (8 :: Int)]) :: RowRep Identity SumRowT TwoSum ()
+          argS1 = RowRep (injectRep 1 [slot (8 :: Int)]) :: RowRep Identity SumRowT TwoSum ()
+      helim handlers argS0 @?= (-8)
+      helim handlers argS1 @?= 800
+
+  , testCase "hfoldMap and hcfoldMap accumulate into monoid" $ do
+      let p = RowRep (productRep [slot (1 :: Int), slot True]) :: RowRep Identity ProductRowT R2 ()
+          res = hfoldMap (\(Identity _) -> [1 :: Int]) p
+      res @?= [1, 1]
+      let cfm = hcfoldMap @Show (\(Identity x) -> [show x]) p
+      cfm @?= ["1", "True"]
+
+  , testCase "hcfoldMapSum accumulates active constructor into monoid" $ do
+      let s = RowRep (injectRep 1 [slot (42 :: Int)]) :: RowRep Identity SumRowT TwoSum ()
+          res = hcfoldMapSum @Show (\(Identity x) -> [show x]) s
+      res @?= ["42"]
+
+  , testCase "hsequence' and hsequence sequence Applicative effects" $ do
+      let compP = RowRep (productRep [Compose (Just (slot (10 :: Int))), Compose (Just (slot (20 :: Int)))])
+                    :: RowRep (Compose Maybe Identity) ProductRowT R2 ()
+      case hsequence' compP of
+        Just r -> do
+          unslot (fieldAt 0 (unRowRep r)) @?= (10 :: Int)
+          unslot (fieldAt 1 (unRowRep r)) @?= (20 :: Int)
+        Nothing -> error "Expected Just"
+
+      let seqP = RowRep (productRep [Just (noInlineUnsafeCo (10 :: Int)), Just (noInlineUnsafeCo (20 :: Int))])
+                   :: RowRep Maybe ProductRowT R2 ()
+      case hsequence seqP of
+        Just r -> do
+          unslot (fieldAt 0 (unRowRep r)) @?= (10 :: Int)
+          unslot (fieldAt 1 (unRowRep r)) @?= (20 :: Int)
+        Nothing -> error "Expected Just"
+
+  , testCase "htraverse and hctraverse traverse Applicative effects" $ do
+      let p = RowRep (productRep [slot (1 :: Int), slot (2 :: Int)]) :: RowRep Identity ProductRowT R2 ()
+          tRes = htraverse (\(Identity x) -> Just (Identity (noInlineUnsafeCo ((noInlineUnsafeCo x :: Int) + 1)))) p
+      case tRes of
+        Just r -> do
+          unslot (fieldAt 0 (unRowRep r)) @?= (2 :: Int)
+          unslot (fieldAt 1 (unRowRep r)) @?= (3 :: Int)
+        Nothing -> error "Expected Just"
+
+  , testCase "hindex returns active constructor index in O(1)" $ do
+      let s0 = RowRep (injectRep 0 [slot (1 :: Int)]) :: RowRep Identity SumRowT TwoSum ()
+          s1 = RowRep (injectRep 1 [slot (2 :: Int)]) :: RowRep Identity SumRowT TwoSum ()
+      hindex s0 @?= 0
+      hindex s1 @?= 1
+
+  , testCase "hexpand expands sum into Compose Maybe product" $ do
+      let s = RowRep (injectRep 1 [slot (99 :: Int)]) :: RowRep Identity SumRowT TwoSum ()
+          expanded = hexpand @TwoSum s
+      repArity (unRowRep expanded) @?= 2
+      case fieldAt 0 (unRowRep expanded) of
+        Compose Nothing -> pure ()
+        _               -> error "Expected Nothing at slot 0"
+      case fieldAt 1 (unRowRep expanded) of
+        Compose (Just x) -> unslot x @?= (99 :: Int)
+        _                -> error "Expected Just at slot 1"
+
+  , testCase "injections and apInjs sum/product conversions" $ do
+      let injs = injections @TwoSum :: RowRep (Identity -.-> Const (RowRep Identity SumRowT TwoSum ())) ProductRowT TwoSum ()
+      repArity (unRowRep injs) @?= 2
+
+      let p = RowRep (productRep [slot (10 :: Int), slot (20 :: Int)]) :: RowRep Identity ProductRowT TwoSum ()
+          injsList = apInjs p
+      case injsList of
+        [inj0, inj1] -> do
+          repTag (unRowRep inj0) @?= 0
+          unslot (fieldAt 0 (unRowRep inj0)) @?= (10 :: Int)
+          repTag (unRowRep inj1) @?= 1
+          unslot (fieldAt 0 (unRowRep inj1)) @?= (20 :: Int)
+        _ -> error "Expected 2 injections"
+
+  , testCase "hhead extracts slot 0" $ do
+      let p = RowRep (productRep [slot (77 :: Int), slot (88 :: Int)]) :: RowRep Identity ProductRowT R2 ()
+      unslot (hhead p) @?= (77 :: Int)
+
+  , testCase "hcoerce, htoI, hfromI perform zero-copy casts" $ do
+      let p = RowRep (productRep [slot (42 :: Int)]) :: RowRep Identity ProductRowT R2 ()
+          asI = htoI p
+      unI (unslot (fieldAt 0 (unRowRep asI))) @?= (42 :: Int)
+      let asId :: RowRep Identity ProductRowT R2 ()
+          asId = hfromI asI
+      runIdentity (unslot (fieldAt 0 (unRowRep asId))) @?= (42 :: Int)
+
+  , testCase "hfieldNames reifies row symbol names" $ do
+      let namesR2 = hfieldNames @R2 :: RowRep (Const String) ProductRowT R2 ()
+      hcollapse namesR2 @?= ["a", "b"]
+      let namesTwoSum = hfieldNames @TwoSum :: RowRep (Const String) ProductRowT TwoSum ()
+      hcollapse namesTwoSum @?= ["Neg", "Pos"]
+
+  , testCase "htoRecord, hfromRecord, htoVariant, hfromVariant bridge facade" $ do
+      let p = RowRep (productRep [slot (100 :: Int)]) :: RowRep Identity ProductRowT R2 Int
+          recVal = htoRecord p
+      repArity (unRowRep recVal) @?= 1
+      let p' = hfromRecord recVal :: RowRep Identity ProductRowT R2 Int
+      repArity (unRowRep p') @?= 1
+
+      let s = RowRep (injectRep 1 [slot (200 :: Int)]) :: RowRep Identity SumRowT TwoSum Int
+          varVal = htoVariant s
+      repTag (unRowRep varVal) @?= 1
+      let s' = hfromVariant varVal :: RowRep Identity SumRowT TwoSum Int
+      repTag (unRowRep s') @?= 1
+  ]
+
 main :: IO ()
 main = defaultMain $ testGroup "polytropos-core"
   [ productTests
@@ -542,4 +795,5 @@ main = defaultMain $ testGroup "polytropos-core"
   , simdTests
   , rowMorphTests
   , effectRowTests
+  , sopTests
   ]
