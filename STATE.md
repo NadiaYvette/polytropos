@@ -122,6 +122,11 @@ All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
   * **Cabal Manifest Standards:** Harmonized `cabal-version: 3.0` across all packages, added `homepage: https://github.com/NadiaYvette/polytropos`, `bug-reports: https://github.com/NadiaYvette/polytropos/issues`, `extra-doc-files: README.md, CHANGELOG.md`, and monorepo-aware `source-repository head` blocks (with `subdir: packages/<pkg>`).
   * **Hygiene & Verification:** Removed stray `.hi` build artifact from `polytropos-plugin/src/`; confirmed 100% clean `cabal check` (0 errors, 0 warnings across all 16 packages); confirmed `cabal sdist all` generates complete, self-contained source tarballs containing license, changelog, readme, sources, and tests; confirmed `cabal haddock --haddock-for-hackage all` builds all documentation tarballs with 100% coverage; and confirmed all 210 test cases pass.
   * **Hackage Candidate Upload:** Successfully uploaded all 16 source package candidates and all 16 candidate documentation tarballs to Hackage via `cabal upload` and `cabal upload -d`, available for preview under `https://hackage.haskell.org/package/<pkg>-0.1.0.0/candidate`.
+- **Release 0.1.0.3 Tagging & Penelope Effect System Foundations:**
+  * **Git Tag 0.1.0.3:** Tagged release `0.1.0.3` bumping the least-significant version component across all 26 packages, benchmarks, and examples.
+  * **Reified Row Morphisms (`RowMorph`):** Static permutation arrays (`PrimArray Int`) and `KnownRowMorph` TcPlugin solver for compile-time peephole route fusion.
+  * **Frame-Rule Automatic Register Wiring (`FrameWire`):** TcPlugin solver synthesizing compile-time gather and scatter plans for frame-rule register wiring.
+  * **Poly-Kinded Effect Row Indexing:** Generalized `ConstructorIndex` and `FieldIndex` TcPlugin solvers supporting effect operations (`Type -> Type`) over open variant rows.
 - **Release 0.1.0.2 Tagging & Dhall Expansion:**
   * **Git Tag 0.1.0.2:** Tagged release `0.1.0.2` bumping the least-significant version component across all 20 packages, benchmarks, and examples.
   * **Dhall Satellite (`polytropos-dhall`):** Integrated and published linear $O(N)$ `FromDhall`/`ToDhall` codecs and `GenericDhall` deriving adapters for open records, variants, HKD `RecordF`, and nominal data types.

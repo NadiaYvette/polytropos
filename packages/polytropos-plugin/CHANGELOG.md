@@ -1,5 +1,11 @@
 # Changelog for polytropos-plugin
 
+## 0.1.0.3 — 2026-11-03
+
+- Add `KnownRowMorph` constraint solver emitting literal `RowMorph` index arrays for static channel permutations.
+- Add `FrameWire` constraint solver synthesizing automatic gather and scatter plans for frame-rule register wiring.
+- Generalize `ConstructorIndex` solver to poly-kinded constructors (`k -> Type` and `Type -> Type`).
+
 ## 0.1.0.0 — Initial Release
 
 - GHC typechecker plugin synthesizing literal dictionaries and $O(1)$ jump tables directly into Core AST

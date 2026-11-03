@@ -1,5 +1,12 @@
 # Changelog for polytropos-core
 
+## 0.1.0.3 — 2026-11-03
+
+- Reified Row Morphisms (`RowMorph`): static permutation arrays and `KnownRowMorph` TcPlugin solver for compile-time peephole route fusion.
+- Frame-Rule automatic register wiring (`FrameWire`): TcPlugin solver for compile-time gather and scatter plans.
+- Poly-kinded `ConstructorIndex` solver supporting effect operations (`Type -> Type`) over open variant rows.
+- Coordinated release across all Polytropos packages, benchmarks, and examples.
+
 ## 0.1.0.2 — 2026-10-21
 
 - Coordinated release across all 20 Polytropos packages, benchmarks, and examples.
