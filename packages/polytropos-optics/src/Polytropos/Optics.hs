@@ -90,7 +90,6 @@ import Optics.Core
 import Polytropos
 import Polytropos.Core
 import GHC.TypeLits
-import GHC.Records
 import Unsafe.Coerce
 import Data.Functor.Identity
 

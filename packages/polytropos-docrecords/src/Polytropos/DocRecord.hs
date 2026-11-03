@@ -25,7 +25,7 @@
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
--- Self-documenting extensible configuration records for the 'Polytropos' open record ecosystem.
+-- Self-documenting extensible configuration records for the @polytropos@ open record ecosystem.
 --
 -- = Precedents & Attribution
 -- This package is an architectural reimplementation inspired by Yves Parès's pioneering

@@ -359,10 +359,10 @@ data Pair a b = a := b
 -- Can be constructed ergonomically via @OverloadedLabels@ (e.g. @#foo@).
 --
 -- Algorithmic Mechanics:
--- 'Field' has no runtime fields and is represented by GHC as a zero-cost singleton.
+-- t'Field' has no runtime fields and is represented by GHC as a zero-cost singleton.
 -- When the user writes @#foo@, GHC desugars this to @fromLabel @"foo"@. The
 -- 'IsLabel' instance below matches when the label string @l@ unifies with the
--- expected field symbol @l'@, constructing 'Field' at compile time with zero
+-- expected field symbol @l'@, constructing t'Field' at compile time with zero
 -- runtime allocation.
 data Field (n :: Symbol) = Field
 
@@ -566,7 +566,7 @@ data ResultType (n :: Symbol) (res :: Type)
 -- Zero-Cost Newtype Erasure:
 -- GHC's Core compiler completely unwraps @RowRep@ at compile time. At runtime,
 -- all operations on @RowRep@ compile down to direct primitive instructions on
--- the underlying 'Rep'. The type arguments @r@ and @row@ act as purely type-level
+-- the underlying t'Rep'. The type arguments @r@ and @row@ act as purely type-level
 -- evidence tags, allowing typeclasses like 'RowEq', 'RowShow', and 'AllFields'
 -- to be invoked directly on records without requiring explicit runtime proxies.
 data RowRep (f :: Type -> Type) (r :: RowType) (row :: k) a = RowRep (Rep f a)
@@ -635,7 +635,7 @@ repArity = sizeofSmallArray . vals
 --
 -- [ref:note-transient-cow]
 -- Allows O(1) in-place slot modification during multi-field updates, bulk parsing,
--- or database row decoding without allocating intermediate immutable 'SmallArray'
+-- or database row decoding without allocating intermediate immutable 't:SmallArray'
 -- wrappers.
 data MRep s (f :: Type -> Type) a = MRep
   {-# UNPACK #-} !Word
@@ -651,7 +651,7 @@ newMRep tag n defaultVal = do
 
 -- | Safely thaw an immutable t'Rep' into a mutable builder.
 --
--- Performs a single heap allocation of a 'SmallMutableArray' and copies the N
+-- Performs a single heap allocation of a 't:SmallMutableArray' and copies the N
 -- pointers from the source array.
 thawRep :: Rep f a -> ST s (MRep s f a)
 thawRep (Rep t v) = do
@@ -667,7 +667,7 @@ thawRepSlice (Rep t v) off len = do
 -- | Safely freeze an ephemeral builder into an immutable t'Rep'.
 --
 -- Uses 'unsafeFreezeSmallArray', which is an O(1) zero-copy operation that reuses
--- the mutable buffer directly as an immutable 'SmallArray'. Safe because caller
+-- the mutable buffer directly as an immutable 't:SmallArray'. Safe because caller
 -- relinquishes all mutable references in the enclosing 'ST' action.
 freezeRep :: MRep s f a -> ST s (Rep f a)
 freezeRep (MRep t m) = do
@@ -697,8 +697,8 @@ copyMFields (MRep _ src) srcOff (MRep _ dst) dstOff len =
 
 -- | Scoped pure modification wrapper.
 --
--- Safely thaws an immutable 'Rep', runs an ST-scoped mutation callback, and freezes
--- the result back into an immutable 'Rep' without exposing mutable state.
+-- Safely thaws an immutable t'Rep', runs an ST-scoped mutation callback, and freezes
+-- the result back into an immutable t'Rep' without exposing mutable state.
 modifyRep :: Rep f a -> (forall s. MRep s f a -> ST s ()) -> Rep f a
 modifyRep (Rep t v) act = Rep t $ runSmallArray $ do
   m <- thawSmallArray v 0 (sizeofSmallArray v)
@@ -713,7 +713,7 @@ modifyRep (Rep t v) act = Rep t $ runSmallArray $ do
 --
 -- [ref:note-rep-memory-physics]
 -- The tag is @0@: a product is the one-constructor sum. The payload values
--- are placed directly into a contiguous 'SmallArray'.
+-- are placed directly into a contiguous 't:SmallArray'.
 productRep :: [f Any] -> Rep f a
 productRep xs = Rep 0 (smallArrayFromList xs)
 
@@ -845,7 +845,7 @@ projectRepList t (Rep t' v)
 matchRep :: (Word -> [f Any] -> a) -> Rep f a -> a
 matchRep k r = k (repTag r) (toListSlots (repVals r))
 
--- | Eliminate a sum passing the payload as a flat 'SmallArray' without list allocation.
+-- | Eliminate a sum passing the payload as a flat 't:SmallArray' without list allocation.
 matchRepArr :: (Word -> SmallArray (f Any) -> a) -> Rep f a -> a
 matchRepArr k r = k (repTag r) (repVals r)
 
@@ -908,9 +908,9 @@ class RowFlavour r => RowEq (r :: RowType) (row :: k) where
 -- | Field-wise @Show@ for a product row. See 'RowEq' for the design.
 --
 -- [ref:note-literal-evidence]
--- The plugin synthesizes an unrolled sequence of per-field `showsPrec` calls,
+-- The plugin synthesizes an unrolled sequence of per-field @showsPrec@ calls,
 -- formatting each field label as a literal string @"fieldname = "@ followed by
--- the field value's `showsPrec`, joined by comma separators.
+-- the field value's @showsPrec@, joined by comma separators.
 class RowFlavour r => RowShow (r :: RowType) (row :: k) where
   repShowsPrec :: Int -> RowRep f r row a -> ShowS
   repShowsPrec _ _ = undefined
@@ -923,10 +923,10 @@ class RowFlavour r => RowShow (r :: RowType) (row :: k) where
 --
 -- [ref:note-literal-evidence]
 -- Algorithmic Mechanics:
--- Two variant values `v1` and `v2` are equal iff:
---   1. Their runtime tags match: `repTag v1 == repTag v2`
+-- Two variant values @v1@ and @v2@ are equal iff:
+--   1. Their runtime tags match: @repTag v1 == repTag v2@
 --   2. Their payload fields for that specific active constructor match.
--- The plugin emits a Core `case` expression on the tag, branching into per-constructor
+-- The plugin emits a Core @case@ expression on the tag, branching into per-constructor
 -- literal slot equality comparisons.
 class RowFlavour r => RowEqSum (r :: RowType) (row :: k) where
   repEqSum :: RowRep f r row a -> RowRep f r row a -> Bool
@@ -935,7 +935,7 @@ class RowFlavour r => RowEqSum (r :: RowType) (row :: k) where
 -- | Field-wise @Show@ for a sum row.
 --
 -- [ref:note-literal-evidence]
--- The plugin generates a jump table on `repTag`, emitting the constructor name
+-- The plugin generates a jump table on @repTag@, emitting the constructor name
 -- as a string literal followed by its payload record's field representations.
 class RowFlavour r => RowShowSum (r :: RowType) (row :: k) where
   repShowsPrecSum :: Int -> RowRep f r row a -> ShowS
@@ -949,9 +949,9 @@ class RowFlavour r => RowShowSum (r :: RowType) (row :: k) where
 -- [ref:note-literal-evidence]
 -- [ref:note-poly-kinded-indexing]
 -- Algorithmic Mechanics:
--- When GHC encounters a wanted constraint `FieldIndex "foo" r a`, the plugin
--- scans the type-level list `r` for the entry `"foo" ':= a`. It returns the
--- 0-based integer offset directly as a Core literal `Lit (MachInt i)`.
+-- When GHC encounters a wanted constraint @FieldIndex "foo" r a@, the plugin
+-- scans the type-level list @r@ for the entry @"foo" ':= a@. It returns the
+-- 0-based integer offset directly as a Core literal @Lit (MachInt i)@.
 type FieldIndex :: forall {kn} k {ka}. kn -> k -> ka -> Constraint
 class FieldIndex (n :: kn) (row :: k) (a :: ka) where
   fieldIndex :: Int
@@ -965,8 +965,8 @@ class FieldIndex (n :: kn) (row :: k) (a :: ka) where
 -- [ref:note-literal-evidence]
 -- [ref:note-poly-kinded-indexing]
 -- Algorithmic Mechanics:
--- For wanted `ConstructorIndex "Bar" s`, the plugin locates `"Bar"` in the sum
--- row `s` and produces an unboxed integer literal `Lit (MachWord t)`.
+-- For wanted @ConstructorIndex "Bar" s@, the plugin locates @"Bar"@ in the sum
+-- row @s@ and produces an unboxed integer literal @Lit (MachWord t)@.
 type ConstructorIndex :: forall {kn} k. kn -> k -> Constraint
 class ConstructorIndex (n :: kn) (row :: k) where
   constructorIndex :: Word
@@ -987,9 +987,9 @@ data Dict (c :: Type -> Constraint) (a :: Type) where
 -- Algorithmic Mechanics:
 -- Under the hood, GHC typeclass dictionaries are ordinary record values containing
 -- function pointers (vtable). Because all boxed heap objects have identical runtime
--- representation (a pointer), a dictionary for `c a` can be coerced to `c Any` via
--- 'noInlineUnsafeCo'. At point of consumption, passing an `Any` value cast from `a`
--- to a method in `c Any` is completely type-safe because the vtable functions match
+-- representation (a pointer), a dictionary for @c a@ can be coerced to @c Any@ via
+-- 'noInlineUnsafeCo'. At point of consumption, passing an @Any@ value cast from @a@
+-- to a method in @c Any@ is completely type-safe because the vtable functions match
 -- the actual runtime type of the value.
 data DictAny (c :: Type -> Constraint) where
   DictAny :: c Any => DictAny c
@@ -1004,7 +1004,7 @@ mkDictAny = aux (noInlineUnsafeCo (Dict :: Dict c a) :: Dict c Any)
 -- | Construct evidence for the 'AllFields' class.
 --
 -- Takes a list of type-erased dictionaries and places them into a contiguous
--- 'SmallArray' for O(1) indexed lookup during generic loops.
+-- 't:SmallArray' for O(1) indexed lookup during generic loops.
 {-# NOINLINE evidenceAllFields #-}
 evidenceAllFields :: forall c. [DictAny c] -> DictAllFields c
 evidenceAllFields = smallArrayFromList
@@ -1064,8 +1064,8 @@ instance RowShow ProductRowT row => Show (RowRep f ProductRowT row a) where
 --
 -- Algorithmic Mechanics:
 -- Walks the field dictionary array and the two value arrays in lockstep from
--- index 0 to N-1. For each slot, unpacks `DictAny`, casts both values to `Any`,
--- and calls `compare`. If `EQ`, advances to the next slot; otherwise immediately
+-- index 0 to N-1. For each slot, unpacks @DictAny@, casts both values to @Any@,
+-- and calls @compare@. If @EQ@, advances to the next slot; otherwise immediately
 -- terminates with the comparison result.
 instance (RowEq ProductRowT row, AllFields ProductRowT row Ord) => Ord (RowRep f ProductRowT row a) where
   compare (RowRep r1) (RowRep r2) =
@@ -1144,9 +1144,9 @@ instance RowShowSum SumRowHKDT row => Show (RowRep f SumRowHKDT row a) where
 -- as evidence.
 --
 -- Algorithmic Mechanics:
--- For sub-record projection `projectRecord @sub superRec`, the runtime must extract
+-- For sub-record projection @projectRecord \@sub superRec@, the runtime must extract
 -- the subset of fields in @sub@ from @super@. The @subRowIndices@ method returns a
--- precomputed permutation vector `[Int]` containing the exact slot indices in @super@.
+-- precomputed permutation vector @[Int]@ containing the exact slot indices in @super@.
 -- This allows projection to execute in a single O(|sub|) pass with zero type search.
 type SubRow :: forall {k1} {k2}. k1 -> k2 -> Constraint
 class SubRow (sub :: k1) (super :: k2) where
@@ -1162,13 +1162,13 @@ class SubRow (sub :: k1) (super :: k2) where
 -- (for widening) and narrowing tag indices (for projection) as evidence.
 --
 -- Algorithmic Mechanics:
--- 1. Widening (`widenVariant`):
+-- 1. Widening (@widenVariant@):
 --    Total and O(1). Every constructor in @sub@ is present in @super@. The runtime tag
---    `t` in @sub@ is mapped to `subSumInjectIndices !! fromIntegral t`, which is
+--    @t@ in @sub@ is mapped to @subSumInjectIndices !! fromIntegral t@, which is
 --    precomputed by the plugin.
--- 2. Narrowing (`narrowVariant`):
---    Partial and O(1). Inspects `subSumNarrowIndices !! fromIntegral t`. If the constructor
---    is present in @sub@, returns `Just subTag`; otherwise `Nothing`.
+-- 2. Narrowing (@narrowVariant@):
+--    Partial and O(1). Inspects @subSumNarrowIndices !! fromIntegral t@. If the constructor
+--    is present in @sub@, returns @Just subTag@; otherwise 'Nothing'.
 type SubSum :: forall {k1} {k2}. k1 -> k2 -> Constraint
 class SubSum (sub :: k1) (super :: k2) where
   -- | For each constructor in @sub@, its tag in @super@ (widening).
@@ -1202,9 +1202,12 @@ class SubSum (sub :: k1) (super :: k2) where
 --
 -- Algorithmic Mechanics:
 -- The FNV-1a 64-bit algorithm evaluates over the UTF-8 bytes of the label string:
+--
+-- @
 --   hash = 14695981039346656037 (offset basis)
 --   for each byte c:
 --     hash = (hash `xor` c) * 1099511628211 (prime)
+-- @
 type KnownHash :: Symbol -> Constraint
 class KnownHash (s :: Symbol) where
   -- | Literal compile-time hash for label @s@.

@@ -49,7 +49,7 @@ instance SoupContext InternalState ResourceT where
   toReaderT act = ReaderT $ runInternalState act
   fromReaderT (ReaderT act) = withInternalState act
 
--- | Canonical 'ContextRunner' for 'ResourceT', executing acquired resources safely.
+-- | Canonical 't:ContextRunner' for 'ResourceT', executing acquired resources safely.
 useResource :: MonadUnliftIO m => ContextRunner ResourceT m
 useResource = ContextRunner runResourceT
 

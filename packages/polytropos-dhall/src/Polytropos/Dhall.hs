@@ -29,7 +29,7 @@ Stability   : experimental
 Portability : non-portable (GHC extensions)
 
 Linear \(O(N)\) 'Dhall.FromDhall' and 'Dhall.ToDhall' codecs for heterogeneous open
-'Record', 'Variant', and higher-kinded 'RecordF' types, alongside generic adapters
+'Polytropos.Record', 'Variant', and higher-kinded 'RecordF' types, alongside generic adapters
 powered by "Dhall.Marshal.Decode.GenericFromDhall" and "Dhall.Marshal.Encode.GenericToDhall".
 
 = Architectural Overview & Rationale
@@ -45,7 +45,7 @@ In contrast, @polytropos-dhall@ unrolls the flat contiguous
 'Data.Primitive.SmallArray.SmallArray' payload directly into and out of Dhall's
 abstract syntax tree ('Dhall.Syntax.Expr'):
 
-* __Records__: An open 'Record' encodes into a native Dhall record literal
+* __Records__: An open 'Polytropos.Record' encodes into a native Dhall record literal
   @RecordLit { x = ..., y = ... }@ in exact row order, and decodes directly from
   the field map into flat memory with zero intermediate binary tree allocations.
 * __Variants__: An open 'Variant' encodes into a native Dhall union literal
@@ -57,10 +57,10 @@ abstract syntax tree ('Dhall.Syntax.Expr'):
 == Generic Adapters for Nominal Schemas and Gachi Substrates
 
 In addition to open rows, this package provides turnkey generic adapters
-('GenericDhall', 'genericFromDhall', 'genericToDhall') leveraging Dhall's internal
+('t:GenericDhall', 'genericFromDhall', 'genericToDhall') leveraging Dhall's internal
 'GenericFromDhall' and 'GenericToDhall' classes. Nominal Haskell records or
 osteological structures (such as in @gachi@) can derive 'FromDhall' and 'ToDhall'
-via 'GenericDhall' through @DerivingVia@:
+via 't:GenericDhall' through @DerivingVia@:
 
 > data ServerConfig = ServerConfig
 >   { host :: Text
@@ -72,7 +72,7 @@ via 'GenericDhall' through @DerivingVia@:
 
 * When reading or writing configuration files, environment profiles, or service
   manifests modeled with @polytropos@ open records or variants.
-* When deriving Dhall encoders and decoders for nominal records via 'GenericDhall'.
+* When deriving Dhall encoders and decoders for nominal records via 't:GenericDhall'.
 * When building extensible, multi-agent configuration pipelines (such as in
   @sarutahiko@ or @gachi@) requiring deterministic schemas.
 
@@ -519,13 +519,13 @@ instance (Generic a, GenericFromDhall a (GHC.Rep a)) => FromDhall (GenericDhall 
 instance (Generic a, GenericToDhall (GHC.Rep a)) => ToDhall (GenericDhall a) where
   injectWith norm = contramap unGenericDhall (genericToDhallWithInputNormalizer defaultInterpretOptions norm)
 
--- | Construct a 'Decoder' for any 'Generic' data type using Dhall's generic adapter
+-- | Construct a 't:Decoder' for any 'Generic' data type using Dhall's generic adapter
 -- 'GenericFromDhall'.
 genericFromDhall :: forall a. (Generic a, GenericFromDhall a (GHC.Rep a)) => Decoder a
 genericFromDhall = genericAuto
 
--- | Construct a 'Decoder' for any 'Generic' data type using custom 'InterpretOptions'
--- and 'InputNormalizer'.
+-- | Construct a 't:Decoder' for any 'Generic' data type using custom 't:InterpretOptions'
+-- and 't:InputNormalizer'.
 genericFromDhallWith
   :: forall a. (Generic a, GenericFromDhall a (GHC.Rep a))
   => InterpretOptions

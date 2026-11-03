@@ -49,11 +49,11 @@
 --   Field retrieval via 'askSoup' resolves at compile time to a direct slot offset ($O(1)$).
 -- * __Sub-soup Projection__: Sub-actions declare only the contexts they need. Structural
 --   narrowing via 'filtering' copies the required slice in $O(K)$ time via 'SubRow' evidence.
--- * __Context Isolation__: 'Spoon' extracts any labeled context into a standard 'MonadReader'
+-- * __Context Isolation__: 't:Spoon' extracts any labeled context into a standard 'MonadReader'
 --   instance supporting 'ask' and 'local'.
 -- * __Third-Party Monad Bridging__: 'SoupContext' connects external monads (such as
 --   'Control.Monad.Trans.Resource.ResourceT') using 'picking', 'scooping', and 'pouring'.
--- * __Modular Consumption__: 'ContextRunner' and 'consumeSoup' allow contexts to be peeled
+-- * __Modular Consumption__: 't:ContextRunner' and 'consumeSoup' allow contexts to be peeled
 --   and evaluated in dependency order until the base broth is reached.
 --
 -- = When to Use This Module
@@ -181,8 +181,8 @@ getField _ (RowRep (Rep _ v)) =
 -- 1. Core ReaderSoup Monad
 --------------------------------------------------------------------------------
 
--- | 'ReaderSoupT' holds a row-polymorphic collection of Reader contexts within
--- a single 'ReaderT' layer over a base monad @m@.
+-- | 't:ReaderSoupT' holds a row-polymorphic collection of Reader contexts within
+-- a single 't:ReaderT' layer over a base monad @m@.
 --
 -- Unlike deeply nested transformer stacks, all contexts reside in a single flat
 -- contiguous 'Record', eliminating pointer chasing and wrapper allocations.
@@ -233,7 +233,7 @@ instance (Monad m) => MonadReader (Record ctxs) (ReaderSoupT ctxs m) where
 runReaderSoup :: ReaderSoup ctxs a -> Record ctxs -> IO a
 runReaderSoup (ReaderSoupT (ReaderT act)) = act
 
--- | Run a transformer 'ReaderSoupT' action over any base monad @m@.
+-- | Run a transformer 't:ReaderSoupT' action over any base monad @m@.
 runReaderSoupT :: ReaderSoupT ctxs m a -> Record ctxs -> m a
 runReaderSoupT (ReaderSoupT (ReaderT act)) = act
 
@@ -274,7 +274,7 @@ filtering (ReaderSoupT (ReaderT act)) =
 -- 3. Single Context Projection (Spoon)
 --------------------------------------------------------------------------------
 
--- | 'Spoon' isolates a single labeled context @l@ from the soup, equipping it with
+-- | 't:Spoon' isolates a single labeled context @l@ from the soup, equipping it with
 -- a standard 'MonadReader' instance.
 --
 -- This bridges the multi-context soup with standard MTL code expecting @MonadReader c@,
@@ -317,17 +317,17 @@ instance (c ~ LookupContext l ctxs, FieldIndex l ctxs c) => MonadReader c (Spoon
           !rec' = setField (Field @l) new rec
       in act rec'
 
--- | Bring forth a single context from the soup to run a 'Spoon' computation.
+-- | Bring forth a single context from the soup to run a 't:Spoon' computation.
 dipping :: Field l -> Spoon ctxs l a -> ReaderSoup ctxs a
 dipping _ = unSpoon
 
--- | Convert a legacy @ReaderT c IO@ action directly into a 'Spoon'.
+-- | Convert a legacy @ReaderT c IO@ action directly into a 't:Spoon'.
 rioToSpoon :: forall l c ctxs a. (c ~ ContextFromName l, FieldIndex l ctxs c)
            => ReaderT c IO a -> Spoon ctxs l a
 rioToSpoon (ReaderT act) = Spoon $ ReaderSoupT $ ReaderT $ \rec ->
   act (getField (Field @l) rec)
 
--- | Convert a 'Spoon' action into a 'ReaderT' running inside the outer 'ReaderSoup'.
+-- | Convert a 't:Spoon' action into a 't:ReaderT' running inside the outer 'ReaderSoup'.
 spoonToReaderT :: forall l c ctxs a. (c ~ ContextFromName l, KnownSymbol l, FieldIndex l ctxs c)
                => Spoon ctxs l a -> ReaderT c (ReaderSoup ctxs) a
 spoonToReaderT (Spoon (ReaderSoupT (ReaderT act))) =
@@ -347,11 +347,11 @@ spoonToReaderT (Spoon (ReaderSoupT (ReaderT act))) =
 type family ContextFromName (l :: Symbol) :: Type
 
 -- | Type class identifying monad transformers that can be converted to and from
--- a 'ReaderT' of their context.
+-- a 't:ReaderT' of their context.
 class SoupContext c t | c -> t where
-  -- | Convert transformer to 'ReaderT'.
+  -- | Convert transformer to 't:ReaderT'.
   toReaderT   :: Monad m => t m a -> ReaderT c m a
-  -- | Reconstruct transformer from 'ReaderT'.
+  -- | Reconstruct transformer from 't:ReaderT'.
   fromReaderT :: Monad m => ReaderT c m a -> t m a
 
 
@@ -362,7 +362,7 @@ type CanBeScoopedIn t ctxs l =
   , SoupContext (ContextFromName l) t
   )
 
--- | Convert an action in a Reader-like monad @t@ into a 'Spoon'.
+-- | Convert an action in a Reader-like monad @t@ into a 't:Spoon'.
 withSpoon :: forall l ctxs t a. (CanBeScoopedIn t ctxs l)
           => t (ReaderSoup ctxs) a -> Spoon ctxs l a
 withSpoon act = Spoon $ ReaderSoupT $ ReaderT $ \rec ->
@@ -400,7 +400,7 @@ consRecord :: forall n a rest. Field n -> a -> Record rest -> Record ((n ':= a) 
 consRecord _ val (RowRep (Rep _ v)) =
   RowRep (productRep (unsafeCoerce val : toList v))
 
--- | Extract a 'ReaderT' of the first context from the soup, leaving the remaining toppings.
+-- | Extract a 't:ReaderT' of the first context from the soup, leaving the remaining toppings.
 pickTopping :: forall l c rest a.
                ReaderSoup ((l ':= c) ': rest) a
             -> ReaderT c (ReaderSoup rest) a
@@ -423,7 +423,7 @@ finishBroth (ReaderSoupT (ReaderT act)) = act emptyRecord
 newtype ContextRunner t m = ContextRunner
   { runContext :: forall r. t m r -> m r }
 
--- | Class for peeling contexts iteratively using an extensible record of 'ContextRunner's.
+-- | Class for peeling contexts iteratively using an extensible record of 't:ContextRunner's.
 class ArgsForSoupConsumption args where
   -- | Maps runner arguments to the corresponding context row.
   type ContextsFromArgs args :: [Pair Symbol Type]

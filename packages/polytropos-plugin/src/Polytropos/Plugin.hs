@@ -770,7 +770,7 @@ lookupIdInModule modName occStr = do
 -- Type family rewriting (FieldNames, SimpleFieldTypes, FieldTypes)
 -------------------------------------------------------------------------------
 
--- | Type family rewriter for FieldNames, SimpleFieldTypes, and FieldTypes.
+-- Type family rewriter for FieldNames, SimpleFieldTypes, and FieldTypes.
 -- Evaluates closed row reflection queries in O(1) during GHC's type rewriting stage.
 -- See Note [Type-Level Metadata Rewriting and Defunctionalization] [ref:note-metadata-rewriting]
 -- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
@@ -781,7 +781,7 @@ polytroposRewrite state = listToUFM
   , (psFieldNamesTyCon state, rewriteFieldNames (psFieldNamesTyCon state))
   ]
 
--- | Extracts fields from a row type. Fails (returns Nothing) if the tail is unfixed or open.
+-- Extracts fields from a row type. Fails (returns Nothing) if the tail is unfixed or open.
 -- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
 -- See Note [OCaml Subtype/Unify Correlation and Row Tail Algebra] [ref:note-ocaml-row-algebra]
 walkRowFields_maybe :: Type -> Maybe [(FastString, Type)]
@@ -858,7 +858,7 @@ rewriteFieldTypes tyCon _givens args
 -- See Note [Diagnostic Recovery and Cascading Error Prevention] [ref:note-diagnostic-prevention]
 -------------------------------------------------------------------------------
 
--- | Computes the Levenshtein edit distance between two strings using dynamic
+-- Computes the Levenshtein edit distance between two strings using dynamic
 -- programming. Used to rank fuzzy typo suggestions when a requested field or
 -- constructor label is not found in a closed row.
 --
@@ -889,7 +889,7 @@ levenshtein s1 s2 =
        [] -> 0
        res -> last res
 
--- | Filters and ranks candidate field/constructor names against a target typo.
+-- Filters and ranks candidate field/constructor names against a target typo.
 --
 -- Policy:
 -- - Candidates with edit distance <= 2 are retained. Distance 2 is the empirical
@@ -902,7 +902,7 @@ suggestSimilar target candidates =
   let scored = [ (c, d) | c <- candidates, let d = levenshtein target c, d <= 2 ]
   in map fst (sortOn snd scored)
 
--- | Formats a product row's schema for display in compiler diagnostics:
+-- Formats a product row's schema for display in compiler diagnostics:
 -- "{ field1 :: Type1, field2 :: Type2, ... }"
 --
 -- Unrolls GHC Core Types to human-readable strings via 'ppr' and 'showSDocUnsafe'.
@@ -914,7 +914,7 @@ formatRecordRow fields =
       | nullFS n  = showSDocUnsafe (ppr ty)
       | otherwise = unpackFS n ++ " :: " ++ showSDocUnsafe (ppr ty)
 
--- | Formats a sum row's schema for display in compiler diagnostics:
+-- Formats a sum row's schema for display in compiler diagnostics:
 -- "< Con1 RecordPayload | Con2 TypePayload | Con3 >"
 --
 -- Handles empty constructors, single-field bare constructors, and multi-field
@@ -931,7 +931,7 @@ formatVariantRow ctors =
             [(_, fn, ty)] | nullFS fn -> unpackFS n ++ " :: " ++ showSDocUnsafe (ppr ty)
             fs -> unpackFS n ++ " " ++ formatRecordRow fs
 
--- | Formats a field suggestion clause:
+-- Formats a field suggestion clause:
 -- - If close matches exist: "Did you mean: 'name' or 'age'?"
 -- - If no close matches: lists all available fields in the record.
 -- - If the record is empty: reports "(no fields in record)".
@@ -943,7 +943,7 @@ formatSuggestion target candidates =
       _  -> "Available fields: " ++ intercalate ", " (map (\c -> "'" ++ c ++ "'") candidates)
     suggs -> "Did you mean: " ++ intercalate " or " (map (\s -> "'" ++ s ++ "'") suggs) ++ "?"
 
--- | Formats a constructor suggestion clause for variants.
+-- Formats a constructor suggestion clause for variants.
 formatCtorSuggestion :: String -> [String] -> String
 formatCtorSuggestion target candidates =
   case suggestSimilar target candidates of
@@ -952,22 +952,22 @@ formatCtorSuggestion target candidates =
       _  -> "Available constructors: " ++ intercalate ", " (map (\c -> "'" ++ c ++ "'") candidates)
     suggs -> "Did you mean: " ++ intercalate " or " (map (\s -> "'" ++ s ++ "'") suggs) ++ "?"
 
--- | Checks whether a Type contains no free type or coercion variables.
+-- Checks whether a Type contains no free type or coercion variables.
 -- A closed type is fully grounded and ready for terminal diagnostic reporting.
 isClosedType :: Type -> Bool
 isClosedType ty = isEmptyVarSet (tyCoVarsOfType (unwrapSynonyms ty))
 
--- | Wraps a Haskell string into GHC's promoted 'Text constructor for type-level ErrorMessage.
+-- Wraps a Haskell string into GHC's promoted 'Text constructor for type-level ErrorMessage.
 mkTextMsg :: PluginState -> String -> Type
 mkTextMsg state s = mkTyConApp (psPromotedText state) [mkStrLitTy (fsLit s)]
 
--- | Combines multiple promoted 'Text messages vertically using ':$$: (promoted Vcat).
+-- Combines multiple promoted 'Text messages vertically using ':$$: (promoted Vcat).
 mkVcatMsgs :: PluginState -> [Type] -> Type
 mkVcatMsgs _ [] = error "mkVcatMsgs: empty list"
 mkVcatMsgs _ [m] = m
 mkVcatMsgs state (m : ms) = mkTyConApp (psPromotedVcat state) [m, mkVcatMsgs state ms]
 
--- | Synthesizes a new wanted GHC 'TypeError' constraint from a list of diagnostic strings.
+-- Synthesizes a new wanted GHC 'TypeError' constraint from a list of diagnostic strings.
 --
 -- Mechanics:
 -- 1. Promotes each string into an 'ErrorMessage ('Text ...)'.
@@ -986,7 +986,7 @@ mkTypeErrorCt state loc msgLines = do
   ev <- newWanted loc predTy
   pure (mkNonCanonical ev)
 
--- | Synthesizes a dummy dictionary for GHC.Records.HasField that produces a safe bottom
+-- Synthesizes a dummy dictionary for GHC.Records.HasField that produces a safe bottom
 -- value at runtime via 'noInlineUnsafeCo ()'.
 --
 -- Why dummy dictionaries are necessary:
@@ -1025,7 +1025,7 @@ mkDummyHasFieldDict state cls tys = do
 -- Constraint solving
 -------------------------------------------------------------------------------
 
--- | Top-level constraint solver entry point for @Polytropos.Plugin@.
+-- Top-level constraint solver entry point for @Polytropos.Plugin@.
 --
 -- Invoked by GHC during constraint simplification with 'givens' and 'wanteds'.
 -- See Note [Solving Pipeline: Wanteds, Givens, and Staged Evidence Synthesis] [ref:note-solving-pipeline]
@@ -1101,7 +1101,7 @@ solveOne state ct
 -- FieldIndex solver
 -------------------------------------------------------------------------------
 
--- | Solves the 'FieldIndex' constraint by statically locating the field's 0-based
+-- Solves the 'FieldIndex' constraint by statically locating the field's 0-based
 -- offset in the row and returning literal Int evidence.
 --
 -- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
@@ -1234,7 +1234,7 @@ solveFieldIndex state ct cls tys
 -- ConstructorIndex solver
 -------------------------------------------------------------------------------
 
--- | Solves the 'ConstructorIndex' constraint by statically locating the constructor's
+-- Solves the 'ConstructorIndex' constraint by statically locating the constructor's
 -- 0-based tag in the sum row and returning literal Word evidence.
 --
 -- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
@@ -1314,7 +1314,7 @@ solveConstructorIndex state ct cls tys
 -- RowEq solver
 -------------------------------------------------------------------------------
 
--- | Solves the 'RowEq' constraint by synthesizing an unrolled comparison expression over all fields.
+-- Solves the 'RowEq' constraint by synthesizing an unrolled comparison expression over all fields.
 --
 -- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
 -- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
@@ -1422,7 +1422,7 @@ solveRowEq state ct cls tys = do
 -- RowShow solver
 -------------------------------------------------------------------------------
 
--- | Solves the 'RowShow' constraint by synthesizing an unrolled showsPrec expression over all fields.
+-- Solves the 'RowShow' constraint by synthesizing an unrolled showsPrec expression over all fields.
 --
 -- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
 -- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
@@ -1525,7 +1525,7 @@ solveRowShow state ct cls tys = do
 -- RowEqSum / RowShowSum solvers
 -------------------------------------------------------------------------------
 
--- | Solves the 'RowEqSum' constraint by synthesizing constructor branch comparison Core trees.
+-- Solves the 'RowEqSum' constraint by synthesizing constructor branch comparison Core trees.
 --
 -- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
 -- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
@@ -1634,7 +1634,7 @@ solveRowEqSum state ct cls tys = do
 
   pure $ Left ((EvExpr dictExpr, ct), allNewWanteds)
 
--- | Solves the 'RowShowSum' constraint by synthesizing constructor branch showsPrec Core trees.
+-- Solves the 'RowShowSum' constraint by synthesizing constructor branch showsPrec Core trees.
 --
 -- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
 -- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
@@ -1747,7 +1747,7 @@ solveRowShowSum state ct cls tys = do
 -- HasField solver
 -------------------------------------------------------------------------------
 
--- | Solves GHC's 'HasField' class for records, enabling standard dot-syntax selection
+-- Solves GHC's 'HasField' class for records, enabling standard dot-syntax selection
 -- (@rec.fieldName@) via literal slot offsets without runtime hash lookups.
 --
 -- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
@@ -1874,7 +1874,7 @@ solveHasField state ct cls tys = do
 -- AllFields solver (generic field-class dictionary supply)
 -------------------------------------------------------------------------------
 
--- | Solves 'AllFields' by synthesizing a flat array of type-erased 'DictAny' dictionaries.
+-- Solves 'AllFields' by synthesizing a flat array of type-erased 'DictAny' dictionaries.
 --
 -- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
 -- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
@@ -1943,7 +1943,7 @@ solveAllFields state ct cls tys
 -- See Note [Diagnostic Recovery and Cascading Error Prevention] [ref:note-diagnostic-prevention]
 -------------------------------------------------------------------------------
 
--- | Solves the 'SubRow sub super' constraint by synthesizing literal index projection lists.
+-- Solves the 'SubRow sub super' constraint by synthesizing literal index projection lists.
 --
 -- Intuition:
 -- A sub-record 'sub' can be projected out of a super-record 'super' if every field
@@ -2043,7 +2043,7 @@ solveSubRow state ct cls tys
 -- See Note [Diagnostic Recovery and Cascading Error Prevention] [ref:note-diagnostic-prevention]
 -------------------------------------------------------------------------------
 
--- | Solves the 'KnownRowMorph r1 r2' constraint by synthesizing an unboxed 'RowMorph'
+-- Solves the 'KnownRowMorph r1 r2' constraint by synthesizing an unboxed 'RowMorph'
 -- permutation array directly into Core AST.
 --
 -- Algorithmic Mechanics:
@@ -2140,7 +2140,7 @@ solveKnownRowMorph state ct cls tys
 -- See Note [Diagnostic Recovery and Cascading Error Prevention] [ref:note-diagnostic-prevention]
 -------------------------------------------------------------------------------
 
--- | Solves the 'FrameWire frameIn opIn opOut frameOut' constraint:
+-- Solves the 'FrameWire frameIn opIn opOut frameOut' constraint:
 -- 1. Checks open-tail deferral on 'frameIn', 'opIn', and 'opOut'.
 -- 2. Verifies 'opIn' is a sub-row of 'frameIn', mapping gather indices and
 --    emitting nominal equality constraints for polymorphic port types.
@@ -2276,7 +2276,7 @@ solveFrameWire state ct cls tys
                          ]
               pure $ Left diag
 
--- | Solves the 'SubSum sub super' constraint by synthesizing literal injection and narrowing arrays.
+-- Solves the 'SubSum sub super' constraint by synthesizing literal injection and narrowing arrays.
 --
 -- Intuition:
 -- A sub-variant 'sub' can be widened into a super-variant 'super' if every constructor
@@ -2397,7 +2397,7 @@ solveSubSum state ct cls tys
 -- KnownHash solver
 -------------------------------------------------------------------------------
 
--- | FNV-1a 64-bit hash for a type-level label symbol.
+-- FNV-1a 64-bit hash for a type-level label symbol.
 --
 -- Algorithmic Details:
 -- - Uses the standard Fowler-Noll-Vo 64-bit non-cryptographic hash algorithm (FNV-1a).
@@ -2413,7 +2413,7 @@ fnv1a64FS fs = fromIntegral (foldl' step (14695981039346656037 :: Word64) (unpac
   where
     step !h !c = (h `xor` fromIntegral (ord c)) * 1099511628211
 
--- | Solves the 'KnownHash' constraint by computing the compile-time 64-bit FNV-1a hash
+-- Solves the 'KnownHash' constraint by computing the compile-time 64-bit FNV-1a hash
 -- of a type-level Symbol and emitting literal Word evidence.
 --
 -- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
@@ -2449,7 +2449,7 @@ solveKnownHash ct cls tys = do
 -- Row walking & schema extraction helpers
 -------------------------------------------------------------------------------
 
--- | Walks a record row type to extract its field schema.
+-- Walks a record row type to extract its field schema.
 -- Returns 'Nothing' if the row tail is unfixed or open (deferring solving until
 -- the row tail is unified by downstream inference).
 --
@@ -2470,7 +2470,7 @@ walkRowWithTypes_maybe rowTy = do
           -> Just (i, n, fieldTy)
         _ -> Just (i, nilFS, elemTy)
 
--- | Walks a variant sum row type to extract its constructor schema.
+-- Walks a variant sum row type to extract its constructor schema.
 -- Returns 'Nothing' if the row tail is unfixed or open.
 --
 -- See Note [Row Type Anatomy: Open vs Closed Rows and Fixed vs Unfixed Tails] [ref:note-row-anatomy]
@@ -2490,14 +2490,14 @@ walkSumRowWithTypes_maybe rowTy = do
           -> Just (i, n, conRowTy)
         _ -> Just (i, nilFS, elemTy)
 
--- | Fully unrolls GHC type synonyms to expose the underlying type constructor.
+-- Fully unrolls GHC type synonyms to expose the underlying type constructor.
 -- Uses 'coreView' recursively until no further synonyms can be stripped.
 unwrapSynonyms :: Type -> Type
 unwrapSynonyms ty = case coreView ty of
   Just ty' -> unwrapSynonyms ty'
   Nothing  -> ty
 
--- | Extracts elements from a promoted type-level list (@'[a, b, c]@).
+-- Extracts elements from a promoted type-level list (@'[a, b, c]@).
 --
 -- Invariants:
 -- - Returns 'Just [a, b, c]' for closed lists terminating in @'[]@.
@@ -2515,7 +2515,7 @@ myExtractPromotedList ty = case splitTyConApp_maybe (unwrapSynonyms ty) of
   Just (tc, [_]) | occNameString (getOccName tc) == "[]" -> Just []
   _ -> Nothing
 
--- | Pure version of 'walkRowWithTypes_maybe' that defaults open tails to '[]'.
+-- Pure version of 'walkRowWithTypes_maybe' that defaults open tails to '[]'.
 walkRowWithTypes :: Type -> [(Int, FastString, Type)]
 walkRowWithTypes rowTy =
   case myExtractPromotedList (unwrapSynonyms rowTy) of { Just xs -> zipWith extractField [0..] xs; Nothing -> [] }
@@ -2530,7 +2530,7 @@ walkRowWithTypes rowTy =
           -> (i, n, fieldTy)
         _ -> (i, nilFS, elemTy)
 
--- | Pure version of 'walkSumRowWithTypes_maybe' that defaults open tails to '[]'.
+-- Pure version of 'walkSumRowWithTypes_maybe' that defaults open tails to '[]'.
 walkSumRowWithTypes :: Type -> [(Int, FastString, Type)]
 walkSumRowWithTypes rowTy =
   case myExtractPromotedList (unwrapSynonyms rowTy) of { Just xs -> zipWith extractCon [0..] xs; Nothing -> [] }
@@ -2545,28 +2545,28 @@ walkSumRowWithTypes rowTy =
           -> (i, n, conRowTy)
         _ -> (i, nilFS, elemTy)
 
--- | Find 0-based constructor tag by name in a sum row.
+-- Find 0-based constructor tag by name in a sum row.
 findConstructorIndex :: FastString -> Type -> Maybe Word
 findConstructorIndex conName rowTy =
   case [fromIntegral i | (i, n, _) <- walkSumRowWithTypes rowTy, n == conName] of
     (w : _) -> Just w
     []      -> Nothing
 
--- | Find 0-based field index by matching field payload type.
+-- Find 0-based field index by matching field payload type.
 findFieldIndexByType :: Type -> Type -> Maybe Int
 findFieldIndexByType targetTy rowTy =
   case [i | (i, _, ty) <- walkRowWithTypes rowTy, targetTy `eqType` ty] of
     (i : _) -> Just i
     []      -> Nothing
 
--- | Find 0-based constructor tag by matching constructor payload type.
+-- Find 0-based constructor tag by matching constructor payload type.
 findConstructorIndexByType :: Type -> Type -> Maybe Word
 findConstructorIndexByType targetTy rowTy =
   case [fromIntegral i | (i, _, ty) <- walkSumRowWithTypes rowTy, targetTy `eqType` ty] of
     (w : _) -> Just w
     []      -> Nothing
 
--- | Find 0-based field index and field type by name in a product row.
+-- Find 0-based field index and field type by name in a product row.
 findFieldType :: FastString -> Type -> Maybe (Int, Type)
 findFieldType fieldName rowTy =
   case [(i, ty) | (i, n, ty) <- walkRowWithTypes rowTy, n == fieldName] of
@@ -2577,7 +2577,7 @@ findFieldType fieldName rowTy =
 -- Utilities
 -------------------------------------------------------------------------------
 
--- | Construct a boxed Int Core expression from an Int value.
+-- Construct a boxed Int Core expression from an Int value.
 --
 -- Generates: 'GHC.Types.I# <literal>'
 -- Used by TcPlugin to emit literal 0-based slot offsets into dictionary evidence.
@@ -2585,7 +2585,7 @@ findFieldType fieldName rowTy =
 mkIntExpr :: Int -> CoreExpr
 mkIntExpr i = mkCoreConApps intDataCon [Lit (LitNumber LitNumInt (toInteger i))]
 
--- | Construct a boxed Word Core expression from a Word value.
+-- Construct a boxed Word Core expression from a Word value.
 --
 -- Generates: 'GHC.Types.W# <literal>'
 -- Used by TcPlugin to emit literal 0-based constructor tags into dictionary evidence.

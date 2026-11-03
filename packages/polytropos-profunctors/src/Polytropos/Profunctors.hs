@@ -148,7 +148,7 @@ prism' :: (b -> s) -> (s -> Maybe b) -> Prism' s b
 prism' build match = prism build (\s -> maybe (Left s) Right (match s))
 {-# INLINE prism' #-}
 
--- | Extract the target of a lens using the 'Forget' profunctor.
+-- | Extract the target of a lens using the 't:Forget' profunctor.
 view :: Lens' s a -> s -> a
 view l = runForget (l (Forget id))
 {-# INLINE view #-}
@@ -158,7 +158,7 @@ preview :: Prism' s a -> s -> Maybe a
 preview p = getFirst . runForget (p (Forget (First . Just)))
 {-# INLINE preview #-}
 
--- | Inject a target into a sum using the 'Tagged' profunctor.
+-- | Inject a target into a sum using the 't:Tagged' profunctor.
 review :: Prism' s a -> a -> s
 review p = unTagged . p . Tagged
 {-# INLINE review #-}
@@ -177,7 +177,7 @@ set l val = over l (const val)
 -- High-Level Row Lenses & Prisms
 --------------------------------------------------------------------------------
 
--- | A typed profunctor lens focusing on an open 'Record' field specified by 'Field',
+-- | A typed profunctor lens focusing on an open 'Record' field specified by 't:Field',
 -- resolved at compile time via 'FieldIndex'.
 fieldLens :: forall n r a. FieldIndex n r a => Field n -> Lens' (Record r) a
 fieldLens _ = lens getter setter
@@ -189,7 +189,7 @@ fieldLens _ = lens getter setter
       in RowRep (setFieldAt idx boxed r)
 {-# INLINE fieldLens #-}
 
--- | A typed profunctor prism focusing on an open 'Variant' constructor specified by 'Field',
+-- | A typed profunctor prism focusing on an open 'Variant' constructor specified by 't:Field',
 -- resolved at compile time via 'ConstructorIndex'.
 ctorPrism :: forall c s fs. ConstructorIndex c s => Field c -> Prism' (Variant s) (Record fs)
 ctorPrism f = prism (injectVariant f) project

@@ -18,30 +18,30 @@ projection typically incur either:
 2. Inductive type-level searches (@KnownNat@ / inductive dictionary trees) that generate
    \(O(N)\) or \(O(N^2)\) pointer-chasing calls at runtime.
 
-'RowMorph' collapses row routing and projection into a single unboxed 'PrimArray' 'Int'
+'t:RowMorph' collapses row routing and projection into a single unboxed 'PrimArray' 'Int'
 (backed by a contiguous 'GHC.Exts.ByteArray#' primitive). Each index @i@ in @[0 .. |r1| - 1]@
 contains the literal 0-based slot offset in the target row @r2@.
 
 == Key Features & Operations
 
-* __Unboxed Reification:__ 'RowMorph' has zero heap allocation overhead per element, storing
+* __Unboxed Reification:__ 't:RowMorph' has zero heap allocation overhead per element, storing
   pure integer indices densely in cache lines.
 * __\(O(|r1|)\) Category Composition:__ 'composeRowMorph' composes two morphisms in a single
   branchless pass, computing @m23(m12(i))@ into a newly allocated 'PrimArray' without intermediate lists.
 * __Contravariant Reduct Gather:__ 'gatherRep' extracts an arbitrary subrow or permutation from
-  an existing 'Polytropos.Core.Rep' in \(O(|sub|)\) time with a single 'Data.Primitive.SmallArray.SmallArray' allocation.
-* __In-Place Scatter:__ 'scatterRep' writes back updated subrow slots into an existing 'Rep'
+  an existing 't:Polytropos.Core.Rep' in \(O(|sub|)\) time with a single 't:Data.Primitive.SmallArray.SmallArray' allocation.
+* __In-Place Scatter:__ 'scatterRep' writes back updated subrow slots into an existing 't:Rep'
   in \(O(|full|)\) time via 'Data.Primitive.SmallArray.thawSmallArray'.
 * __Compile-Time Synthesis:__ The evidence class 'KnownRowMorph' is solved directly by
   @Polytropos.Plugin@, emitting literal index vectors into Core AST with zero runtime dictionary search.
-* __Frame-Rule Auto-Wiring:__ 'FramePlan' and 'FrameWire' generalize binary port routing
+* __Frame-Rule Auto-Wiring:__ 't:FramePlan' and 'FrameWire' generalize binary port routing
   to stateful execution frames with automatic output row synthesis (see Note [Frame-Rule Automatic Wire Synthesis] [ref:note-frame-rule-wiring]).
 
 = Note [Reified Row Morphisms and Gather-Scatter] [tag:note-row-morph-routing]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 A row morphism @RowMorph r1 r2@ models a structural embedding / projection map from @r1@ into @r2@.
 Rather than representing morphisms as functions @Record r2 -> Record r1@ or type-level inductive
-witnesses, 'RowMorph' reifies the mapping as a flat primitive array of integers.
+witnesses, 't:RowMorph' reifies the mapping as a flat primitive array of integers.
 
 1. Category Structure:
    - Identity: @idMorph = RowMorph [0, 1, .. n-1]@.
@@ -54,7 +54,7 @@ witnesses, 'RowMorph' reifies the mapping as a flat primitive array of integers.
    exactly the active ports or handler methods into a compact, contiguous memory buffer.
 
 3. Frame-Rule Auto-Wiring:
-   'FramePlan' and 'FrameWire' generalize binary port routing to stateful execution frames:
+   't:FramePlan' and 'FrameWire' generalize binary port routing to stateful execution frames:
    an operation @(opIn -> opOut)@ inside @(frameIn -> frameOut)@ executes by gathering @opIn@
    from @frameIn@, copying surviving @frameIn@ slots to @frameOut@, and scattering @opOut@ into @frameOut@
    in two tight branchless loops.
@@ -76,7 +76,7 @@ states that the ambient context survives unchanged except where explicitly modif
           -> p (Record frameIn) (Record frameOut)
 
 1. Dual Gather-Scatter Lifecycle:
-   Execution proceeds in two phases coordinated by 'FramePlan':
+   Execution proceeds in two phases coordinated by 't:FramePlan':
    a. Contravariant Port Gather:
       Before the operation runs, its input ports @opIn@ are gathered from @frameIn@
       via @fpGatherIn :: RowMorph opIn frameIn@.
@@ -183,7 +183,7 @@ newtype RowMorph (r1 :: k1) (r2 :: k2) = RowMorph
   { unRowMorph :: PrimArray Int }
   deriving stock (Eq, Show)
 
--- | Solved by @Polytropos.Plugin@ into a static 'RowMorph' CAF constant.
+-- | Solved by @Polytropos.Plugin@ into a static 't:RowMorph' CAF constant.
 --
 -- When @r1@ is a subrow or permutation of @r2@, the compiler plugin synthesizes
 -- the literal permutation array and emits the instance dictionary directly into Core AST.
@@ -203,7 +203,7 @@ indexRowMorph :: RowMorph r1 r2 -> Int -> Int
 {-# INLINE indexRowMorph #-}
 indexRowMorph (RowMorph arr) !i = indexPrimArray arr i
 
--- | Category composition for 'RowMorph': \(\mathcal{O}(|r1|)\) primitive array indexing.
+-- | Category composition for 't:RowMorph': \(\mathcal{O}(|r1|)\) primitive array indexing.
 --
 -- Given morphisms @m12 : r1 -> r2@ and @m23 : r2 -> r3@, computes @m13 : r1 -> r3@
 -- where each slot @i@ in @r1@ maps to @m23(m12(i))@ in @r3@.
@@ -230,7 +230,7 @@ composeRowMorph (RowMorph m12) (RowMorph m23) = RowMorph $ runST $ do
 -- | Contravariant reduct / port gather: extracts @sub@ slots from @full@ in \(\mathcal{O}(|sub|)\).
 --
 -- Directly implements \(\mathrm{Mod}(\sigma)(M')\) for handler records, input port frames,
--- and structural subrow extraction with a single 'SmallArray' allocation.
+-- and structural subrow extraction with a single 't:Data.Primitive.SmallArray.SmallArray' allocation.
 --
 -- See Note [Reified Row Morphisms and Gather-Scatter] [ref:note-row-morph-routing]
 gatherRep :: RowMorph sub full -> Rep f a -> Rep f b
@@ -288,7 +288,7 @@ data FramePlan frameIn opIn opOut frameOut = FramePlan
 -- | Solved by @Polytropos.Plugin@:
 -- 1. Verifies @opIn@ is a subrow of @frameIn@ (unifying port types).
 -- 2. Synthesizes @frameOut ~ RowOverwrite frameIn opOut@.
--- 3. Emits the 'FramePlan' dictionary.
+-- 3. Emits the 't:FramePlan' dictionary.
 --
 -- See Note [Frame-Rule Automatic Wire Synthesis] [ref:note-frame-rule-wiring]
 type FrameWire :: forall {k1} {k2} {k3} {k4}. k1 -> k2 -> k3 -> k4 -> Constraint

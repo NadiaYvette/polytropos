@@ -139,8 +139,8 @@ Why desugar at the parsed AST level:
    without requiring language extensions that modify the lexical grammar or external
    preprocessors (like CPP or Template Haskell quotes).
 2. Elimination of Downstream Complexity:
-   By lowering syntactic forms to standard Polytropos combinators ('emptyRecord',
-   'insertField', 'setField', 'injectVariant', 'projectVariant', 'recordField') before
+   By lowering syntactic forms to standard Polytropos combinators (@emptyRecord@,
+   @insertField@, @setField@, @injectVariant@, @projectVariant@, @recordField@) before
    renaming, the GHC Typechecker receives standard Haskell function applications
    and view patterns. The typechecker plugin ('Polytropos.Plugin') can then solve
    the resulting 'FieldIndex', 'ConstructorIndex', and 'SubRow' constraints with
@@ -165,14 +165,14 @@ row-polymorphic operations without boilerplate conversion:
   @data Person = Person { name :: String, age :: Int } deriving OpenRecord@
   @data Status = Active | Inactive String deriving OpenVariant@
 
-GHC's built-in deriving engine would reject 'OpenRecord' and 'OpenVariant' because they
+GHC's built-in deriving engine would reject @OpenRecord@ and @OpenVariant@ because they
 are not built-in deriving strategies. The source plugin solves this via a two-stage process:
 
 Stage 1 (Declaration Harvesting & Scrubbing):
-- Scans 'hsmodDecls' for 'DataDecl's containing deriving clauses referencing 'OpenRecord'
-  or 'OpenVariant'.
+- Scans 'hsmodDecls' for 'DataDecl's containing deriving clauses referencing @OpenRecord@
+  or @OpenVariant@.
 - Extracts the type name and constructor names into 'knownRecs' and 'knownVars'.
-- Scrubs (filters out) the 'OpenRecord' and 'OpenVariant' deriving clauses from the AST,
+- Scrubs (filters out) the @OpenRecord@ and @OpenVariant@ deriving clauses from the AST,
   so GHC's stock deriving engine never sees them.
 
 Stage 2 (Expression and Pattern Interception):
@@ -200,11 +200,11 @@ Note [Record Update and View Pattern Translation]
    The plugin intercepts 'RecordUpd' (and its compat variants across GHC versions)
    and folds the updates right-to-left:
      @setField #x 42 (setField #y True r)@
-   For HKD records, @REC_UPD_F@ desugars into 'setFieldF' chains.
+   For HKD records, @REC_UPD_F@ desugars into @setFieldF@ chains.
 
 2. Record Patterns & View Pattern Bundling:
    A pattern like @REC { name = p1, age = p2 }@ cannot be matched with standard data constructors
-   because 'Record' is backed by a flat 'SmallArray'.
+   because @Record@ is backed by a flat @SmallArray@.
    The plugin desugars this into GHC View Patterns ('ViewPat'):
    - Single-field match:
      @REC { name = p1 }@  ==>  @(recordField #name -> p1)@
@@ -218,8 +218,8 @@ Note [Record Update and View Pattern Translation]
 3. Variant Patterns:
    @VAR { Ok = p }@ is desugared into:
      @(projectVariant #Ok -> Just p)@
-   If the variant's active tag matches '#Ok', 'projectVariant' yields 'Just payload' and
-   matching proceeds against 'p'. If the tag does not match, 'projectVariant' yields
+   If the variant's active tag matches @#Ok@, @projectVariant@ yields @Just payload@ and
+   matching proceeds against @p@. If the tag does not match, @projectVariant@ yields
    'Nothing', causing GHC to fall through to the next pattern match branch.
 -}
 
@@ -237,12 +237,12 @@ sourcePlugin _opts res = do
   pure res { parsedResultModule = pm' }
 
 -- | Transforms a parsed module AST through three sequential compiler passes:
--- 1. Declaration Harvesting & Scrubbing: discovers 'OpenRecord' and 'OpenVariant' deriving
+-- 1. Declaration Harvesting & Scrubbing: discovers @OpenRecord@ and @OpenVariant@ deriving
 --    clauses, registers their nominal constructors, and strips the clauses.
 --    See Note [Open Declarations: Lowering Nominal Declarations to Open Rows] [ref:note-open-declarations]
--- 2. Expression Transformation: rewrites 'REC', 'VAR', 'REC_UPD', and nominal constructors
+-- 2. Expression Transformation: rewrites @REC@, @VAR@, @REC_UPD@, and nominal constructors
 --    into Polytropos runtime function application chains.
--- 3. Pattern Transformation: rewrites 'REC' and 'VAR' patterns into view patterns.
+-- 3. Pattern Transformation: rewrites @REC@ and @VAR@ patterns into view patterns.
 --    See Note [Record Update and View Pattern Translation] [ref:note-view-patterns]
 -- 4. Import Management: ensures 'import qualified Polytropos as Polytropos' is present.
 transformParsedModule :: HsParsedModule -> HsParsedModule
@@ -261,7 +261,7 @@ transformParsedModule pm@HsParsedModule{ hpm_module = L modLoc hsmod } =
   SYB Combinators (Self-contained Data.Data helpers)
 -------------------------------------------------------------------------------}
 
--- | Casts a transformation function 'b -> b' over any type 'a' satisfying 'Typeable'.
+-- | Casts a transformation function @b -> b@ over any type @a@ satisfying 'Typeable'.
 -- Provides lightweight Scrap Your Boilerplate traversal without external library dependencies.
 mkT :: (Typeable a, Typeable b) => (b -> b) -> a -> a
 mkT f x = case cast x of
@@ -340,17 +340,17 @@ extractAndCleanDeclarations decls =
   Expression Rewriting
 -------------------------------------------------------------------------------}
 
--- | Rewrites expressions matching syntactic sugar markers ('REC', 'VAR', 'REC_UPD',
--- 'REC_UPD_F', and nominal constructors deriving 'OpenRecord' / 'OpenVariant') into
+-- | Rewrites expressions matching syntactic sugar markers (@REC@, @VAR@, @REC_UPD@,
+-- @REC_UPD_F@, and nominal constructors deriving @OpenRecord@ / @OpenVariant@) into
 -- standard Polytropos library combinator expressions.
 --
 -- Supported Syntactic Forms:
 -- 1. Bare Record Construction:
 --    @REC { x = 1, y = True }@ or @Person { name = "Alice", age = 30 }@
---    Lowered into a chain of 'insertField' calls ending in 'emptyRecord'.
+--    Lowered into a chain of @insertField@ calls ending in @emptyRecord@.
 -- 2. HKD Record Construction:
 --    @REC_F { x = Just 1 }@
---    Lowered into a chain of 'insertFieldF' calls ending in 'emptyRecordF'.
+--    Lowered into a chain of @insertFieldF@ calls ending in @emptyRecordF@.
 -- 3. Variant Injection:
 --    @VAR { Ok = 200 }@ or @VARIANT { Err = "msg" }@
 --    Lowered into @injectVariant #Tag val@.
@@ -420,11 +420,11 @@ transformExpr knownRecs knownVars expr = case expr of
 
   other -> other
 
--- | Desugars record construction into a nested fold of 'insertField' calls:
+-- | Desugars record construction into a nested fold of @insertField@ calls:
 -- @REC { x = 1, y = True }@ ==> @insertField #x 1 (insertField #y True emptyRecord)@
 --
--- When 'isHKD' is true, emits 'insertFieldF' and 'emptyRecordF' instead.
--- Supports field punning: @REC { x }@ extracts local variable 'x' as argument.
+-- When @isHKD@ is true, emits @insertFieldF@ and @emptyRecordF@ instead.
+-- Supports field punning: @REC { x }@ extracts local variable @x@ as argument.
 desugarRecordCon :: Bool -> [LHsRecField GhcPs (LHsExpr GhcPs)] -> HsExpr GhcPs
 desugarRecordCon isHKD flds =
   let emptyFn = polyVar (if isHKD then "emptyRecordF" else "emptyRecord")
@@ -448,10 +448,10 @@ desugarVariantCon (fld : _) =
       lblExpr = polyLabel lbl
   in unLoc (mkHsApp (mkHsApp injFn lblExpr) arg)
 
--- | Desugars functional record update into a fold of 'setField' calls:
+-- | Desugars functional record update into a fold of @setField@ calls:
 -- @REC_UPD r { x = 42, y = False }@ ==> @setField #x 42 (setField #y False r)@
 --
--- When 'isHKD' is true, emits 'setFieldF' instead.
+-- When @isHKD@ is true, emits @setFieldF@ instead.
 desugarRecordUpd :: Bool -> LHsExpr GhcPs -> [CompatRecUpdField] -> HsExpr GhcPs
 desugarRecordUpd isHKD r flds =
   let setFnName = if isHKD then "setFieldF" else "setField"
@@ -567,7 +567,7 @@ desugarRecordPat flds =
 -- | Desugars variant pattern matching into @(projectVariant #Tag -> Just p)@:
 -- @VAR { Ok = p }@ ==> @(projectVariant #Ok -> Just p)@
 --
--- If the runtime tag matches '#Ok', 'projectVariant' returns 'Just payload' and
+-- If the runtime tag matches @#Ok@, @projectVariant@ returns @Just payload@ and
 -- succeeds; otherwise it returns 'Nothing' and pattern matching falls through.
 desugarVariantPat :: [LHsRecField GhcPs (LPat GhcPs)] -> Pat GhcPs
 desugarVariantPat [] =
@@ -580,7 +580,7 @@ desugarVariantPat (fld : _) =
   in ViewPat noAnn viewExpr justPat
 
 -- | Extracts the field label and sub-pattern from a record pattern field node.
--- Supports field punning: @REC { x }@ binds to pattern variable 'x'.
+-- Supports field punning: @REC { x }@ binds to pattern variable @x@.
 extractRecPatField :: LHsRecField GhcPs (LPat GhcPs) -> (FastString, LPat GhcPs)
 extractRecPatField (L _ (HsFieldBind _ (L _ (FieldOcc _ (L _ lbl))) p pun)) =
   let fs = occNameFS (rdrNameOcc lbl)

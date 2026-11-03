@@ -193,7 +193,7 @@ using idiomatic v'VAR' syntax:
 
 Polytropos provides first-class support for functorial / Higher-Kinded Data rows,
 where every field type @a@ is parameterized by an outer type constructor @f a@
-(e.g. 'Maybe' for partial forms or 'Identity' for validated domain entities):
+(e.g. 'Maybe' for partial forms or 't:Identity' for validated domain entities):
 
 > {-# LANGUAGE DataKinds #-}
 >
@@ -704,20 +704,20 @@ narrowVariant (RowRep rep) =
 -------------------------------------------------------------------------------}
 
 -- | Contravariant gather for 'Record': extracts sub-record fields in \(\mathcal{O}(|sub|)\)
--- using a reified 'RowMorph'.
+-- using a reified 't:RowMorph'.
 --
 -- See Note [Reified Row Morphisms and Gather-Scatter] [ref:note-row-morph-routing]
 gatherRecord :: RowMorph sub full -> Record full -> Record sub
 gatherRecord morph (RowRep rep) = RowRep (gatherRep morph rep)
 
 -- | Scatter updates for 'Record': overwrites sub-record fields into full record in \(\mathcal{O}(|full|)\)
--- using a reified 'RowMorph'.
+-- using a reified 't:RowMorph'.
 --
 -- See Note [Reified Row Morphisms and Gather-Scatter] [ref:note-row-morph-routing]
 scatterRecord :: RowMorph sub full -> Record sub -> Record full -> Record full
 scatterRecord morph (RowRep sub) (RowRep full) = RowRep (scatterRep morph sub full)
 
--- | High-level record runner for 'FramePlan': merges the previous frame @frameIn@
+-- | High-level record runner for 't:FramePlan': merges the previous frame @frameIn@
 -- and the operation output @opOut@ into the next frame @frameOut@ in two tight loops.
 --
 -- See Note [Frame-Rule Automatic Wire Synthesis] [ref:note-frame-rule-wiring]
@@ -987,11 +987,11 @@ setFieldF _ val (RowRep rep) =
 -- | Map a class-constrained function over all fields of a record.
 --
 -- Algorithmic Mechanics:
--- 1. Fetches pre-resolved dictionary vector @fieldDicts@ (a contiguous 'SmallArray'
---    of type-erased 'DictAny' entries).
--- 2. Clones the underlying payload array into a mutable 'SmallMutableArray' in ST.
+-- 1. Fetches pre-resolved dictionary vector @fieldDicts@ (a contiguous 'Data.Primitive.SmallArray.SmallArray'
+--    of type-erased 't:DictAny' entries).
+-- 2. Clones the underlying payload array into a mutable 'Data.Primitive.SmallArray.SmallMutableArray' in ST.
 -- 3. In a tight unrolled loop from 0 to N-1:
---    - Fetches the dictionary at slot @i@ and unpacks 'DictAny', bringing @c Any@ into scope.
+--    - Fetches the dictionary at slot @i@ and unpacks 't:DictAny', bringing @c Any@ into scope.
 --    - Fetches the payload at slot @i@, coerces to @Any@, and invokes @f@.
 --    - Writes the coerced result back into slot @i@ in-place.
 -- 4. Freezes the mutable array into an immutable 'Record'.
@@ -1025,7 +1025,7 @@ cmapRecord f (RowRep (Rep t v)) =
 --
 -- Algorithmic Mechanics:
 -- Recursively traverses the dictionary vector and payload array from index 0 to N-1.
--- For each slot, unpacks 'DictAny', maps the value using @f@ to a monoidal value @m@,
+-- For each slot, unpacks 't:DictAny', maps the value using @f@ to a monoidal value @m@,
 -- and combines the results using '<>'.
 --
 -- Complexity: Zero heap array allocations.
