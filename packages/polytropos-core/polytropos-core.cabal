@@ -52,7 +52,7 @@ library
                   , Polytropos.RowMorph
   hs-source-dirs:   src
   default-language: GHC2021
-  build-depends:    base       >= 4.18 && < 4.23
+  build-depends:    base       >= 4.18 && < 4.24
                   , primitive  >= 0.9  && < 0.10
 
 test-suite polytropos-core-test
