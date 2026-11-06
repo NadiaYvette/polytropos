@@ -19,4 +19,7 @@ cabal v2-build --project-file="/home/nyc/src/test-ghci-fix/cabal.project" -w "$G
 echo "=== [ghc-10.1-regression] Verifying build / compilation ==="
 cabal v2-build --project-file="/home/nyc/src/test-ghci-fix/cabal.project" -w "$GHC_10_1" polytropos-plugin
 
+echo "=== [ghc-10.1-regression] Running polytropos-core core test suite ==="
+cabal v2-test --project-file="/home/nyc/src/test-ghci-fix/cabal.project" -w "$GHC_10_1" polytropos-core-test
+
 echo "=== [ghc-10.1-regression] REGRESSION TEST PASS ==="

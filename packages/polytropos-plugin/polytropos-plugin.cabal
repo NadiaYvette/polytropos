@@ -61,7 +61,8 @@ test-suite polytropos-plugin-smoke
   main-is:          Main.hs
   default-language: GHC2021
   build-depends:
-      base       >= 4.18 && < 4.23
+      base       >= 4.18 && < 4.24
+    , ghc
     , polytropos-core
     , primitive
     , tasty         >= 1.4  && < 1.6
