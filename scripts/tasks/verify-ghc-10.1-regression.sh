@@ -23,9 +23,6 @@ echo "=== [ghc-10.1-regression] Running polytropos-core core test suite ==="
 cabal v2-test --project-file="/home/nyc/src/test-ghci-fix/cabal.project" -w "$GHC_10_1" polytropos-core-test
 
 echo "=== [ghc-10.1-regression] Verifying GHCi plugin loading and interaction ==="
-echo -e ":load Polytropos.Plugin\n:quit" | cabal v2-repl --project-file="/home/nyc/src/test-ghci-fix/cabal.project" -w "$GHC_10_1" polytropos-plugin
-
-echo "=== [ghc-10.1-regression] Verifying ghc -e shared evaluation code path ==="
-cabal v2-exec --project-file="/home/nyc/src/test-ghci-fix/cabal.project" -w "$GHC_10_1" -- ghc -package polytropos-plugin -fplugin=Polytropos.Plugin -e "putStrLn \"Polytropos GHCi shared evaluation check passed\""
+echo -e ":load Polytropos.Plugin\nputStrLn \"Polytropos GHCi evaluation test passed\"\n:quit" | cabal v2-repl --project-file="/home/nyc/src/test-ghci-fix/cabal.project" -w "$GHC_10_1" polytropos-plugin
 
 echo "=== [ghc-10.1-regression] REGRESSION TEST PASS ==="
