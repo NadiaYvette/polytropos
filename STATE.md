@@ -10,13 +10,14 @@ and verified through their deterministic gates. All milestones of `plans/2026-10
 §1.4 subrow/subsum projection evidence, §1.5 compile-time label hashing `KnownHash`, §1.6 source-plugin construction syntax & open declaration forms,
 and §1.7 generic instance layer over rows & dynamic dictionary emission) are implemented and verified.
 All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
-- `polytropos-core` passes 81 tests (primitive SmallArray CoW updates, `setFieldsAt` batch updates,
+- `polytropos-core` passes 83 tests (primitive SmallArray CoW updates, `setFieldsAt` batch updates,
   `MRep` transient builders, zero-copy `SmallArray` constructor peeling, injection, and projection without intermediate list allocations,
   `Polytropos` consumer surface, `Record`, `Variant`, `peel`, `peelF`,
   `eliminateUniform`, `eliminateUniformM`, `eliminate`, `matchVariant`, SIMD CoW 64/100-field record scaling,
   reified row morphisms `RowMorph`, `composeRowMorph`, `gatherRep`, `scatterRep`, `gatherRecord`, `scatterRecord`,
   frame-rule execution `executeFrameScatter`, `executeFrameRecord`, poly-kinded effect rows `EffectRowOf`,
-  and full generic Sums of Products (SOP) combinators in `Polytropos.Core.SOP`: `hpure`, `hcpure`, `hmap`, `hcmap`, `hliftA2`, `hcliftA2`, `hliftA3`, `hproduct`, `hunzip`, `hapProduct`, `hapSum`, $O(1)$ `helim`, `hcollapse`, `hfoldMap`, `hcfoldMap`, `hsequence`, `htraverse`, $O(1)$ `hindex`, `hexpand`, `injections`, `apInjs`, `hcoerce`, and consumer facade bridges `htoRecord`/`hfromRecord`/`htoVariant`/`hfromVariant`).
+  full generic Sums of Products (SOP) combinators in `Polytropos.Core.SOP`: `hpure`, `hcpure`, `hmap`, `hcmap`, `hliftA2`, `hcliftA2`, `hliftA3`, `hproduct`, `hunzip`, `hapProduct`, `hapSum`, $O(1)$ `helim`, `hcollapse`, `hfoldMap`, `hcfoldMap`, `hsequence`, `htraverse`, $O(1)$ `hindex`, `hexpand`, `injections`, `apInjs`, `hcoerce`, and consumer facade bridges `htoRecord`/`hfromRecord`/`htoVariant`/`hfromVariant`,
+  and Wave 0 / TP-001A deliverables: `SubRow` infix constraint alias `(:-)` and 2LTT static layout descriptors `SlotIndex(..)`, `RowLayoutDescriptorOf(..)`, `RowLayoutDescriptor`, `buildRowLayoutDescriptor`, and `resolveRowSlot`).
 - `polytropos-plugin-smoke` passes 79 tests with `-fplugin=Polytropos.Plugin` (`RowEq`, `RowShow`,
   `RowEqSum`, `RowShowSum`, native `OverloadedRecordDot` on bare and `RecordF Maybe` records including
   polymorphic inferred type variables with nominal equality constraint emission preventing GHCi RTS defaulting aborts,
