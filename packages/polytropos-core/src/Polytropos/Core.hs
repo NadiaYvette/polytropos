@@ -133,6 +133,7 @@ module Polytropos.Core (
   , AllFields(..)
   , DictAllFields
   , SubRow(..)
+  , type (:-)
   , SubSum(..)
   , KnownHash(..)
   , labelHash
@@ -1153,6 +1154,10 @@ class SubRow (sub :: k1) (super :: k2) where
   -- | For each field in @sub@, its 0-based slot index in @super@.
   subRowIndices :: [Int]
   subRowIndices = undefined
+
+-- | Infix constraint alias for 'SubRow': @sub :- super@ witnesses that @sub@ is a sub-row of @super@.
+type (:-) = SubRow
+infix 4 :-
 
 -- | Sub-sum relationship between two sum rows (variant widening & narrowing).
 --

@@ -248,6 +248,7 @@ module Polytropos
   , type ConstructorPayloadHKD
     -- * Sub-row & Sub-variant operations
   , SubRow(..)
+  , type (:-)
   , SubSum(..)
   , projectRecord
   , projectRecordF
@@ -268,6 +269,12 @@ module Polytropos
   , FrameWire(..)
   , executeFrameScatter
   , executeFrameRecord
+    -- * 2LTT Static Layout Descriptors
+  , SlotIndex(..)
+  , RowLayoutDescriptorOf(..)
+  , RowLayoutDescriptor
+  , buildRowLayoutDescriptor
+  , resolveRowSlot
     -- * Elimination & Peeling
   , peel
   , peelF

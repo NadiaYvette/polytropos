@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -132,6 +133,10 @@ instance AllFields ProductRowT R2 Top where
 
 instance AllFields ProductRowT R2 Show where
   fieldDicts = evidenceAllFields [mkDictAny @Show @Int, mkDictAny @Show @Bool]
+
+-- | Hand-written SubRow witness for testing (sub :- super).
+instance SubRow '[ "a" := Int ] R2 where
+  subRowIndices = [0]
 
 {-------------------------------------------------------------------------------
   Fixtures
@@ -514,6 +519,25 @@ rowMorphTests = testGroup "row-morph"
       unslot (fieldAt 0 (unRowRep fOut)) @?= (1 :: Int)
       unslot (fieldAt 1 (unRowRep fOut)) @?= ("new" :: String)
       unslot (fieldAt 2 (unRowRep fOut)) @?= True
+
+  , testCase "SubRow (:-) constraint alias witnesses sub-row projection" $ do
+      let witnessSubRow :: forall sub super. (sub :- super) => [Int]
+          witnessSubRow = subRowIndices @sub @super
+      witnessSubRow @('[ "a" := Int ]) @R2 @?= [0]
+
+  , testCase "RowLayoutDescriptor 2LTT static layout and slot resolution" $ do
+      let rldClosed = buildRowLayoutDescriptor ["delta", "alpha", "gamma", "beta"] Nothing
+      rldKnownSlots rldClosed @?= [("alpha", 0), ("beta", 1), ("delta", 2), ("gamma", 3)]
+      rldOpenTail rldClosed @?= Nothing
+      resolveRowSlot rldClosed "beta" @?= StaticSlot 1
+      resolveRowSlot rldClosed "gamma" @?= StaticSlot 3
+      resolveRowSlot rldClosed "omega" @?= OpenTailSlot "rho_default" "omega"
+
+      let rldOpen = buildRowLayoutDescriptor ["y", "x"] (Just "rho_tail")
+      rldKnownSlots rldOpen @?= [("x", 0), ("y", 1)]
+      rldOpenTail rldOpen @?= Just "rho_tail"
+      resolveRowSlot rldOpen "x" @?= StaticSlot 0
+      resolveRowSlot rldOpen "z" @?= OpenTailSlot "rho_tail" "z"
   ]
 
 -- | Mock higher-kinded effect signatures for EffectRowOf testing.

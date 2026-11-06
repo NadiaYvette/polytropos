@@ -136,10 +136,22 @@ module Polytropos.RowMorph
   , FrameWire(..)
   , unsafeMkFramePlan
   , executeFrameScatter
+    -- * 2LTT Static Layout Descriptors
+  , SlotIndex(..)
+  , RowLayoutDescriptorOf(..)
+  , RowLayoutDescriptor
+  , buildRowLayoutDescriptor
+  , resolveRowSlot
   ) where
 
 import Control.Monad.ST
   ( runST
+  )
+import Data.List
+  ( sort
+  )
+import GHC.Generics
+  ( Generic
   )
 import Data.Kind
   ( Constraint
@@ -342,3 +354,42 @@ executeFrameScatter (FramePlan !outSz _ (RowMorph baseMap) (RowMorph opMap)) (Re
               copyOp (j + 1)
     copyBase 0
     copyOp 0
+
+{-------------------------------------------------------------------------------
+  2LTT Static Layout Descriptors
+-------------------------------------------------------------------------------}
+
+-- | 2LTT slot reference: either statically resolved or accessed via open row tail evidence.
+data SlotIndex
+  = StaticSlot !Int
+  | OpenTailSlot !String !String -- ^ (Row variable @rho@, Field/Tag label @l@)
+  deriving stock (Eq, Ord, Show, Generic)
+
+-- | 2LTT static layout descriptor: canonical 0-indexed static slot map for target lowering
+-- (OrganIR / GIMPLE / MLIR / C struct offsets) versus SmallArray# host evaluation.
+data RowLayoutDescriptorOf s = RowLayoutDescriptor
+  { rldKnownSlots :: ![(String, Int)]
+  -- ^ Canonical lexicographical slot offsets into Polytropos 'Rep' SmallArray
+  , rldKnownSorts :: ![(String, s)]
+  , rldOpenTail   :: !(Maybe String)
+  } deriving stock (Eq, Show, Generic)
+
+type RowLayoutDescriptor = RowLayoutDescriptorOf String
+
+-- | Compiles a list of field labels to a canonical 0-indexed static slot table.
+buildRowLayoutDescriptor :: [String] -> Maybe String -> RowLayoutDescriptor
+buildRowLayoutDescriptor fields mTail =
+  let sortedFields = sort fields
+      slots = zip sortedFields [0..]
+  in RowLayoutDescriptor
+      { rldKnownSlots = slots
+      , rldKnownSorts = []
+      , rldOpenTail   = mTail
+      }
+
+-- | Resolve a label to a static slot index or an open tail slot.
+resolveRowSlot :: RowLayoutDescriptorOf s -> String -> SlotIndex
+resolveRowSlot rld lbl =
+  case lookup lbl (rldKnownSlots rld) of
+    Just idx -> StaticSlot idx
+    Nothing  -> OpenTailSlot (maybe "rho_default" id (rldOpenTail rld)) lbl
