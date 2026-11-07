@@ -15,6 +15,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# OPTIONS_GHC -Wno-redundant-constraints #-}
 
 {-|
 Module      : Polytropos.Core.SOP
@@ -988,22 +989,24 @@ hcoerce
   => RowRep f r row a
   -> RowRep g r row a
 hcoerce rep =
-  let !_ = coerce (id :: f Any -> f Any) :: g Any -> g Any
+  let !_ = coerce (id :: f () -> f ()) :: g () -> g ()
   in unsafeCoerce rep
 
 -- | Coerce a functorial 'RowRep' to an 'Identity'-wrapped 'RowRep' in \(\mathcal{O}(1)\) time.
 htoI
-  :: (forall x. Coercible (f x) (Identity x))
+  :: forall f r row a.
+     (forall x. Coercible (f x) (Identity x))
   => RowRep f r row a
   -> RowRep Identity r row a
-htoI = hcoerce
+htoI = unsafeCoerce
 
 -- | Coerce an 'Identity'-wrapped 'RowRep' to another representationally identical functor in \(\mathcal{O}(1)\) time.
 hfromI
-  :: (forall x. Coercible (Identity x) (f x))
+  :: forall f r row a.
+     (forall x. Coercible (Identity x) (f x))
   => RowRep Identity r row a
   -> RowRep f r row a
-hfromI = hcoerce
+hfromI = unsafeCoerce
 
 -- | Coerce a 'RowRep' with arbitrary result type @a@ to @()@.
 hunit :: RowRep f r row a -> RowRep f r row ()
