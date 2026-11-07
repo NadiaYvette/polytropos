@@ -10,7 +10,8 @@ and verified through their deterministic gates. All milestones of `plans/2026-10
 §1.4 subrow/subsum projection evidence, §1.5 compile-time label hashing `KnownHash`, §1.6 source-plugin construction syntax & open declaration forms,
 and §1.7 generic instance layer over rows & dynamic dictionary emission) are implemented and verified.
 All packages build cleanly on GHC 9.14.1 with `-Wall -Werror`:
-- `polytropos-core` passes 83 tests (primitive SmallArray CoW updates, `setFieldsAt` batch updates,
+- `polytropos-core` passes 83 tests under threaded parallel execution (`-threaded -rtsopts "-with-rtsopts=-N"` with `cabal test -j20 --semaphore`)
+  (primitive SmallArray CoW updates, `setFieldsAt` batch updates,
   `MRep` transient builders, zero-copy `SmallArray` constructor peeling, injection, and projection without intermediate list allocations,
   `Polytropos` consumer surface, `Record`, `Variant`, `peel`, `peelF`,
   `eliminateUniform`, `eliminateUniformM`, `eliminate`, `matchVariant`, SIMD CoW 64/100-field record scaling,
