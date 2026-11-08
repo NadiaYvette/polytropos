@@ -34,6 +34,10 @@ guidance is subdivided into modular rules loaded on demand:
   Precedence rule ("code wins at runtime; notes corrected regardless") and the two-file loop.
 - [`.agents/rules/plugin-invariants.md`](.agents/rules/plugin-invariants.md) —
   TcPlugin literal index calculation, Core AST synthesis, and selector safety.
+- [`.agents/rules/kioku-context.md`](.agents/rules/kioku-context.md) —
+  Durable agent memory, context offloading loop (`kioku-remember`), and hybrid recall.
+- [`.agents/rules/hls-housekeeping.md`](.agents/rules/hls-housekeeping.md) —
+  Zero-token mechanical auto-healing (`hls-autoheal`), unused imports, pragmas, and HLS offloading.
 
 ## Operational advisories
 

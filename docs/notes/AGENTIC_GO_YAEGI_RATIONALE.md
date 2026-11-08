@@ -1,0 +1,1 @@
+/home/nyc/src/sarutahiko/docs/notes/AGENTIC_GO_YAEGI_RATIONALE.md
