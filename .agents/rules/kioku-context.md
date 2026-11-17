@@ -5,7 +5,7 @@ SPDX-License-Identifier: EUPL-1.2 OR Apache-2.0
 
 **Status:** ACTIVE RULE · Bounded Context Extension  
 **Memory Substrate:** `shinzui kioku` (PostgreSQL `postgresql:///kioku`)  
-**CLI Tools:** [`/home/nyc/.local/bin/kioku`](file:///home/nyc/.local/bin/kioku) · [`/home/nyc/.local/bin/kioku-remember`](file:///home/nyc/.local/bin/kioku-remember)  
+**CLI Tools:** `/home/nyc/.local/bin/kioku` · `/home/nyc/.local/bin/kioku-remember`  
 **Session Loop:** [`PLAN.md`](../../PLAN.md) · [`STATE.md`](../../STATE.md) · [`AGENTS.md`](../../AGENTS.md)
 
 ---
@@ -21,7 +21,7 @@ To arrest quota drain while retaining high-fidelity recall:
    kioku-remember "Polytropos uses a flat SmallArray payload representation for both sums and products" --tags "architecture,smallarray"
    ```
 2. **Update the Two-File Loop:** Reflect active frontiers in `PLAN.md` and `STATE.md`.
-3. **Prune History via `/compact`:** Once offloaded, recommend or trigger `/compact` to shed obsolete conversational steps.
+3. **Compaction Cadence:** Once offloaded, recommend or trigger `/compact` every 40–50 turns or immediately upon completing a task packet to shed obsolete conversational history.
 4. **Recall On-Demand:** Retrieve stored facts with `kioku recall`:
    ```bash
    kioku recall "<query>" --namespace-wide antigravity --strategy keyword

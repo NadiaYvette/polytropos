@@ -38,6 +38,18 @@ guidance is subdivided into modular rules loaded on demand:
   Durable agent memory, context offloading loop (`kioku-remember`), and hybrid recall.
 - [`.agents/rules/hls-housekeeping.md`](.agents/rules/hls-housekeeping.md) —
   Zero-token mechanical auto-healing (`hls-autoheal`), unused imports, pragmas, and HLS offloading.
+- [`.agents/rules/task-execution.md`](.agents/rules/task-execution.md) —
+  Yamaarashi runner invariants, `executor: auto` preference, and zero-polling discipline.
+
+## Subdivided operational skills (`.agents/skills/`)
+
+- [`.agents/skills/code-navigation/SKILL.md`](.agents/skills/code-navigation/SKILL.md) — Fast, token-efficient code navigation using tags, ripgrep, and ast-grep.
+- [`.agents/skills/contextful/SKILL.md`](.agents/skills/contextful/SKILL.md) — Query project context packs, local FTS5 BM25 search.
+- [`.agents/skills/kioku/SKILL.md`](.agents/skills/kioku/SKILL.md) — Durable agent memory and hybrid recall via shinzui kioku.
+- [`.agents/skills/ponytail/SKILL.md`](.agents/skills/ponytail/SKILL.md) — Minimalist / YAGNI / lazy-mode coding.
+- [`.agents/skills/shikumi/SKILL.md`](.agents/skills/shikumi/SKILL.md) — Typed language-model programs & hierarchical tracing.
+- [`.agents/skills/tricorder/SKILL.md`](.agents/skills/tricorder/SKILL.md) — Check continuous GHCi build status and zero-log compiler diagnostics.
+- [`.agents/skills/yamaarashi/SKILL.md`](.agents/skills/yamaarashi/SKILL.md) — Autonomous task packet runner and ASCII Kanban board projection.
 
 ## Operational advisories
 
