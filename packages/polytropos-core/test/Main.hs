@@ -27,11 +27,12 @@
 module Main (main) where
 
 import Control.Monad.ST             (runST)
+import Data.Bits                    (complement)
 import Data.Functor.Compose         (Compose(..))
 import Data.Functor.Const           (Const(..))
 import Data.Functor.Identity        (Identity(..))
 import Data.Kind                    (Type)
-import Data.Primitive.PrimArray     (sizeofPrimArray)
+import Data.Primitive.PrimArray     (primArrayFromList, sizeofPrimArray)
 import Data.Primitive.SmallArray    (indexSmallArray)
 import Data.Proxy                   (Proxy(..))
 import GHC.Exts                     (Any)
@@ -41,6 +42,8 @@ import Test.Tasty.HUnit            (testCase, (@?=))
 import Polytropos.Core
 import Polytropos
 import Polytropos.RowMorph
+import Polytropos.MergeMorph
+import qualified Polytropos.Record as PR
 
 {-------------------------------------------------------------------------------
   Slot helpers
@@ -820,4 +823,17 @@ main = defaultMain $ testGroup "polytropos-core"
   , rowMorphTests
   , effectRowTests
   , sopTests
+  , mergeMorphTests
+  ]
+
+mergeMorphTests :: TestTree
+mergeMorphTests = testGroup "merge-morph"
+  [ testCase "executeMergeMorph with two's-complement gather plan" $ do
+      let plan = MergeMorph (primArrayFromList [0, complement 0]) :: MergeMorph 'OpOverrideR R2 R2 R2
+          r1 = PR.Record (productRep [slot (10 :: Int), slot (20 :: Int)])
+          r2 = PR.Record (productRep [slot (30 :: Int)])
+          out = executeMergeMorph plan r1 r2
+      repArity (PR.unRecord out) @?= 2
+      (noInlineUnsafeCo (indexSmallArray (repVals (PR.unRecord out)) 0) :: Int) @?= (10 :: Int)
+      (noInlineUnsafeCo (indexSmallArray (repVals (PR.unRecord out)) 1) :: Int) @?= (30 :: Int)
   ]
