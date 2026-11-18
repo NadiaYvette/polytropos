@@ -291,6 +291,8 @@ module Polytropos
     -- * Re-exports
   , Pair(..)
   , HasField(..)
+  , FieldIndex(..)
+  , ConstructorIndex(..)
   , RowEq(..)
   , RowShow(..)
   , RowFlavour(..)
