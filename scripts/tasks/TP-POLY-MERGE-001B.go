@@ -93,7 +93,7 @@ func main() {
 		if !strings.Contains(smokeStr, "import Polytropos.Plugin.MergeMorph") {
 			smokeStr = strings.Replace(smokeStr, "import Polytropos\n", "import Polytropos\nimport Polytropos.Plugin.MergeMorph\nimport qualified Data.ByteString as BS\n", 1)
 		}
-		smokeStr = strings.Replace(smokeStr, "getEffectIndex = fieldIndex @_ @l @ef @a\n", "getEffectIndex = fieldIndex @_ @l @ef @a\n"+testSnippet, 1)
+		smokeStr = strings.Replace(smokeStr, "      ]\n  ]\n\ncheckGhcDiag", "      ]"+testSnippet+"  ]\n\ncheckGhcDiag", 1)
 		if err := os.WriteFile(smokePath, []byte(smokeStr), 0644); err != nil {
 			fmt.Fprintf(os.Stderr, "failed to write %s: %v\n", smokePath, err)
 			os.Exit(1)
