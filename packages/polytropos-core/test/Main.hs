@@ -42,8 +42,6 @@ import Test.Tasty.HUnit            (testCase, (@?=))
 import Polytropos.Core
 import Polytropos
 import Polytropos.RowMorph
-import Polytropos.MergeMorph
-import qualified Polytropos.Record as PR
 
 {-------------------------------------------------------------------------------
   Slot helpers
@@ -830,10 +828,10 @@ mergeMorphTests :: TestTree
 mergeMorphTests = testGroup "merge-morph"
   [ testCase "executeMergeMorph with two's-complement gather plan" $ do
       let plan = MergeMorph (primArrayFromList [0, complement 0]) :: MergeMorph 'OpOverrideR R2 R2 R2
-          r1 = PR.Record (productRep [slot (10 :: Int), slot (20 :: Int)])
-          r2 = PR.Record (productRep [slot (30 :: Int)])
+          r1 = RowRep (productRep [slot (10 :: Int), slot (20 :: Int)])
+          r2 = RowRep (productRep [slot (30 :: Int)])
           out = executeMergeMorph plan r1 r2
-      repArity (PR.unRecord out) @?= 2
-      (noInlineUnsafeCo (indexSmallArray (repVals (PR.unRecord out)) 0) :: Int) @?= (10 :: Int)
-      (noInlineUnsafeCo (indexSmallArray (repVals (PR.unRecord out)) 1) :: Int) @?= (30 :: Int)
+      repArity (unRowRep out) @?= 2
+      (noInlineUnsafeCo (indexSmallArray (repVals (unRowRep out)) 0) :: Int) @?= (10 :: Int)
+      (noInlineUnsafeCo (indexSmallArray (repVals (unRowRep out)) 1) :: Int) @?= (30 :: Int)
   ]
