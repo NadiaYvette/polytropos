@@ -1,0 +1,11 @@
+:set -package polytropos-core
+:set -package polytropos-plugin
+:set -fplugin=Polytropos.Plugin
+:set -XDataKinds
+:set -XOverloadedLabels
+:set -XOverloadedRecordDot
+:set -XTypeApplications
+:set -XTypeOperators
+:set -fobject-code
+:set prompt "\ESC[1;35mpolytropos\ESC[0m> "
+import Polytropos

@@ -1,0 +1,32 @@
+#!/bin/sh
+# polytropos-repl — Frictionless GHCi REPL preconfigured for Polytropos.Plugin
+#
+# Resolves the common GHCi traps:
+# 1. Preloads -package polytropos-core and -package polytropos-plugin
+# 2. Enables -fplugin=Polytropos.Plugin and -fobject-code
+# 3. Enables -XDataKinds, -XOverloadedLabels, -XOverloadedRecordDot, -XTypeApplications
+# 4. Imports Polytropos into the interactive scope
+
+set -eu
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+cd "$REPO_ROOT"
+
+if [ ! -f "$REPO_ROOT/.ghci" ]; then
+    echo "Warning: .ghci not found at $REPO_ROOT/.ghci, using inline flags" >&2
+    exec cabal exec -- ghci \
+        -package polytropos-core \
+        -package polytropos-plugin \
+        -fplugin=Polytropos.Plugin \
+        -XDataKinds \
+        -XOverloadedLabels \
+        -XOverloadedRecordDot \
+        -XTypeApplications \
+        -XTypeOperators \
+        -fobject-code \
+        "$@"
+fi
+
+exec cabal exec -- ghci -ghci-script "$REPO_ROOT/.ghci" "$@"
