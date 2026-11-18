@@ -67,6 +67,7 @@ func main() {
 	if !strings.Contains(cabalStr, "Polytropos.Plugin.MergeMorph") {
 		cabalStr = strings.Replace(cabalStr, "  exposed-modules:  Polytropos.Plugin\n                  , Polytropos.Plugin.Source\n", "  exposed-modules:  Polytropos.Plugin\n                  , Polytropos.Plugin.Source\n                  , Polytropos.Plugin.MergeMorph\n", 1)
 		cabalStr = strings.Replace(cabalStr, "    , ghc-tcplugin-api >= 0.1 && < 0.21\n", "    , ghc-tcplugin-api >= 0.1 && < 0.21\n    , bytestring >= 0.11 && < 0.13\n    , containers >= 0.6 && < 0.9\n    , polytropos-core\n", 1)
+		cabalStr = strings.Replace(cabalStr, "    , directory\n", "    , directory\n    , bytestring\n", 1)
 		if err := os.WriteFile(cabalPath, []byte(cabalStr), 0644); err != nil {
 			fmt.Fprintf(os.Stderr, "failed to write %s: %v\n", cabalPath, err)
 			os.Exit(1)
