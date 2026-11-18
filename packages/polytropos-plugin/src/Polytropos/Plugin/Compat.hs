@@ -20,6 +20,7 @@ module Polytropos.Plugin.Compat
   , extractRecUpdField
   , pattern PrefixConPat
   , stripHsPar
+  , mkHsPar
   , polyLabel
   , mkPolytroposImportDecl
   , mkHsApp
@@ -183,6 +184,14 @@ stripHsPar (unLoc -> HsPar _ e) = stripHsPar e
 stripHsPar (unLoc -> HsPar _ _ e _) = stripHsPar e
 #endif
 stripHsPar e = e
+
+-- | Construct a parenthesized expression across GHC versions.
+mkHsPar :: LHsExpr GhcPs -> LHsExpr GhcPs
+#if __GLASGOW_HASKELL__ >= 910
+mkHsPar e = noLocA (HsPar noAnn e)
+#else
+mkHsPar e = noLocA (HsPar noAnn noAnn e noAnn)
+#endif
 
 -- | Construct an overloaded label expression across GHC 9.6-9.14.
 polyLabel :: FastString -> LHsExpr GhcPs

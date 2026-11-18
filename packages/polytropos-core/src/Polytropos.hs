@@ -336,10 +336,13 @@ module Polytropos
   , hfromRecord
   , htoVariant
   , hfromVariant
+    -- * Row Merge Operations & Skew Boolean Algebra
+  , module Polytropos.MergeMorph
   ) where
 
 import Polytropos.Core
 import Polytropos.Core.SOP
+import Polytropos.MergeMorph
 import Polytropos.RowMorph
 import Data.Functor.Identity (Identity(..))
 import Data.Kind (Type)

@@ -112,6 +112,7 @@ import Polytropos.Plugin.Compat
   , extractRecUpdField
   , pattern PrefixConPat
   , stripHsPar
+  , mkHsPar
   , polyLabel
   , mkPolytroposImportDecl
   , mkHsApp
@@ -434,8 +435,8 @@ desugarRecordCon isHKD flds =
         let (lbl, arg) = extractRecField fld
             insFn = polyVar insertFnName
             lblExpr = polyLabel lbl
-        in mkHsApp (mkHsApp (mkHsApp insFn lblExpr) arg) acc
-  in unLoc $ foldr foldStep emptyFn flds
+        in mkHsApp (mkHsApp (mkHsApp insFn lblExpr) (mkHsPar arg)) acc
+  in unLoc $ mkHsPar (foldr foldStep emptyFn flds)
 
 -- | Desugars variant injection into @injectVariant #Tag val@:
 -- @VAR { Ok = 200 }@ ==> @injectVariant #Ok 200@
@@ -446,7 +447,7 @@ desugarVariantCon (fld : _) =
   let (lbl, arg) = extractRecField fld
       injFn = polyVar "injectVariant"
       lblExpr = polyLabel lbl
-  in unLoc (mkHsApp (mkHsApp injFn lblExpr) arg)
+  in unLoc (mkHsPar (mkHsApp (mkHsApp injFn lblExpr) (mkHsPar arg)))
 
 -- | Desugars functional record update into a fold of @setField@ calls:
 -- @REC_UPD r { x = 42, y = False }@ ==> @setField #x 42 (setField #y False r)@
@@ -460,8 +461,8 @@ desugarRecordUpd isHKD r flds =
         let (fs, arg) = extractRecUpdField fld
             setFn = polyVar setFnName
             lblExpr = polyLabel fs
-        in mkHsApp (mkHsApp (mkHsApp setFn lblExpr) arg) acc
-  in unLoc $ foldr foldStep r flds
+        in mkHsApp (mkHsApp (mkHsApp setFn lblExpr) (mkHsPar arg)) acc
+  in unLoc $ mkHsPar (foldr foldStep r flds)
 
 -- | Extracts the field label and value expression from a record field node.
 -- Handles GHC field punning: if @pun@ flag is set, synthesizes a variable
