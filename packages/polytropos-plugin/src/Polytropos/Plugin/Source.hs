@@ -64,9 +64,6 @@ import GHC.Plugins
   , occNameFS
   , moduleNameString
   )
-import Language.Haskell.Syntax.Module.Name
-  ( hsModuleNameString
-  )
 
 import GHC.Hs.Extension
   ( GhcPs
@@ -292,7 +289,7 @@ extractAndCleanDeclarations decls =
   in (nub recs, nub vars, cleanedDecls)
   where
     step (L loc (TyClD x decl)) (rAcc, vAcc, dAcc)
-      | DataDecl ext modifiers (L _ name) tyvars fixity (HsDataDefn defnExt ctxt mtype mkind cons derivs) <- decl
+      | DataDecl ext (L _ name) tyvars fixity (HsDataDefn defnExt ctxt mtype mkind cons derivs) <- decl
       , let hasOpenRec = any isDerivingOpenRecord derivs
       , let hasOpenVar = any isDerivingOpenVariant derivs
       = let typeNameStr = occNameString (rdrNameOcc name)
@@ -301,7 +298,7 @@ extractAndCleanDeclarations decls =
             vAcc' = if hasOpenVar then vCons ++ vAcc else vAcc
             cleanedDerivs = filter (\c -> not (isDerivingOpenRecord c || isDerivingOpenVariant c)) derivs
             defn' = HsDataDefn defnExt ctxt mtype mkind cons cleanedDerivs
-            decl' = DataDecl ext modifiers (noLocA name) tyvars fixity defn'
+            decl' = DataDecl ext (noLocA name) tyvars fixity defn'
         in (rAcc', vAcc', L loc (TyClD x decl') : dAcc)
     step d (rAcc, vAcc, dAcc) =
       (rAcc, vAcc, d : dAcc)
@@ -498,26 +495,26 @@ extractRecField (L _ (HsFieldBind _ (L _ (FieldOcc _ (L _ lbl))) arg pun)) =
 transformPat :: [String] -> [String] -> Pat GhcPs -> Pat GhcPs
 transformPat knownRecs knownVars pat = case pat of
   -- 1. Record Pattern: REC { x, y } or Person { x, y }
-  ConPat _ext (L _ nm) (RecCon _ (HsRecFields{ rec_flds = flds }))
+  ConPat _ext (L _ nm) (RecCon HsRecFields{ rec_flds = flds })
     | let conStr = occNameString (rdrNameOcc nm)
     , conStr == "REC" || conStr `elem` knownRecs
     -> desugarRecordPat flds
 
   -- 2. Variant Pattern: VAR { Ok = p } or VARIANT { Err = p }
-  ConPat _ext (L _ nm) (RecCon _ (HsRecFields{ rec_flds = flds }))
+  ConPat _ext (L _ nm) (RecCon HsRecFields{ rec_flds = flds })
     | let conStr = occNameString (rdrNameOcc nm)
     , conStr == "VAR" || conStr == "VARIANT"
     -> desugarVariantPat flds
 
   -- 3. Open Variant Constructor Pattern (Lowering nominal constructor patterns)
   -- 3a. Record syntax payload: Success { val }
-  ConPat _ext (L _ nm) (RecCon _ (HsRecFields{ rec_flds = flds }))
+  ConPat _ext (L _ nm) (RecCon HsRecFields{ rec_flds = flds })
     | let conStr = occNameString (rdrNameOcc nm)
     , conStr `elem` knownVars
     -> let viewExpr = mkHsApp (polyVar "projectVariant") (polyLabel (fsLit conStr))
            justCon  = noLocA (mkRdrUnqual (mkDataOcc "Just"))
            innerPat = noLocA (desugarRecordPat flds)
-           justPat  = noLocA $ ConPat noExtField justCon (PrefixConPat [innerPat])
+           justPat  = noLocA $ ConPat noAnn justCon (PrefixConPat [innerPat])
        in ViewPat noAnn viewExpr justPat
 
   -- 3b. 1-arg prefix pattern: Success r
@@ -526,7 +523,7 @@ transformPat knownRecs knownVars pat = case pat of
     , conStr `elem` knownVars
     -> let viewExpr = mkHsApp (polyVar "projectVariant") (polyLabel (fsLit conStr))
            justCon  = noLocA (mkRdrUnqual (mkDataOcc "Just"))
-           justPat  = noLocA $ ConPat noExtField justCon (PrefixConPat [argPat])
+           justPat  = noLocA $ ConPat noAnn justCon (PrefixConPat [argPat])
        in ViewPat noAnn viewExpr justPat
 
   -- 3c. Nullary prefix pattern: Loading
@@ -536,7 +533,7 @@ transformPat knownRecs knownVars pat = case pat of
     -> let viewExpr = mkHsApp (polyVar "projectVariant") (polyLabel (fsLit conStr))
            justCon  = noLocA (mkRdrUnqual (mkDataOcc "Just"))
            wildPat  = noLocA (WildPat noExtField)
-           justPat  = noLocA $ ConPat noExtField justCon (PrefixConPat [wildPat])
+           justPat  = noLocA $ ConPat noAnn justCon (PrefixConPat [wildPat])
        in ViewPat noAnn viewExpr justPat
 
   other -> other
@@ -579,7 +576,7 @@ desugarVariantPat (fld : _) =
   let (lbl, p)   = extractRecPatField fld
       viewExpr   = mkHsApp (polyVar "projectVariant") (polyLabel lbl)
       justCon    = noLocA (mkRdrUnqual (mkDataOcc "Just"))
-      justPat    = noLocA $ ConPat noExtField justCon (PrefixConPat [p])
+      justPat    = noLocA $ ConPat noAnn justCon (PrefixConPat [p])
   in ViewPat noAnn viewExpr justPat
 
 -- | Extracts the field label and sub-pattern from a record pattern field node.
@@ -608,6 +605,6 @@ ensurePolytroposImport imps =
     then imps
     else mkPolytroposImportDecl : imps
   where
-    isPolytroposImport (L _ ImportDecl{ ideclName = modNm }) =
-      hsModuleNameString (unLoc modNm) == "Polytropos"
+    isPolytroposImport (L _ ImportDecl{ ideclName = L _ modNm }) =
+      moduleNameString modNm == "Polytropos"
     isPolytroposImport _ = False

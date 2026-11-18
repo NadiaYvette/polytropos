@@ -131,9 +131,7 @@ import GHC.Core.Make
   , mkCoreConApps
   , mkCoreLams
   , mkCharExpr
-  , mkStringExprFSWith
-  , getMkStringIds
-  , MkStringIds (..)
+  , mkStringExpr
   , mkIfThenElse
   , mkListExpr
   )
@@ -184,11 +182,7 @@ import GHC.Plugins
   , ppr
   , isEmptyVarSet
   , tyCoVarsOfType
-  , mkFastString
   )
-
-import GHC.Tc.Utils.Env (tcLookupKnownKeyId)
-import Language.Haskell.Syntax.Basic (Boxity(Boxed))
 
 import GHC.Core.Class
   ( classMethods
@@ -208,12 +202,7 @@ import GHC.Core.TyCo.Compare
   ( eqType
   )
 
-import GHC.Builtin.Modules
-  ( gHC_CLASSES
-  , gHC_INTERNAL_BASE
-  )
-
-import GHC.Builtin.WiredIn.Types
+import GHC.Builtin.Types
   ( trueDataCon
   , falseDataCon
   , maybeTyCon
@@ -227,6 +216,19 @@ import GHC.Builtin.WiredIn.Types
   , mkPromotedPairTy
   , mkPromotedListTy
   , mkTupleTy
+  )
+
+import Language.Haskell.Syntax.Basic
+  ( Boxity(..)
+  )
+
+import GHC.Builtin.Names
+  ( gHC_CLASSES
+  , eqClassName
+  , showClassName
+  , errorMessageTypeErrorFamName
+  , typeErrorTextDataConName
+  , typeErrorVAppendDataConName
   )
 
 import Polytropos.Plugin.Compat
@@ -701,8 +703,8 @@ polytroposInit = do
   psFShowInt      <- lookupIdInModule modShow "$fShowInt"
   psFShowBool     <- lookupIdInModule modShow "$fShowBool"
 
-  psEqCls   <- tcLookupClass =<< lookupOrig modBase (mkTcOcc "Eq")
-  psShowCls <- tcLookupClass =<< lookupOrig modShow (mkTcOcc "Show")
+  psEqCls   <- tcLookupClass eqClassName
+  psShowCls <- tcLookupClass showClassName
 
   psComp <- lookupIdInModule modBase "."
 
@@ -727,9 +729,9 @@ polytroposInit = do
   fieldNamesOcc <- lookupOrig coreMod (mkTcOcc "FieldNames")
   psFieldNamesTyCon <- tcLookupTyCon fieldNamesOcc
 
-  psTypeErrorTyCon <- tcLookupTyCon =<< lookupOrig modBase (mkTcOcc "TypeError")
-  textDataCon      <- tcLookupDataCon =<< lookupOrig modBase (mkTcOcc "Text")
-  vcatDataCon      <- tcLookupDataCon =<< lookupOrig modBase (mkTcOcc "VAppend")
+  psTypeErrorTyCon <- tcLookupTyCon errorMessageTypeErrorFamName
+  textDataCon      <- tcLookupDataCon typeErrorTextDataConName
+  vcatDataCon      <- tcLookupDataCon typeErrorVAppendDataConName
 
   let psPromotedText = promoteDataCon textDataCon
       psPromotedVcat = promoteDataCon vcatDataCon
@@ -1484,8 +1486,7 @@ solveRowShow state ct cls tys = do
           -> name
         _ -> "R" ++ show (length fields)
 
-  mkStringIds <- unsafeLiftTcM (getMkStringIds tcLookupKnownKeyId)
-  prefixExpr <- pure (mkStringExprFSWith mkStringIds (mkFastString (rowName ++ " ")))
+  prefixExpr <- unsafeLiftTcM $ mkStringExpr (rowName ++ " ")
   let prefixShowS = mkCoreApps (Var (psShowString state)) [prefixExpr]
       spaceShowS  = mkCoreApps (Var (psShowChar state)) [mkCharExpr ' ']
 
@@ -1715,8 +1716,7 @@ solveRowShowSum state ct cls tys = do
 
       showConFields conNameFS fWanteds = do
         let conName = unpackFS conNameFS
-        mkStringIds <- unsafeLiftTcM (getMkStringIds tcLookupKnownKeyId)
-        prefixExpr <- pure (mkStringExprFSWith mkStringIds (mkFastString (conName ++ " ")))
+        prefixExpr <- unsafeLiftTcM $ mkStringExpr (conName ++ " ")
         let prefixShowS = mkCoreApps (Var (psShowString state)) [prefixExpr]
             fieldShows = [ showField fi fieldTy ev | (fi, fieldTy, ev) <- fWanteds ]
             showParts = case fieldShows of
@@ -1726,8 +1726,7 @@ solveRowShowSum state ct cls tys = do
 
   -- Synthesize recursive branch dispatcher: if tag == i then showConFields else buildTree (rest)
   let buildTree _tagExpr [] = do
-        mkStringIds <- unsafeLiftTcM (getMkStringIds tcLookupKnownKeyId)
-        errorPrefix <- pure (mkStringExprFSWith mkStringIds (mkFastString "??? "))
+        errorPrefix <- unsafeLiftTcM $ mkStringExpr "??? "
         pure $ mkCoreApps (Var (psShowString state)) [errorPrefix]
       buildTree tagExpr ((i, conNameFS, fWanteds) : rest) = do
         let iLit = mkWordExpr (fromIntegral i)

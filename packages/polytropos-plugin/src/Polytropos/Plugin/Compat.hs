@@ -30,7 +30,6 @@ module Polytropos.Plugin.Compat
 import GHC.Unit.Types
   ( mkModule
   , moduleUnit
-  , stringToUnit
   )
 
 import GHC.Plugins
@@ -45,7 +44,6 @@ import GHC.Plugins
 
 import GHC.Hs.Extension
   ( GhcPs
-  , GhcPass
   )
 
 import GHC.Hs
@@ -85,24 +83,21 @@ import Language.Haskell.Syntax.Expr
 import GHC.Hs.ImpExp
   ( XImportDeclPass(..)
   )
-import GHC.Types.UnresolvedImport
-  ( ImportDeclOrigin(UserWrittenImport)
-  )
-import GHC.Unit.Module.Name
-  ( toHsModuleName
-  )
+
 import GHC.Types.SourceText
   ( SourceText(..)
   )
-import GHC.Data.FastString
-  ( fastStringToShortText
-  )
-import Language.Haskell.Syntax.Text
-  ( HText
-  )
 
 #if __GLASGOW_HASKELL__ >= 910
--- Stub out these specific GHC.Builtin imports since GHC 10.1 moves/hides them or handles them differently in TcPlugin API
+import GHC.Builtin.Names
+  ( gHC_INTERNAL_BASE
+  , gHC_INTERNAL_SHOW
+  )
+#else
+import GHC.Builtin.Names
+  ( gHC_BASE
+  , gHC_SHOW
+  )
 #endif
 
 -------------------------------------------------------------------------------
@@ -112,7 +107,7 @@ import Language.Haskell.Syntax.Text
 -- | Location of GHC.Base (or GHC.Internal.Base in 9.10+)
 modBase :: Module
 #if __GLASGOW_HASKELL__ >= 910
-modBase = mkModule (stringToUnit "ghc-internal") (mkModuleName "GHC.Internal.Base")
+modBase = gHC_INTERNAL_BASE
 #else
 modBase = gHC_BASE
 #endif
@@ -120,7 +115,7 @@ modBase = gHC_BASE
 -- | Location of GHC.Show (or GHC.Internal.Show in 9.10+)
 modShow :: Module
 #if __GLASGOW_HASKELL__ >= 910
-modShow = mkModule (stringToUnit "ghc-internal") (mkModuleName "GHC.Internal.Show")
+modShow = gHC_INTERNAL_SHOW
 #else
 modShow = gHC_SHOW
 #endif
@@ -128,7 +123,7 @@ modShow = gHC_SHOW
 -- | Location of GHC.Records (or GHC.Internal.Records in 9.10+)
 modRecords :: Module
 #if __GLASGOW_HASKELL__ >= 910
-modRecords = mkModule (stringToUnit "ghc-internal") (mkModuleName "GHC.Internal.Records")
+modRecords = mkModule (moduleUnit modBase) (mkModuleName "GHC.Internal.Records")
 #else
 modRecords = mkModule (moduleUnit modBase) (mkModuleName "GHC.Records")
 #endif
@@ -172,9 +167,8 @@ extractRecUpdField (unLoc -> HsFieldBind _ (unLoc -> ambOcc) arg _) =
 
 -- | Pattern synonym matching PrefixCon constructor details across GHC versions.
 #if __GLASGOW_HASKELL__ >= 914
-pattern PrefixConPat :: [arg] -> HsConDetails GhcPs arg rec
-pattern PrefixConPat args <- PrefixCon _ args
-  where PrefixConPat args = PrefixCon noExtField args
+pattern PrefixConPat :: [arg] -> HsConDetails arg rec
+pattern PrefixConPat args = PrefixCon args
 #else
 pattern PrefixConPat :: [arg] -> HsConDetails tyarg arg rec
 pattern PrefixConPat args <- PrefixCon _ args
@@ -193,36 +187,36 @@ stripHsPar e = e
 -- | Construct an overloaded label expression across GHC 9.6-9.14.
 polyLabel :: FastString -> LHsExpr GhcPs
 #if __GLASGOW_HASKELL__ >= 912
-polyLabel fs = noLocA (HsOverLabel NoSourceText (fastStringToShortText fs))
+polyLabel fs = noLocA (HsOverLabel NoSourceText fs)
 #elif __GLASGOW_HASKELL__ >= 910
-polyLabel fs = noLocA (HsOverLabel noExtField NoSourceText (fastStringToShortText fs))
+polyLabel fs = noLocA (HsOverLabel noExtField NoSourceText fs)
 #else
-polyLabel fs = noLocA (HsOverLabel noAnn NoSourceText (fastStringToShortText fs))
+polyLabel fs = noLocA (HsOverLabel noAnn NoSourceText fs)
 #endif
 
 -- | Construct the 'import qualified Polytropos as Polytropos' declaration.
 mkPolytroposImportDecl :: LImportDecl GhcPs
 #if __GLASGOW_HASKELL__ >= 914
 mkPolytroposImportDecl = noLocA $ ImportDecl
-  { ideclExt       = XImportDeclPass noAnn NoSourceText UserWrittenImport
-  , ideclName      = noLocA (toHsModuleName (mkModuleName "Polytropos"))
+  { ideclExt       = XImportDeclPass noAnn NoSourceText False
+  , ideclName      = noLocA (mkModuleName "Polytropos")
   , ideclPkgQual   = NoRawPkgQual
   , ideclSource    = NotBoot
   , ideclLevelSpec = NotLevelled
   , ideclSafe      = False
   , ideclQualified = QualifiedPre
-  , ideclAs        = Just (noLocA (toHsModuleName (mkModuleName "Polytropos")))
+  , ideclAs        = Just (noLocA (mkModuleName "Polytropos"))
   , ideclImportList = Nothing
   }
 #else
 mkPolytroposImportDecl = noLocA $ ImportDecl
-  { ideclExt       = XImportDeclPass noAnn NoSourceText UserWrittenImport
-  , ideclName      = noLocA (toHsModuleName (mkModuleName "Polytropos"))
+  { ideclExt       = XImportDeclPass noAnn NoSourceText False
+  , ideclName      = noLocA (mkModuleName "Polytropos")
   , ideclPkgQual   = NoRawPkgQual
   , ideclSource    = NotBoot
   , ideclSafe      = False
   , ideclQualified = QualifiedPre
-  , ideclAs        = Just (noLocA (toHsModuleName (mkModuleName "Polytropos")))
+  , ideclAs        = Just (noLocA (mkModuleName "Polytropos"))
   , ideclImportList = Nothing
   }
 #endif
