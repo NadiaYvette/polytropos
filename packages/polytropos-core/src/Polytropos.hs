@@ -11,6 +11,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE Trustworthy #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 {-|
 Module      : Polytropos
@@ -348,6 +349,7 @@ import Data.Functor.Identity (Identity(..))
 import Data.Kind (Type)
 import Data.Primitive.SmallArray (copySmallArray, indexSmallArray, newSmallArray, runSmallArray, sizeofSmallArray, thawSmallArray, writeSmallArray)
 import GHC.Exts (Any)
+import GHC.OverloadedLabels (IsLabel(..))
 import GHC.Records (HasField(..))
 import GHC.TypeLits (Symbol)
 import Unsafe.Coerce (unsafeCoerce)
@@ -551,6 +553,10 @@ insertField _ a (RowRep (Rep _ v)) =
         copySmallArray m 1 v 0 n
         pure m
   in RowRep (Rep 0 v')
+
+-- | Overloaded label instance allowing @#foo x@ to construct a single-field record @Record '["foo" ':= typeof x]@.
+instance (r ~ '[n ':= a], f ~ Identity, tag ~ ProductRowT) => IsLabel n (a -> RowRep f tag r ()) where
+  fromLabel a = insertField (Field @n) a emptyRecord
 
 -- | Compute the payload product row of a constructor @n@ in a sum row @s@.
 type family ConstructorPayload (n :: Symbol) (s :: SumRow) :: Row where

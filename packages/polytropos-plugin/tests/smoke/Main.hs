@@ -599,6 +599,18 @@ main = defaultMain $ testGroup "plugin RowEq/RowShow smoke"
       [ testCase "evalMergeOp OpOverrideR encodes right-biased union" $ do
           let bytes = encodeGatherBytes [0, -1]
           BS.length bytes @?= 16
+      , testCase "solveKnownMergeMorph solves (//>) right-biased union" $ do
+          let r1 = REC { name = "Nadia" :: String }
+              r2 = REC { age = 50 :: Int }
+              rMerged = r1 //> r2
+          rMerged.name @?= "Nadia"
+          rMerged.age @?= 50
+      , testCase "solveKnownMergeMorph solves (<+>) disjoint merge" $ do
+          let r1 = (#name ("Nadia" :: String))
+              r2 = (#age (50 :: Int))
+              rMerged = r1 <+> r2
+          rMerged.name @?= "Nadia"
+          rMerged.age @?= (50 :: Int)
       ]
   ]
 
@@ -613,6 +625,8 @@ checkGhcDiag snippet expectedSubstrings = do
     "ghc"
     ([ "-fno-code"
      , tmpFile
+     , "-package"
+     , "polytropos-plugin"
      , "-fplugin=Polytropos.Plugin"
      ] ++ extraFlags)
     ""

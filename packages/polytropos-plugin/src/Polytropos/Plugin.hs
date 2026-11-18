@@ -287,6 +287,16 @@ import Polytropos.Plugin.Source
   ( sourcePlugin
   )
 
+import Polytropos.MergeMorph
+  ( MergeOp (..)
+  )
+
+import Polytropos.Plugin.MergeMorph
+  ( MergeEvalResult (..)
+  , RowEntry (..)
+  , evalMergeOp
+  )
+
 {-
 ================================================================================
                                 GHC NOTES ARCHITECTURE
@@ -674,6 +684,7 @@ data PluginState = PluginState
   , psPromotedVcat          :: !TyCon -- ^ promoted ':$$:
   , psUnsafeMkRowMorph      :: !Var   -- ^ Polytropos.RowMorph.unsafeMkRowMorph
   , psUnsafeMkFrame         :: !Var   -- ^ Polytropos.RowMorph.unsafeMkFramePlan
+  , psUnsafeMkMergeMorph    :: !Var   -- ^ Polytropos.MergeMorph.unsafeMkMergeMorph
   , psPairTyCon             :: !TyCon -- ^ Polytropos.Core.Pair
   , psPromotedPair          :: !TyCon -- ^ promoted '(:=)
   }
@@ -745,6 +756,9 @@ polytroposInit = do
   rowMorphMod <- findModule "Polytropos.RowMorph" (Just "polytropos-core")
   psUnsafeMkRowMorph <- lookupIdInModule rowMorphMod "unsafeMkRowMorph"
   psUnsafeMkFrame    <- lookupIdInModule rowMorphMod "unsafeMkFramePlan"
+
+  mergeMorphMod <- findModule "Polytropos.MergeMorph" (Just "polytropos-core")
+  psUnsafeMkMergeMorph <- lookupIdInModule mergeMorphMod "unsafeMkMergeMorph"
 
   pure PluginState{..}
 
@@ -1088,6 +1102,8 @@ solveOne state ct
             -> solveKnownRowMorph state ct cls tys
             | nameOccName name == mkTcOcc "FrameWire"
             -> solveFrameWire state ct cls tys
+            | nameOccName name == mkTcOcc "KnownMergeMorph"
+            -> solveKnownMergeMorph state ct cls tys
             | nameOccName name == mkTcOcc "IsLabel"
             -> pure $ Right ()
             | otherwise
@@ -2275,6 +2291,103 @@ solveFrameWire state ct cls tys
                          , "    Frame port type:      " ++ showSDocUnsafe (ppr fTy)
                          ]
               pure $ Left diag
+
+-------------------------------------------------------------------------------
+-- KnownMergeMorph solver
+-------------------------------------------------------------------------------
+
+-- | Solves 'KnownMergeMorph (op :: MergeOp) (r1 :: Row) (r2 :: Row) (rOut :: Row)'.
+--
+-- Algorithmic Mechanics:
+-- 1. Evaluates promoted 'MergeOp' to determine the Skew Boolean operation.
+-- 2. Walks 'r1' and 'r2' field lists via 'walkRowWithTypes_maybe'.
+-- 3. If tails are unfixed, defers constraint until closed.
+-- 4. Runs 'evalMergeOp' to compute gather indices and the synthesized output row.
+-- 5. Synthesizes 'rOut' type-level row and emits an equality wanted constraint 'rOut ~ rOutSynth'.
+-- 6. Emits Core call to 'unsafeMkMergeMorph' wrapped in the 'KnownMergeMorph' dictionary.
+solveKnownMergeMorph
+  :: PluginState
+  -> Ct
+  -> Class
+  -> [Type]
+  -> TcPluginM 'Solve (Either ((EvTerm, Ct), [Ct]) ())
+solveKnownMergeMorph state ct cls tys
+  | length tys >= 4
+  , let opTy    = tys !! (length tys - 4)
+        r1Ty    = tys !! (length tys - 3)
+        r2Ty    = tys !! (length tys - 2)
+        rOutTy  = last tys
+        loc     = ctLoc ct
+  , Just op     <- parseMergeOp opTy
+  , Just r1List <- walkRowWithTypes_maybe r1Ty
+  , Just r2List <- walkRowWithTypes_maybe r2Ty
+  = do
+      let r1Entries = [ RowEntry name ty slot | (slot, name, ty) <- r1List ]
+          r2Entries = [ RowEntry name ty slot | (slot, name, ty) <- r2List ]
+      case evalMergeOp op r1Entries r2Entries of
+        MergeSuccess reIndexed gatherIdxs -> do
+          let kTy = case reIndexed of
+                (e : _) -> typeKind (entryType e)
+                _       -> liftedTypeKind
+              entryKind = mkTyConApp (psPairTyCon state) [typeSymbolKind, kTy]
+              entries =
+                [ mkTyConApp (psPromotedPair state)
+                             [ typeSymbolKind
+                             , typeKind (entryType e)
+                             , mkStrLitTy (entryLabel e)
+                             , entryType e
+                             ]
+                | e <- reIndexed
+                ]
+              synthOutTy = mkPromotedListTy entryKind entries
+
+          outEqCts <- if rOutTy `eqType` synthOutTy
+            then pure []
+            else do
+              outEqEv <- newWanted loc (mkEqPredRole Nominal rOutTy synthOutTy)
+              pure [mkNonCanonical outEqEv]
+
+          let gatherExpr = mkListExpr intTy (map mkIntExpr gatherIdxs)
+              evExpr     = mkCoreApps (Var (psUnsafeMkMergeMorph state))
+                            (map Type tys ++ [gatherExpr])
+              dictExpr   = evDataConApp (classDataCon cls) tys [evExpr]
+
+          pure $ Left ((EvExpr dictExpr, ct), outEqCts)
+
+        MergeDisjointOverlap badLabel -> do
+          let diag = [ "Polytropos MergeMorph Error:"
+                     , "  Disjoint merge (<+>) failed: field '" ++ unpackFS badLabel ++ "' occurs in both records."
+                     ]
+              dummyExpr = mkCoreApps (Var (psUnsafeMkMergeMorph state))
+                            (map Type tys ++ [mkListExpr intTy []])
+              dummyDict = evDataConApp (classDataCon cls) tys [dummyExpr]
+          errCt <- mkTypeErrorCt state loc diag
+          pure $ Left ((EvExpr dummyDict, ct), [errCt])
+
+        MergeReplaceMissing badLabel -> do
+          let diag = [ "Polytropos MergeMorph Error:"
+                     , "  Subset update (//~) failed: field '" ++ unpackFS badLabel ++ "' is missing in base record."
+                     ]
+              dummyExpr = mkCoreApps (Var (psUnsafeMkMergeMorph state))
+                            (map Type tys ++ [mkListExpr intTy []])
+              dummyDict = evDataConApp (classDataCon cls) tys [dummyExpr]
+          errCt <- mkTypeErrorCt state loc diag
+          pure $ Left ((EvExpr dummyDict, ct), [errCt])
+
+  | otherwise = pure $ Right ()
+  where
+    parseMergeOp :: Type -> Maybe MergeOp
+    parseMergeOp ty = case splitTyConApp_maybe ty of
+      Just (tc, []) -> case occNameString (getOccName tc) of
+        "OpOverrideR" -> Just OpOverrideR
+        "OpOverrideL" -> Just OpOverrideL
+        "OpDisjoint"  -> Just OpDisjoint
+        "OpReplace"   -> Just OpReplace
+        "OpRestrict"  -> Just OpRestrict
+        "OpDiff"      -> Just OpDiff
+        "OpSymDiff"   -> Just OpSymDiff
+        _             -> Nothing
+      _ -> Nothing
 
 -- Solves the 'SubSum sub super' constraint by synthesizing literal injection and narrowing arrays.
 --

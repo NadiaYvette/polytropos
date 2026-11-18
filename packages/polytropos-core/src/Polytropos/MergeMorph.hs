@@ -23,6 +23,7 @@ module Polytropos.MergeMorph
   , MergeMorph(..)
   , KnownMergeMorph(..)
   , executeMergeMorph
+  , unsafeMkMergeMorph
   , unsafeMkMergeMorph#
   , (//>)
   , (<//)
@@ -35,7 +36,7 @@ module Polytropos.MergeMorph
 
 import Control.Monad.ST (runST)
 import Data.Bits (complement)
-import Data.Primitive.PrimArray (PrimArray(..), indexPrimArray, sizeofPrimArray)
+import Data.Primitive.PrimArray (PrimArray(..), indexPrimArray, primArrayFromList, sizeofPrimArray)
 import Data.Primitive.SmallArray (indexSmallArray, newSmallArray, runSmallArray, writeSmallArray)
 import GHC.Exts (Addr#, Int#, copyAddrToByteArray#, newByteArray#, unsafeFreezeByteArray#)
 import GHC.ST (ST(..))
@@ -84,6 +85,11 @@ executeMergeMorph (MergeMorph plan) (RowRep (Rep _ arr1)) (RowRep (Rep _ arr2)) 
                  writeSmallArray out i val
                  go (i + 1)
        go 0
+
+-- | Core synthesis target: materializes a 'MergeMorph' from an index list.
+{-# NOINLINE unsafeMkMergeMorph #-}
+unsafeMkMergeMorph :: forall (op :: MergeOp) (r1 :: Row) (r2 :: Row) (rOut :: Row). [Int] -> MergeMorph op r1 r2 rOut
+unsafeMkMergeMorph idxs = MergeMorph (primArrayFromList idxs)
 
 -- | Core synthesis target: materializes a 'MergeMorph' from a static .rodata 'Addr#'.
 {-# INLINE unsafeMkMergeMorph# #-}
