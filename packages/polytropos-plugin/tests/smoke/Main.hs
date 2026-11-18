@@ -38,6 +38,8 @@ import Test.Tasty.HUnit (testCase, (@?=), assertBool)
 
 import Polytropos.Core
 import Polytropos
+import Polytropos.Plugin.MergeMorph
+import qualified Data.ByteString as BS
 
 -- | R2: a two-field product: a :: Int, b :: Bool.
 type R2 = '[ "a" := Int, "b" := Bool ]
@@ -592,6 +594,11 @@ main = defaultMain $ testGroup "plugin RowEq/RowShow smoke"
             , "Constructor 'missing' is not a member of variant:"
             , "< StateEff | LogEff >"
             ]
+      ]
+  , testGroup "Plugin MergeMorph Skew Boolean Row Solver"
+      [ testCase "evalMergeOp OpOverrideR encodes right-biased union" $ do
+          let bytes = encodeGatherBytes [0, -1]
+          BS.length bytes @?= 16
       ]
   ]
 

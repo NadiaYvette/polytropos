@@ -46,6 +46,7 @@ library
   import:           warnings
   exposed-modules:  Polytropos.Plugin
                   , Polytropos.Plugin.Source
+                  , Polytropos.Plugin.MergeMorph
   other-modules:    Polytropos.Plugin.Compat
   hs-source-dirs:   src
   default-language: GHC2021
@@ -53,6 +54,9 @@ library
       base       >= 4.18 && < 4.24
     , ghc         >= 9.6  && < 10.2
     , ghc-tcplugin-api >= 0.1 && < 0.21
+    , bytestring >= 0.11 && < 0.13
+    , containers >= 0.6 && < 0.9
+    , polytropos-core
 
 test-suite polytropos-plugin-smoke
   import:           warnings
@@ -70,6 +74,7 @@ test-suite polytropos-plugin-smoke
     , polytropos-plugin
     , process
     , directory
+    , bytestring
 
   ghc-options:
       -fplugin=Polytropos.Plugin
