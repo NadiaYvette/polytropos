@@ -3,6 +3,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
 
 #if __GLASGOW_HASKELL__ >= 914
@@ -30,6 +31,10 @@
 --    and @data Status = Active | Inactive String deriving OpenVariant@.
 module Polytropos.Plugin.Source
   ( sourcePlugin
+#if __GLASGOW_HASKELL__ >= 1001
+  , sourceDeclsPlugin
+  , sourceStmtPlugin
+#endif
   ) where
 
 import Prelude
@@ -62,7 +67,6 @@ import GHC.Plugins
   , rdrNameOcc
   , occNameString
   , occNameFS
-  , moduleNameString
   )
 
 import GHC.Hs.Extension
@@ -101,6 +105,9 @@ import GHC.Hs
 import Language.Haskell.Syntax.Basic
   ( Boxity(..)
   )
+#if __GLASGOW_HASKELL__ >= 1001
+import Language.Haskell.Syntax.Expr (GhciLStmt)
+#endif
 
 import GHC.Driver.Plugins
   ( ParsedResult(..)
@@ -111,6 +118,8 @@ import Polytropos.Plugin.Compat
   , matchRecordUpd
   , extractRecUpdField
   , pattern PrefixConPat
+  , pattern RecConPat
+  , compatImportModName
   , stripHsPar
   , mkHsPar
   , polyLabel
@@ -290,7 +299,9 @@ extractAndCleanDeclarations decls =
   in (nub recs, nub vars, cleanedDecls)
   where
     step (L loc (TyClD x decl)) (rAcc, vAcc, dAcc)
-      | DataDecl ext (L _ name) tyvars fixity (HsDataDefn defnExt ctxt mtype mkind cons derivs) <- decl
+      | DataDecl{ tcdLName = L _ name
+                , tcdDataDefn = defn@HsDataDefn{ dd_cons = cons, dd_derivs = derivs }
+                } <- decl
       , let hasOpenRec = any isDerivingOpenRecord derivs
       , let hasOpenVar = any isDerivingOpenVariant derivs
       = let typeNameStr = occNameString (rdrNameOcc name)
@@ -298,8 +309,8 @@ extractAndCleanDeclarations decls =
             vCons = if hasOpenVar then extractConNames cons else []
             vAcc' = if hasOpenVar then vCons ++ vAcc else vAcc
             cleanedDerivs = filter (\c -> not (isDerivingOpenRecord c || isDerivingOpenVariant c)) derivs
-            defn' = HsDataDefn defnExt ctxt mtype mkind cons cleanedDerivs
-            decl' = DataDecl ext (noLocA name) tyvars fixity defn'
+            defn' = defn { dd_derivs = cleanedDerivs }
+            decl' = decl { tcdDataDefn = defn' }
         in (rAcc', vAcc', L loc (TyClD x decl') : dAcc)
     step d (rAcc, vAcc, dAcc) =
       (rAcc, vAcc, d : dAcc)
@@ -496,26 +507,25 @@ extractRecField (L _ (HsFieldBind _ (L _ (FieldOcc _ (L _ lbl))) arg pun)) =
 transformPat :: [String] -> [String] -> Pat GhcPs -> Pat GhcPs
 transformPat knownRecs knownVars pat = case pat of
   -- 1. Record Pattern: REC { x, y } or Person { x, y }
-  ConPat _ext (L _ nm) (RecCon HsRecFields{ rec_flds = flds })
+  ConPat _ext (L _ nm) (RecConPat HsRecFields{ rec_flds = flds })
     | let conStr = occNameString (rdrNameOcc nm)
     , conStr == "REC" || conStr `elem` knownRecs
     -> desugarRecordPat flds
 
   -- 2. Variant Pattern: VAR { Ok = p } or VARIANT { Err = p }
-  ConPat _ext (L _ nm) (RecCon HsRecFields{ rec_flds = flds })
+  ConPat _ext (L _ nm) (RecConPat HsRecFields{ rec_flds = flds })
     | let conStr = occNameString (rdrNameOcc nm)
     , conStr == "VAR" || conStr == "VARIANT"
     -> desugarVariantPat flds
 
   -- 3. Open Variant Constructor Pattern (Lowering nominal constructor patterns)
   -- 3a. Record syntax payload: Success { val }
-  ConPat _ext (L _ nm) (RecCon HsRecFields{ rec_flds = flds })
+  ConPat _ext (L _ nm) (RecConPat HsRecFields{ rec_flds = flds })
     | let conStr = occNameString (rdrNameOcc nm)
     , conStr `elem` knownVars
     -> let viewExpr = mkHsApp (polyVar "projectVariant") (polyLabel (fsLit conStr))
-           justCon  = noLocA (mkRdrUnqual (mkDataOcc "Just"))
            innerPat = noLocA (desugarRecordPat flds)
-           justPat  = noLocA $ ConPat noAnn justCon (PrefixConPat [innerPat])
+           justPat  = mkJustConPat innerPat
        in ViewPat noAnn viewExpr justPat
 
   -- 3b. 1-arg prefix pattern: Success r
@@ -523,8 +533,7 @@ transformPat knownRecs knownVars pat = case pat of
     | let conStr = occNameString (rdrNameOcc nm)
     , conStr `elem` knownVars
     -> let viewExpr = mkHsApp (polyVar "projectVariant") (polyLabel (fsLit conStr))
-           justCon  = noLocA (mkRdrUnqual (mkDataOcc "Just"))
-           justPat  = noLocA $ ConPat noAnn justCon (PrefixConPat [argPat])
+           justPat  = mkJustConPat argPat
        in ViewPat noAnn viewExpr justPat
 
   -- 3c. Nullary prefix pattern: Loading
@@ -532,9 +541,8 @@ transformPat knownRecs knownVars pat = case pat of
     | let conStr = occNameString (rdrNameOcc nm)
     , conStr `elem` knownVars
     -> let viewExpr = mkHsApp (polyVar "projectVariant") (polyLabel (fsLit conStr))
-           justCon  = noLocA (mkRdrUnqual (mkDataOcc "Just"))
            wildPat  = noLocA (WildPat noExtField)
-           justPat  = noLocA $ ConPat noAnn justCon (PrefixConPat [wildPat])
+           justPat  = mkJustConPat wildPat
        in ViewPat noAnn viewExpr justPat
 
   other -> other
@@ -576,8 +584,7 @@ desugarVariantPat [] =
 desugarVariantPat (fld : _) =
   let (lbl, p)   = extractRecPatField fld
       viewExpr   = mkHsApp (polyVar "projectVariant") (polyLabel lbl)
-      justCon    = noLocA (mkRdrUnqual (mkDataOcc "Just"))
-      justPat    = noLocA $ ConPat noAnn justCon (PrefixConPat [p])
+      justPat    = mkJustConPat p
   in ViewPat noAnn viewExpr justPat
 
 -- | Extracts the field label and sub-pattern from a record pattern field node.
@@ -592,6 +599,15 @@ extractRecPatField (L _ (HsFieldBind _ (L _ (FieldOcc _ (L _ lbl))) p pun)) =
   Helper Functions
 -------------------------------------------------------------------------------}
 
+mkJustConPat :: LPat GhcPs -> LPat GhcPs
+mkJustConPat p =
+  let justCon = noLocA (mkRdrUnqual (mkDataOcc "Just"))
+#if __GLASGOW_HASKELL__ >= 1001
+  in noLocA $ ConPat noExtField justCon (PrefixConPat [p])
+#else
+  in noLocA $ ConPat noAnn justCon (PrefixConPat [p])
+#endif
+
 -- | Synthesizes a qualified RdrName expression: @Polytropos.<identifier>@.
 -- Ensures that transformed expressions reference canonical Polytropos symbols
 -- regardless of userland import shadowing.
@@ -602,10 +618,21 @@ polyVar occ = noLocA (HsVar noExtField (noLocA (mkRdrQual (mkModuleName "Polytro
 -- Injected automatically during 'transformParsedModule' so generated combinators resolve cleanly.
 ensurePolytroposImport :: [LImportDecl GhcPs] -> [LImportDecl GhcPs]
 ensurePolytroposImport imps =
-  if any isPolytroposImport imps
+  if any (\imp -> compatImportModName imp == "Polytropos") imps
     then imps
     else mkPolytroposImportDecl : imps
-  where
-    isPolytroposImport (L _ ImportDecl{ ideclName = L _ modNm }) =
-      moduleNameString modNm == "Polytropos"
-    isPolytroposImport _ = False
+
+#if __GLASGOW_HASKELL__ >= 1001
+sourceStmtPlugin :: [CommandLineOption] -> GhciLStmt GhcPs -> Hsc (GhciLStmt GhcPs)
+sourceStmtPlugin _opts stmt =
+  let stmt1 = everywhere (mkT (transformExpr [] [])) stmt
+      stmt2 = everywhere (mkT (transformPat [] [])) stmt1
+  in pure stmt2
+
+sourceDeclsPlugin :: [CommandLineOption] -> [LHsDecl GhcPs] -> Hsc [LHsDecl GhcPs]
+sourceDeclsPlugin _opts decls0 =
+  let (knownRecs, knownVars, decls1) = extractAndCleanDeclarations decls0
+      decls2 = everywhere (mkT (transformExpr knownRecs knownVars)) decls1
+      decls3 = everywhere (mkT (transformPat knownRecs knownVars)) decls2
+  in pure decls3
+#endif

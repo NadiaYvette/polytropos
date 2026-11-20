@@ -131,7 +131,6 @@ import GHC.Core.Make
   , mkCoreConApps
   , mkCoreLams
   , mkCharExpr
-  , mkStringExpr
   , mkIfThenElse
   , mkListExpr
   )
@@ -143,6 +142,7 @@ import GHC.Plugins
   , CoreExpr
   , Expr(..)
   , Type
+  , mkDataOcc
   , mkTcOcc
   , nameOccName
   , mkTyConTy
@@ -159,6 +159,7 @@ import GHC.Plugins
   , wordTyCon
   , Var(..)
   , varType
+  , charTy
   , intTy
   , stringTy
   , mkVarOcc
@@ -202,7 +203,11 @@ import GHC.Core.TyCo.Compare
   ( eqType
   )
 
+#if __GLASGOW_HASKELL__ >= 1001
+import GHC.Builtin.WiredIn.Types
+#else
 import GHC.Builtin.Types
+#endif
   ( trueDataCon
   , falseDataCon
   , maybeTyCon
@@ -222,6 +227,12 @@ import Language.Haskell.Syntax.Basic
   ( Boxity(..)
   )
 
+#if __GLASGOW_HASKELL__ >= 1001
+import GHC.Builtin.Modules
+  ( gHC_CLASSES
+  , gHC_INTERNAL_TYPEERROR
+  )
+#else
 import GHC.Builtin.Names
   ( gHC_CLASSES
   , eqClassName
@@ -230,6 +241,7 @@ import GHC.Builtin.Names
   , typeErrorTextDataConName
   , typeErrorVAppendDataConName
   )
+#endif
 
 import Polytropos.Plugin.Compat
   ( modBase
@@ -285,6 +297,10 @@ import GHC.TcPlugin.API.Internal
 
 import Polytropos.Plugin.Source
   ( sourcePlugin
+#if __GLASGOW_HASKELL__ >= 1001
+  , sourceStmtPlugin
+  , sourceDeclsPlugin
+#endif
   )
 
 import Polytropos.MergeMorph
@@ -637,6 +653,10 @@ plugin :: Plugin
 plugin = defaultPlugin
   { tcPlugin           = const $ Just $ mkTcPlugin polytroposPlugin
   , parsedResultAction = \opts _modSummary -> sourcePlugin opts
+#if __GLASGOW_HASKELL__ >= 1001
+  , parsedStmtAction   = sourceStmtPlugin
+  , parsedDeclsAction  = sourceDeclsPlugin
+#endif
   }
 
 polytroposPlugin :: TcPlugin
@@ -713,10 +733,15 @@ polytroposInit = do
   psShowChar      <- lookupIdInModule modShow "showChar"
   psFShowInt      <- lookupIdInModule modShow "$fShowInt"
   psFShowBool     <- lookupIdInModule modShow "$fShowBool"
-
+#if __GLASGOW_HASKELL__ >= 1001
+  eqName        <- lookupOrig gHC_CLASSES            (mkTcOcc   "Eq")
+  showName      <- lookupOrig modShow                (mkTcOcc   "Show")
+  psEqCls       <- tcLookupClass eqName
+  psShowCls     <- tcLookupClass showName
+#else
   psEqCls   <- tcLookupClass eqClassName
   psShowCls <- tcLookupClass showClassName
-
+#endif
   psComp <- lookupIdInModule modBase "."
 
   rowFlavourName <- lookupOrig coreMod (mkTcOcc "RowFlavour")
@@ -739,11 +764,18 @@ polytroposInit = do
 
   fieldNamesOcc <- lookupOrig coreMod (mkTcOcc "FieldNames")
   psFieldNamesTyCon <- tcLookupTyCon fieldNamesOcc
-
+#if __GLASGOW_HASKELL__ >= 1001
+  teFamName        <- lookupOrig gHC_INTERNAL_TYPEERROR (mkTcOcc   "TypeError")
+  textDcName       <- lookupOrig gHC_INTERNAL_TYPEERROR (mkDataOcc "Text")
+  vcatDcName       <- lookupOrig gHC_INTERNAL_TYPEERROR (mkDataOcc ":$$:")
+  psTypeErrorTyCon <- tcLookupTyCon   teFamName
+  textDataCon      <- tcLookupDataCon textDcName
+  vcatDataCon      <- tcLookupDataCon vcatDcName
+#else
   psTypeErrorTyCon <- tcLookupTyCon errorMessageTypeErrorFamName
   textDataCon      <- tcLookupDataCon typeErrorTextDataConName
   vcatDataCon      <- tcLookupDataCon typeErrorVAppendDataConName
-
+#endif
   let psPromotedText = promoteDataCon textDataCon
       psPromotedVcat = promoteDataCon vcatDataCon
 
@@ -1502,8 +1534,8 @@ solveRowShow state ct cls tys = do
           -> name
         _ -> "R" ++ show (length fields)
 
-  prefixExpr <- unsafeLiftTcM $ mkStringExpr (rowName ++ " ")
-  let prefixShowS = mkCoreApps (Var (psShowString state)) [prefixExpr]
+  let prefixExpr  = mkCoreStringExpr (rowName ++ " ")
+      prefixShowS = mkCoreApps (Var (psShowString state)) [prefixExpr]
       spaceShowS  = mkCoreApps (Var (psShowChar state)) [mkCharExpr ' ']
 
   -- Spawn wanted Show constraints for every field type in the row
@@ -1732,8 +1764,8 @@ solveRowShowSum state ct cls tys = do
 
       showConFields conNameFS fWanteds = do
         let conName = unpackFS conNameFS
-        prefixExpr <- unsafeLiftTcM $ mkStringExpr (conName ++ " ")
-        let prefixShowS = mkCoreApps (Var (psShowString state)) [prefixExpr]
+            prefixExpr = mkCoreStringExpr (conName ++ " ")
+            prefixShowS = mkCoreApps (Var (psShowString state)) [prefixExpr]
             fieldShows = [ showField fi fieldTy ev | (fi, fieldTy, ev) <- fWanteds ]
             showParts = case fieldShows of
               [] -> [prefixShowS]
@@ -1742,7 +1774,7 @@ solveRowShowSum state ct cls tys = do
 
   -- Synthesize recursive branch dispatcher: if tag == i then showConFields else buildTree (rest)
   let buildTree _tagExpr [] = do
-        errorPrefix <- unsafeLiftTcM $ mkStringExpr "??? "
+        let errorPrefix = mkCoreStringExpr "??? "
         pure $ mkCoreApps (Var (psShowString state)) [errorPrefix]
       buildTree tagExpr ((i, conNameFS, fWanteds) : rest) = do
         let iLit = mkWordExpr (fromIntegral i)
@@ -2705,3 +2737,6 @@ mkIntExpr i = mkCoreConApps intDataCon [Lit (LitNumber LitNumInt (toInteger i))]
 -- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
 mkWordExpr :: Word -> CoreExpr
 mkWordExpr w = mkCoreConApps wordDataCon [Lit (LitNumber LitNumWord (toInteger w))]
+
+mkCoreStringExpr :: String -> CoreExpr
+mkCoreStringExpr s = mkListExpr charTy (map mkCharExpr s)
