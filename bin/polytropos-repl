@@ -53,12 +53,17 @@ run_repl() {
         --semaphore \
         --build-depends=polytropos-core,polytropos-plugin \
         --repl-options="-ignore-dot-ghci -fplugin=Polytropos.Plugin -ghci-script $INIT_SCRIPT" \
-        "$TARGET_COMPONENT" \
+        $TARGET_COMPONENT \
         "$@"
 }
 
 if [ "$SMOKE" -eq 1 ]; then
     run_repl "$@" <<'EOF'
+:set -XDataKinds -XOverloadedLabels -XOverloadedRecordDot -XTypeApplications -XTypeOperators -XViewPatterns
+:set -fobject-code
+import Polytropos
+:set prompt "polytropos> "
+:set prompt-cont "polytropos| "
 r = REC { x = 1 :: Int, y = True }
 r.x
 REC_UPD r { x = 42 }
