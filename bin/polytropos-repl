@@ -23,7 +23,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 GHC_VERSION="${GHC_VERSION:-10.1.20261105}"
 GHC_BIN="${GHC_BIN:-ghc-$GHC_VERSION}"
 JOBS="${JOBS:-$(nproc)}"
-TARGET_COMPONENT="${TARGET_COMPONENT:-polytropos-optics}"
+TARGET_COMPONENT="${TARGET_COMPONENT:-polytropos-generics polytropos-optics polytropos-profunctors}"
 
 cd "$REPO_ROOT"
 
@@ -48,6 +48,7 @@ run_repl() {
     cabal --with-compiler="$GHC_BIN" v2-repl \
         --allow-newer \
         --enable-shared \
+        --enable-multi-repl \
         --jobs="$JOBS" \
         --semaphore \
         --build-depends=polytropos-core,polytropos-plugin \
@@ -62,8 +63,8 @@ r = REC { x = 1 :: Int, y = True }
 r.x
 REC_UPD r { x = 42 }
 (\(REC { x = a, y = b }) -> (a + 1, not b)) r
-v = VAR { ok = 200 :: Int } :: Variant '["ok" ':= Int, "err" ':= String]
-case v of { VAR { ok = code } -> code; _ -> 0 }
+v = VAR { ok = REC { val = 200 :: Int } } :: Variant '["ok" ':= Int, "err" ':= String]
+case v of { VAR { ok = REC { val = code } } -> code; _ -> 0 }
 data Person = Person { name :: String, age :: Int } deriving OpenRecord
 :quit
 EOF

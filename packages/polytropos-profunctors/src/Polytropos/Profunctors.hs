@@ -108,6 +108,7 @@ import Unsafe.Coerce (unsafeCoerce)
 import Polytropos
   ( Record
   , Variant
+  , ConstructorPayload
   , Field(..)
   , injectVariant
   )
@@ -191,7 +192,7 @@ fieldLens _ = lens getter setter
 
 -- | A typed profunctor prism focusing on an open 'Variant' constructor specified by 't:Field',
 -- resolved at compile time via 'ConstructorIndex'.
-ctorPrism :: forall c s fs. ConstructorIndex c s => Field c -> Prism' (Variant s) (Record fs)
+ctorPrism :: forall c s fs. (ConstructorIndex c s, fs ~ ConstructorPayload c s) => Field c -> Prism' (Variant s) (Record fs)
 ctorPrism f = prism (injectVariant f) project
   where
     cIdx = constructorIndex @_ @c @s
