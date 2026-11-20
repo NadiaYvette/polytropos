@@ -68,7 +68,7 @@ r = REC { x = 1 :: Int, y = True }
 r.x
 REC_UPD r { x = 42 }
 (\(REC { x = a, y = b }) -> (a + 1, not b)) r
-v = VAR { ok = REC { val = 200 :: Int } } :: Variant '["ok" ':= Int, "err" ':= String]
+v = VAR { ok = REC { val = 200 :: Int } } :: Variant '["ok" ':= '["val" ':= Int], "err" ':= '["msg" ':= String]]
 case v of { VAR { ok = REC { val = code } } -> code; _ -> 0 }
 data Person = Person { name :: String, age :: Int } deriving OpenRecord
 :quit

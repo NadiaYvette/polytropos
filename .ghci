@@ -1,5 +1,3 @@
-:set -package polytropos-core
-:set -package polytropos-plugin
 :set -fplugin=Polytropos.Plugin
 :set -XDataKinds
 :set -XOverloadedLabels
