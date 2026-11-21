@@ -66,6 +66,13 @@ import Data.List.NonEmpty
 import Data.Maybe (fromMaybe)
 import Data.Monoid (Any(..))
 
+#if __GLASGOW_HASKELL__ >= 1001
+import Control.Arrow (Arrow(..))
+import Control.Monad.IO.Class (liftIO)
+import Data.IORef (IORef, newIORef, readIORef, atomicModifyIORef')
+import System.IO.Unsafe (unsafePerformIO)
+#endif
+
 import GHC.Plugins
   ( CommandLineOption
   , FastString
@@ -639,16 +646,24 @@ ensurePolytroposImport imps =
     else mkPolytroposImportDecl : imps
 
 #if __GLASGOW_HASKELL__ >= 1001
+{-# NOINLINE interactiveOpenDeclsRef #-}
+interactiveOpenDeclsRef :: IORef ([String], [String])
+interactiveOpenDeclsRef = unsafePerformIO (newIORef ([], []))
+
 sourceStmtPlugin :: [CommandLineOption] -> GhciLStmt GhcPs -> Hsc (GhciLStmt GhcPs)
 sourceStmtPlugin _opts stmt0 = do
-  stmt1 <- everywhereM (mkM $ pure . snd . transformExpr [] []) stmt0
-  stmt2 <- everywhereM (mkM $ pure . snd . transformPat  [] []) stmt1
+  (knownRecs, knownVars) <- liftIO (readIORef interactiveOpenDeclsRef)
+  let (_, stmt1) = everywhereM (mkM $ transformExpr knownRecs knownVars) stmt0
+      (_, stmt2) = everywhereM (mkM $ transformPat  knownRecs knownVars) stmt1
   pure stmt2
 
 sourceDeclsPlugin :: [CommandLineOption] -> [LHsDecl GhcPs] -> Hsc [LHsDecl GhcPs]
 sourceDeclsPlugin _opts decls0 = do
-  let (knownRecs, knownVars, decls1) = extractAndCleanDeclarations decls0
-  decls2 <- everywhereM (mkM $ pure . snd . transformExpr knownRecs knownVars) decls1
-  decls3 <- everywhereM (mkM $ pure . snd . transformPat  knownRecs knownVars) decls2
+  let (newRecs, newVars, decls1) = extractAndCleanDeclarations decls0
+  (knownRecs, knownVars) <- liftIO do
+    atomicModifyIORef' interactiveOpenDeclsRef
+                       \(nub . (newRecs ++) *** nub . (newVars ++) -> rv) -> (rv, rv)
+  let (_, decls2) = everywhereM (mkM $ transformExpr knownRecs knownVars) decls1
+      (_, decls3) = everywhereM (mkM $ transformPat  knownRecs knownVars) decls2
   pure decls3
 #endif
