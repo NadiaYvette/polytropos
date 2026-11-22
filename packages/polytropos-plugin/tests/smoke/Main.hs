@@ -612,6 +612,76 @@ main = defaultMain $ testGroup "plugin RowEq/RowShow smoke"
           rMerged.name @?= "Nadia"
           rMerged.age @?= (50 :: Int)
       ]
+  , testGroup "Soundness, Deferral, and Source Plugin Regressions"
+      [ testCase "unannotated (<+>), (|<), and (//~) evaluation + Show + Eq on unsorted rows" $ do
+          let r1 = REC { z = 10 :: Int, a = True }
+              r2 = REC { b = "hi" :: String, y = (42 :: Int) }
+              rMerged = r1 <+> r2
+          show rMerged @?= "R4 True \"hi\" 42 10"
+          (rMerged == rMerged) @?= True
+
+          let rRestrictKey = REC { z = () :: (), unused = 100 :: Int }
+              rRestricted = rMerged |< rRestrictKey
+          show rRestricted @?= "R1 10"
+          (rRestricted == rRestricted) @?= True
+          rRestricted.z @?= Identity (10 :: Int)
+
+          let rReplVal = REC { z = 99 :: Int }
+              rReplaced = rMerged //~ rReplVal
+          show rReplaced @?= "R4 True \"hi\" 42 99"
+          (rReplaced == rReplaced) @?= True
+          rReplaced.z @?= Identity (99 :: Int)
+          rReplaced.a @?= Identity True
+      , testCase "Show and Eq on Variant values under -dcore-lint" $ do
+          let v1 :: Variant '[ "ok" := '[ "val" := Int ], "err" := '[ "msg" := String ] ]
+              v1 = VAR { ok = REC { val = 200 :: Int } }
+              v1_same = VAR { ok = REC { val = 200 :: Int } }
+              v1_diff = VAR { ok = REC { val = 404 :: Int } }
+              v2 :: Variant '[ "ok" := '[ "val" := Int ], "err" := '[ "msg" := String ] ]
+              v2 = VAR { err = REC { msg = "oops" :: String } }
+          (v1 == v1_same) @?= True
+          (v1 == v1_diff) @?= False
+          (v1 == v2) @?= False
+          show v1 @?= "ok 200"
+          show v2 @?= "err \"oops\""
+      , testCase "ppr round-trip of multi-field REC and REC_UPD" $ do
+          let r1 = REC { a = 1 :: Int, b = True, c = "hello" :: String }
+              r2 = REC_UPD r1 { a = 42 :: Int, b = False }
+              r3 = REC_UPD r2 { b = True, c = "world" :: String }
+          r1.a @?= Identity (1 :: Int)
+          r1.b @?= Identity True
+          r1.c @?= Identity ("hello" :: String)
+          r2.a @?= Identity (42 :: Int)
+          r2.b @?= Identity False
+          r2.c @?= Identity ("hello" :: String)
+          r3.a @?= Identity (42 :: Int)
+          r3.b @?= Identity True
+          r3.c @?= Identity ("world" :: String)
+          show r1 @?= "R3 1 True \"hello\""
+          show r2 @?= "R3 42 False \"hello\""
+          show r3 @?= "R3 42 True \"world\""
+      , testCase "injectVariant payload mismatch rejects wrong field in payload record" $
+          checkGhcDiag
+            (unlines
+              [ "{-# LANGUAGE DataKinds, OverloadedLabels, TypeOperators #-}"
+              , "module Test where"
+              , "import Polytropos"
+              , "type S = '[ \"ok\" := '[ \"val\" := Int ] ]"
+              , "v :: Variant S"
+              , "v = injectVariant #ok (REC { wrong = \"hi\" })"
+              ])
+            [ "Couldn't match type"
+            ]
+      , testCase "module compiled with -fplugin=Polytropos.Plugin -Werror=unused-imports with no REC/VAR" $
+          checkGhcSuccess
+            (unlines
+              [ "{-# LANGUAGE NoImplicitPrelude #-}"
+              , "module CleanTest where"
+              , "import Prelude (Int, (+))"
+              , "addOne :: Int -> Int"
+              , "addOne x = x + 1"
+              ])
+      ]
   ]
 
 checkGhcDiag :: String -> [String] -> IO ()
@@ -627,6 +697,8 @@ checkGhcDiag snippet expectedSubstrings = do
      , tmpFile
      , "-package"
      , "polytropos-plugin"
+     , "-package"
+     , "polytropos-core"
      , "-fplugin=Polytropos.Plugin"
      ] ++ extraFlags)
     ""
@@ -636,6 +708,31 @@ checkGhcDiag snippet expectedSubstrings = do
     assertBool
       ("Expected diagnostic to contain: " ++ show expected ++ "\nActual stderr:\n" ++ stderr)
       (expected `isInfixOf` stderr)
+
+checkGhcSuccess :: String -> IO ()
+checkGhcSuccess snippet = do
+  tmpDir <- getTemporaryDirectory
+  (tmpFile, h) <- openTempFile tmpDir "PolytroposSuccessTest.hs"
+  hPutStr h snippet
+  hClose h
+  extraFlags <- maybe [] words <$> lookupEnv "POLYTROPOS_TEST_GHC_FLAGS"
+  (exitCode, stdout, stderr) <- readProcessWithExitCode
+    "ghc"
+    ([ "-fno-code"
+     , tmpFile
+     , "-package"
+     , "polytropos-plugin"
+     , "-package"
+     , "polytropos-core"
+     , "-fplugin=Polytropos.Plugin"
+     , "-Wall"
+     , "-Werror=unused-imports"
+     ] ++ extraFlags)
+    ""
+  removeFile tmpFile
+  assertBool
+    ("Expected clean compilation, but failed with:\nStdout:\n" ++ stdout ++ "\nStderr:\n" ++ stderr)
+    (exitCode == ExitSuccess)
 
 -- | Use a supplied array of type-erased Show dictionaries to show every slot.
 showAllFields :: DictAllFields Show
