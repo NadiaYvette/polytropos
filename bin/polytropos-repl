@@ -1,32 +1,59 @@
 #!/bin/sh
 # polytropos-repl — Frictionless GHCi REPL preconfigured for Polytropos.Plugin
 #
-# Resolves the common GHCi traps:
-# 1. Preloads -package polytropos-core and -package polytropos-plugin
-# 2. Enables -fplugin=Polytropos.Plugin and -fobject-code
-# 3. Enables -XDataKinds, -XOverloadedLabels, -XOverloadedRecordDot, -XTypeApplications
-# 4. Imports Polytropos into the interactive scope
+# Preconfigures GHCi interactive environment via .ghci:
+# - Preloads -package polytropos-core and -package polytropos-plugin
+# - Enables -fplugin=Polytropos.Plugin and -fobject-code
+# - Enables language extensions and imports Polytropos into interactive scope
+#
+# Usage:
+#   ./bin/polytropos-repl                 # Interactive REPL
+#   ./bin/polytropos-repl --smoke-test    # Non-interactive verification
+#   GHC_VERSION=9.14.1 ./bin/polytropos-repl
 
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+GHC_VERSION="${GHC_VERSION:-10.1.20261105}"
+GHC_BIN="${GHC_BIN:-ghc-$GHC_VERSION}"
+JOBS="${JOBS:-$(nproc)}"
+TARGET_COMPONENT="${TARGET_COMPONENT:-polytropos-generics polytropos-optics polytropos-profunctors}"
 
 cd "$REPO_ROOT"
 
-if [ ! -f "$REPO_ROOT/.ghci" ]; then
-    echo "Warning: .ghci not found at $REPO_ROOT/.ghci, using inline flags" >&2
-    exec cabal exec -- ghci \
-        -package polytropos-core \
-        -package polytropos-plugin \
-        -fplugin=Polytropos.Plugin \
-        -XDataKinds \
-        -XOverloadedLabels \
-        -XOverloadedRecordDot \
-        -XTypeApplications \
-        -XTypeOperators \
-        -fobject-code \
-        "$@"
+SMOKE=0
+if [ "${1:-}" = "--smoke-test" ]; then
+    SMOKE=1
+    shift
 fi
 
-exec cabal exec -- ghci -ghci-script "$REPO_ROOT/.ghci" "$@"
+run_repl() {
+    cabal --with-compiler="$GHC_BIN" v2-repl \
+        --allow-newer \
+        --enable-shared \
+        --enable-multi-repl \
+        --jobs="$JOBS" \
+        --semaphore \
+        --build-depends=polytropos-core,polytropos-plugin \
+        --repl-options="-ghci-script $REPO_ROOT/.ghci" \
+        $TARGET_COMPONENT \
+        "$@"
+}
+
+if [ "$SMOKE" -eq 1 ]; then
+    run_repl "$@" <<'EOF'
+r = REC { x = 1 :: Int, y = True }
+r.x
+REC_UPD r { x = 42 }
+(\(REC { x = a, y = b }) -> (a + 1, not b)) r
+v = VAR { ok = REC { val = 200 :: Int } } :: Variant '["ok" ':= '["val" ':= Int], "err" ':= '["msg" ':= String]]
+case v of { VAR { ok = REC { val = code } } -> code; _ -> 0 }
+data Person = Person { name :: String, age :: Int } deriving OpenRecord
+p = Person { name = "Alice", age = 30 :: Int }
+p.name
+:quit
+EOF
+else
+    run_repl "$@"
+fi

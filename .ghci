@@ -1,11 +1,27 @@
-:set -package polytropos-core
-:set -package polytropos-plugin
 :set -fplugin=Polytropos.Plugin
-:set -XDataKinds
+:set -XGHC2024
+:set -XAllowAmbiguousTypes
+:set -XApplicativeDo
+:set -XArrows
+:set -XBlockArguments
+:set -XDeriveAnyClass
+:set -XDerivingVia
+:set -XLinearTypes
+:set -XModifiers
+:set -XMultiWayIf
+:set -XOrPatterns
 :set -XOverloadedLabels
 :set -XOverloadedRecordDot
-:set -XTypeApplications
-:set -XTypeOperators
+:set -XPackageImports
+:set -XPartialTypeSignatures
+:set -XQuasiQuotes
+:set -XRecordWildCards
+:set -XRequiredTypeArguments
+:set -XTemplateHaskellQuotes
+:set -XTypeFamilies
+:set -XTypeFamilyDependencies
+:set -XViewPatterns
+:set -XUnicodeSyntax
 :set -fobject-code
 :set prompt "\ESC[1;35mpolytropos\ESC[0m> "
 import Polytropos

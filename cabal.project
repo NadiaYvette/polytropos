@@ -9,7 +9,7 @@
 packages: packages/*/
           examples/*/
 
-with-compiler: ghc-9.14.1
+-- with-compiler: ghc-9.14.1
 
 write-ghc-environment-files: always
 -- cborg 0.2.10.0 and serialise 0.2.6.1 declare base < 4.22, but GHC 9.14
