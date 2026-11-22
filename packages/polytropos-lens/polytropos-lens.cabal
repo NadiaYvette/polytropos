@@ -1,6 +1,6 @@
 cabal-version: 3.0
 name: polytropos-lens
-version: 0.1.0.3
+version: 0.1.0.4
 synopsis: Comprehensive lens-suite integration for polytropos open records and variants
 description:
   Comprehensive optics integration between <https://hackage.haskell.org/package/polytropos polytropos> open records and variants
@@ -42,8 +42,8 @@ library
     base >= 4.14 && < 5,
     lens >= 5.2 && < 5.4,
     profunctors >= 5.6 && < 5.7,
-    polytropos-core >= 0.1 && < 0.2,
-    polytropos-plugin >= 0.1 && < 0.2
+    polytropos-core >= 0.1.2.0 && < 0.2,
+    polytropos-plugin >= 0.1.2.0 && < 0.2
 
 test-suite polytropos-lens-test
   type: exitcode-stdio-1.0
@@ -54,9 +54,9 @@ test-suite polytropos-lens-test
   build-depends:
     base,
     lens,
-    polytropos-core,
+    polytropos-core >= 0.1.2.0 && < 0.2,
     polytropos-lens,
-    polytropos-plugin,
+    polytropos-plugin >= 0.1.2.0 && < 0.2,
     profunctors,
     tasty,
     tasty-hunit

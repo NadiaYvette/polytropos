@@ -1,6 +1,6 @@
 cabal-version: 3.0
 name: polytropos-optics
-version: 0.1.0.3
+version: 0.1.0.4
 synopsis: optics-core integration for polytropos open records and variants
 description:
   Integration between <https://hackage.haskell.org/package/polytropos polytropos> and the
@@ -36,7 +36,7 @@ library
   ghc-options: -Wall
   build-depends:
     base >= 4.14 && < 5,
-    polytropos-core >= 0.1 && < 0.2,
+    polytropos-core >= 0.1.2.0 && < 0.2,
     optics-core >= 0.4 && < 0.5
 
 test-suite polytropos-optics-test
@@ -47,9 +47,9 @@ test-suite polytropos-optics-test
   ghc-options: -Wall -fplugin=Polytropos.Plugin
   build-depends:
     base,
-    polytropos-core,
+    polytropos-core >= 0.1.2.0 && < 0.2,
     polytropos-optics,
-    polytropos-plugin,
+    polytropos-plugin >= 0.1.2.0 && < 0.2,
     optics-core,
     tasty,
     tasty-hunit

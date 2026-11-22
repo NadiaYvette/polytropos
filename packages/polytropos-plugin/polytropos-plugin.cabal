@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               polytropos-plugin
-version: 0.1.1.0
+version:            0.1.2.0
 synopsis:           TcPlugin that emits literal evidence for Polytropos row classes
 description:
   A GHC typechecker plugin for <https://hackage.haskell.org/package/polytropos polytropos>
@@ -56,7 +56,7 @@ library
     , ghc-tcplugin-api >= 0.1 && < 0.21
     , bytestring >= 0.11 && < 0.13
     , containers >= 0.6 && < 0.9
-    , polytropos-core >= 0.1.1.0 && < 0.2
+    , polytropos-core >= 0.1.2.0 && < 0.2
 
 test-suite polytropos-plugin-smoke
   import:           warnings
@@ -67,11 +67,11 @@ test-suite polytropos-plugin-smoke
   build-depends:
       base       >= 4.18 && < 4.24
     , ghc-internal
-    , polytropos-core
+    , polytropos-core >= 0.1.2.0 && < 0.2
     , primitive
     , tasty         >= 1.4  && < 1.6
     , tasty-hunit   >= 0.10 && < 0.11
-    , polytropos-plugin
+    , polytropos-plugin >= 0.1.2.0 && < 0.2
     , process
     , directory
     , bytestring

@@ -1,5 +1,15 @@
 # Changelog for polytropos-core
 
+## 0.1.2.0 — 2026-11-22
+
+- Breaking soundness fix: constrain `injectVariant` and `injectVariantF` payload rows strictly to `Record (ConstructorPayload n s)` and `RecordF f (ConstructorPayloadHKD f n s)`.
+- Propagate `ConstructorPayload` constraints to optics and profunctor adapters.
+- Consolidate intermediate development revisions into 0.1.2.0.
+
+## 0.1.1.0 — 2026-11-18
+
+- MergeMorph skew Boolean algebra: reified row operations `(<+>)`, `(//>)`, `(//~)`, `(|<)`, `(/-/)`, `(\^/)`.
+
 ## 0.1.0.3 — 2026-11-03
 
 - Reified Row Morphisms (`RowMorph`): static permutation arrays and `KnownRowMorph` TcPlugin solver for compile-time peephole route fusion.

@@ -1,5 +1,20 @@
 # Changelog for polytropos-plugin
 
+## 0.1.2.0 — 2026-11-22
+
+- Defer `RowEq`, `RowShow`, `RowEqSum`, `RowShowSum` whole-row solvers on open tails and unreduced type families.
+- Fix `OpReplace` field ordering preserving declaration order of original row.
+- Fix `OpRestrict` lookup reading source field slot indices.
+- Unconditionally unwrap synonyms in `parseMergeOp`.
+- Gate injected `Polytropos` imports to only modules containing transformed `REC` or `VAR` syntax.
+- Properly parenthesize desugared expressions and patterns (`mkHsPar`).
+- Persist interactive `OpenRecord` and `OpenVariant` declarations across GHCi prompt turns for GHC 10.1+.
+- Enable `-dcore-lint` in smoke tests.
+
+## 0.1.1.0 — 2026-11-18
+
+- Add `KnownMergeMorph` constraint solver for skew Boolean row algebra operations.
+
 ## 0.1.0.3 — 2026-11-03
 
 - Add `KnownRowMorph` constraint solver emitting literal `RowMorph` index arrays for static channel permutations.
