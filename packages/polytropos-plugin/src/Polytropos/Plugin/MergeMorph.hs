@@ -111,14 +111,11 @@ evalMergeOp op r1 r2 =
                 let badFS = entryLabel (m2 Map.! badKey)
                 in MergeReplaceMissing badFS
               Nothing ->
-                let keys = Set.toList s1
-                    outEntries =
-                      [ case Map.lookup k m2 of
+                let outEntries =
+                      [ case Map.lookup (unpackFS (entryLabel e1)) m2 of
                           Just e2 -> (e2, complement (entrySlot e2))
-                          Nothing -> case Map.lookup k m1 of
-                            Just e1 -> (e1, entrySlot e1)
-                            Nothing -> error "evalMergeOp: impossible key"
-                      | k <- keys
+                          Nothing -> (e1, entrySlot e1)
+                      | e1 <- r1
                       ]
                     reIndexed = zipWith (\idx (e, _) -> e { entrySlot = idx }) [0..] outEntries
                     gather = map snd outEntries
@@ -127,8 +124,8 @@ evalMergeOp op r1 r2 =
        OpRestrict ->
          let keys = Set.toList (Set.intersection s1 s2)
              outEntries =
-               [ case Map.lookup k m2 of
-                   Just e2 -> (e2, complement (entrySlot e2))
+               [ case Map.lookup k m1 of
+                   Just e1 -> (e1, entrySlot e1)
                    Nothing -> error "evalMergeOp: impossible key"
                | k <- keys
                ]

@@ -131,7 +131,6 @@ import GHC.Core.Make
   , mkCoreConApps
   , mkCoreLams
   , mkCharExpr
-  , mkStringExpr
   , mkIfThenElse
   , mkListExpr
   )
@@ -143,6 +142,9 @@ import GHC.Plugins
   , CoreExpr
   , Expr(..)
   , Type
+#if __GLASGOW_HASKELL__ >= 1001
+  , mkDataOcc
+#endif
   , mkTcOcc
   , nameOccName
   , mkTyConTy
@@ -159,6 +161,7 @@ import GHC.Plugins
   , wordTyCon
   , Var(..)
   , varType
+  , charTy
   , intTy
   , stringTy
   , mkVarOcc
@@ -202,7 +205,11 @@ import GHC.Core.TyCo.Compare
   ( eqType
   )
 
+#if __GLASGOW_HASKELL__ >= 1001
+import GHC.Builtin.WiredIn.Types
+#else
 import GHC.Builtin.Types
+#endif
   ( trueDataCon
   , falseDataCon
   , maybeTyCon
@@ -222,6 +229,12 @@ import Language.Haskell.Syntax.Basic
   ( Boxity(..)
   )
 
+#if __GLASGOW_HASKELL__ >= 1001
+import GHC.Builtin.Modules
+  ( gHC_CLASSES
+  , gHC_INTERNAL_TYPEERROR
+  )
+#else
 import GHC.Builtin.Names
   ( gHC_CLASSES
   , eqClassName
@@ -230,6 +243,7 @@ import GHC.Builtin.Names
   , typeErrorTextDataConName
   , typeErrorVAppendDataConName
   )
+#endif
 
 import Polytropos.Plugin.Compat
   ( modBase
@@ -285,6 +299,10 @@ import GHC.TcPlugin.API.Internal
 
 import Polytropos.Plugin.Source
   ( sourcePlugin
+#if __GLASGOW_HASKELL__ >= 1001
+  , sourceStmtPlugin
+  , sourceDeclsPlugin
+#endif
   )
 
 import Polytropos.MergeMorph
@@ -637,6 +655,10 @@ plugin :: Plugin
 plugin = defaultPlugin
   { tcPlugin           = const $ Just $ mkTcPlugin polytroposPlugin
   , parsedResultAction = \opts _modSummary -> sourcePlugin opts
+#if __GLASGOW_HASKELL__ >= 1001
+  , parsedStmtAction   = sourceStmtPlugin
+  , parsedDeclsAction  = sourceDeclsPlugin
+#endif
   }
 
 polytroposPlugin :: TcPlugin
@@ -713,10 +735,15 @@ polytroposInit = do
   psShowChar      <- lookupIdInModule modShow "showChar"
   psFShowInt      <- lookupIdInModule modShow "$fShowInt"
   psFShowBool     <- lookupIdInModule modShow "$fShowBool"
-
+#if __GLASGOW_HASKELL__ >= 1001
+  eqName        <- lookupOrig gHC_CLASSES            (mkTcOcc   "Eq")
+  showName      <- lookupOrig modShow                (mkTcOcc   "Show")
+  psEqCls       <- tcLookupClass eqName
+  psShowCls     <- tcLookupClass showName
+#else
   psEqCls   <- tcLookupClass eqClassName
   psShowCls <- tcLookupClass showClassName
-
+#endif
   psComp <- lookupIdInModule modBase "."
 
   rowFlavourName <- lookupOrig coreMod (mkTcOcc "RowFlavour")
@@ -739,11 +766,18 @@ polytroposInit = do
 
   fieldNamesOcc <- lookupOrig coreMod (mkTcOcc "FieldNames")
   psFieldNamesTyCon <- tcLookupTyCon fieldNamesOcc
-
+#if __GLASGOW_HASKELL__ >= 1001
+  teFamName        <- lookupOrig gHC_INTERNAL_TYPEERROR (mkTcOcc   "TypeError")
+  textDcName       <- lookupOrig gHC_INTERNAL_TYPEERROR (mkDataOcc "Text")
+  vcatDcName       <- lookupOrig gHC_INTERNAL_TYPEERROR (mkDataOcc ":$$:")
+  psTypeErrorTyCon <- tcLookupTyCon   teFamName
+  textDataCon      <- tcLookupDataCon textDcName
+  vcatDataCon      <- tcLookupDataCon vcatDcName
+#else
   psTypeErrorTyCon <- tcLookupTyCon errorMessageTypeErrorFamName
   textDataCon      <- tcLookupDataCon typeErrorTextDataConName
   vcatDataCon      <- tcLookupDataCon typeErrorVAppendDataConName
-
+#endif
   let psPromotedText = promoteDataCon textDataCon
       psPromotedVcat = promoteDataCon vcatDataCon
 
@@ -1360,79 +1394,79 @@ solveRowEq
   -> Class
   -> [Type]
   -> TcPluginM 'Solve (Either ((EvTerm, Ct), [Ct]) ())
-solveRowEq state ct cls tys = do
-  let rowTy  = last tys
-      rTy    = tys !! (length tys - 2)
-      fields = walkRowWithTypes rowTy
-      loc    = ctLoc ct
+solveRowEq state ct cls tys
+  | rowTy : rTy : _ <- reverse tys
+  , Just fields <- walkRowWithTypes_maybe rowTy
+  , let loc = ctLoc ct
+  = do
+           -- Superclass evidence for RowFlavour r
+       let scEvidence = evDataConApp (classDataCon (psRowFlavourCls state)) [rTy] []
 
-      -- Superclass evidence for RowFlavour r
-      scEvidence = evDataConApp (classDataCon (psRowFlavourCls state)) [rTy] []
+           -- Extract repEq method type and bind lambda arguments: \r1 r2 -> ...
+           repEqId = case classMethods cls of
+             (m : _) -> m
+             []      -> error "Polytropos.Plugin: RowEq class has no methods"
+           methodFullTy = piResultTys (varType repEqId) tys
+           (_, _, methodInDictTy) = splitFunTy methodFullTy
+           (tyVars, tauTy) = splitForAllTyCoVars methodInDictTy
+           (argTys, _) = splitFunTys tauTy
+           scaledR1Ty = argTys !! 0
+           scaledR2Ty = argTys !! 1
 
-      -- Extract repEq method type and bind lambda arguments: \r1 r2 -> ...
-      repEqId = case classMethods cls of
-        (m : _) -> m
-        []      -> error "Polytropos.Plugin: RowEq class has no methods"
-      methodFullTy = piResultTys (varType repEqId) tys
-      (_, _, methodInDictTy) = splitFunTy methodFullTy
-      (tyVars, tauTy) = splitForAllTyCoVars methodInDictTy
-      (argTys, _) = splitFunTys tauTy
-      scaledR1Ty = argTys !! 0
-      scaledR2Ty = argTys !! 1
+       r1Name <- unsafeLiftTcM $ newName (mkVarOcc "r1")
+       r2Name <- unsafeLiftTcM $ newName (mkVarOcc "r2")
+       let r1Var = mkLocalId r1Name (scaledMult scaledR1Ty) (scaledThing scaledR1Ty)
+           r2Var = mkLocalId r2Name (scaledMult scaledR2Ty) (scaledThing scaledR2Ty)
 
-  r1Name <- unsafeLiftTcM $ newName (mkVarOcc "r1")
-  r2Name <- unsafeLiftTcM $ newName (mkVarOcc "r2")
-  let r1Var = mkLocalId r1Name (scaledMult scaledR1Ty) (scaledThing scaledR1Ty)
-      r2Var = mkLocalId r2Name (scaledMult scaledR2Ty) (scaledThing scaledR2Ty)
+           kATy   = mkTyVarTy (tyVars !! 0)
+           fTy    = mkTyVarTy (tyVars !! 1)
+           aTy    = mkTyVarTy (tyVars !! 2)
+           kRowTy = typeKind rowTy
 
-      kATy   = mkTyVarTy (tyVars !! 0)
-      fTy    = mkTyVarTy (tyVars !! 1)
-      aTy    = mkTyVarTy (tyVars !! 2)
-      kRowTy = typeKind rowTy
+           -- Unpack RowRep wrappers: unRowRep r1, unRowRep r2
+           unRowRepTypeArgs = [Type kRowTy, Type kATy, Type fTy, Type rTy, Type rowTy, Type aTy]
+           rep1 = mkCoreApps (Var (psUnRowRep state)) (unRowRepTypeArgs ++ [Var r1Var])
+           rep2 = mkCoreApps (Var (psUnRowRep state)) (unRowRepTypeArgs ++ [Var r2Var])
 
-      -- Unpack RowRep wrappers: unRowRep r1, unRowRep r2
-      unRowRepTypeArgs = [Type kRowTy, Type kATy, Type fTy, Type rTy, Type rowTy, Type aTy]
-      rep1 = mkCoreApps (Var (psUnRowRep state)) (unRowRepTypeArgs ++ [Var r1Var])
-      rep2 = mkCoreApps (Var (psUnRowRep state)) (unRowRepTypeArgs ++ [Var r2Var])
+           -- Structural header checks: repTag and repArity
+           repTypeArgs = [Type kATy, Type fTy, Type aTy]
+           tag1 = mkCoreApps (Var (psRepTag state)) (repTypeArgs ++ [rep1])
+           tag2 = mkCoreApps (Var (psRepTag state)) (repTypeArgs ++ [rep2])
+           eqTag = mkCoreApps (Var (psEqClass state)) [Type (mkTyConTy wordTyCon), Var (psFEqWord state), tag1, tag2]
 
-      -- Structural header checks: repTag and repArity
-      repTypeArgs = [Type kATy, Type fTy, Type aTy]
-      tag1 = mkCoreApps (Var (psRepTag state)) (repTypeArgs ++ [rep1])
-      tag2 = mkCoreApps (Var (psRepTag state)) (repTypeArgs ++ [rep2])
-      eqTag = mkCoreApps (Var (psEqClass state)) [Type (mkTyConTy wordTyCon), Var (psFEqWord state), tag1, tag2]
+           arity1 = mkCoreApps (Var (psRepArity state)) (repTypeArgs ++ [rep1])
+           arity2 = mkCoreApps (Var (psRepArity state)) (repTypeArgs ++ [rep2])
+           eqArity = mkCoreApps (Var (psEqClass state)) [Type intTy, Var (psFEqInt state), arity1, arity2]
 
-      arity1 = mkCoreApps (Var (psRepArity state)) (repTypeArgs ++ [rep1])
-      arity2 = mkCoreApps (Var (psRepArity state)) (repTypeArgs ++ [rep2])
-      eqArity = mkCoreApps (Var (psEqClass state)) [Type intTy, Var (psFEqInt state), arity1, arity2]
+       -- Spawn wanted Eq constraints for every field type in the row
+       wanteds <- forM fields $ \(i, _nameFS, fieldTy) -> do
+         ev <- newWanted loc (mkAppTy (mkTyConTy (classTyCon (psEqCls state))) fieldTy)
+         pure (i, fieldTy, ev)
 
-  -- Spawn wanted Eq constraints for every field type in the row
-  wanteds <- forM fields $ \(i, _nameFS, fieldTy) -> do
-    ev <- newWanted loc (mkAppTy (mkTyConTy (classTyCon (psEqCls state))) fieldTy)
-    pure (i, fieldTy, ev)
+       -- Synthesize comparison expression for slot i:
+       -- (==) @fieldTy eqDict (noInlineUnsafeCo (fieldAt @i rep1)) (noInlineUnsafeCo (fieldAt @i rep2))
+       let compareField (i, fieldTy, ev) =
+             let fieldAtTypeArgs = [Type kATy, Type fTy, Type aTy, Type fieldTy]
+                 idxExpr = mkIntExpr i
+                 raw1 = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep1])
+                 raw2 = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep2])
+                 fFieldTy = mkAppTy fTy fieldTy
+                 val1 = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw1]
+                 val2 = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw2]
+                 eqDict = ctEvExpr ev
+             in mkCoreApps (Var (psEqClass state)) [Type fieldTy, eqDict, val1, val2]
 
-  -- Synthesize comparison expression for slot i:
-  -- (==) @fieldTy eqDict (noInlineUnsafeCo (fieldAt @i rep1)) (noInlineUnsafeCo (fieldAt @i rep2))
-  let compareField (i, fieldTy, ev) =
-        let fieldAtTypeArgs = [Type kATy, Type fTy, Type aTy, Type fieldTy]
-            idxExpr = mkIntExpr i
-            raw1 = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep1])
-            raw2 = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep2])
-            fFieldTy = mkAppTy fTy fieldTy
-            val1 = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw1]
-            val2 = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw2]
-            eqDict = ctEvExpr ev
-        in mkCoreApps (Var (psEqClass state)) [Type fieldTy, eqDict, val1, val2]
+           fieldComps = map compareField wanteds
 
-      fieldComps = map compareField wanteds
+           -- Fold all comparisons left-to-right with short-circuiting Boolean (&&)
+           andFn e1 e2 = mkCoreApps (Var (psAnd state)) [e1, e2]
+           bodyExpr = foldl andFn (andFn eqTag eqArity) fieldComps
+           repEqExpr = mkCoreLams (tyVars ++ [r1Var, r2Var]) bodyExpr
 
-      -- Fold all comparisons left-to-right with short-circuiting Boolean (&&)
-      andFn e1 e2 = mkCoreApps (Var (psAnd state)) [e1, e2]
-      bodyExpr = foldl andFn (andFn eqTag eqArity) fieldComps
-      repEqExpr = mkCoreLams (tyVars ++ [r1Var, r2Var]) bodyExpr
-
-      dictExpr = evDataConApp (classDataCon cls) tys [scEvidence, repEqExpr]
-      newWanteds = [mkNonCanonical ev | (_, _, ev) <- wanteds]
-  pure $ Left ((EvExpr dictExpr, ct), newWanteds)
+           dictExpr = evDataConApp (classDataCon cls) tys [scEvidence, repEqExpr]
+           newWanteds = [mkNonCanonical ev | (_, _, ev) <- wanteds]
+       pure $ Left ((EvExpr dictExpr, ct), newWanteds)
+  | otherwise = pure $ Right ()
 
 -------------------------------------------------------------------------------
 -- RowShow solver
@@ -1460,82 +1494,82 @@ solveRowShow
   -> Class
   -> [Type]
   -> TcPluginM 'Solve (Either ((EvTerm, Ct), [Ct]) ())
-solveRowShow state ct cls tys = do
-  let rowTy  = last tys
-      rTy    = tys !! (length tys - 2)
-      fields = walkRowWithTypes rowTy
-      loc    = ctLoc ct
+solveRowShow state ct cls tys
+  | rowTy : rTy : _ <- reverse tys
+  , Just fields <- walkRowWithTypes_maybe rowTy
+  , let loc = ctLoc ct
+  = do
+           -- Superclass evidence for RowFlavour r
+       let scEvidence = evDataConApp (classDataCon (psRowFlavourCls state)) [rTy] []
 
-      -- Superclass evidence for RowFlavour r
-      scEvidence = evDataConApp (classDataCon (psRowFlavourCls state)) [rTy] []
+           -- Extract repShowsPrec method type and bind lambda arguments: \p r -> ...
+           repShowsPrecId = case classMethods cls of
+             (m : _) -> m
+             []      -> error "Polytropos.Plugin: RowShow class has no methods"
+           methodFullTy = piResultTys (varType repShowsPrecId) tys
+           (_, _, methodInDictTy) = splitFunTy methodFullTy
+           (tyVars, tauTy) = splitForAllTyCoVars methodInDictTy
+           (argTys, _) = splitFunTys tauTy
+           scaledPrecTy = argTys !! 0
+           scaledRTy    = argTys !! 1
 
-      -- Extract repShowsPrec method type and bind lambda arguments: \p r -> ...
-      repShowsPrecId = case classMethods cls of
-        (m : _) -> m
-        []      -> error "Polytropos.Plugin: RowShow class has no methods"
-      methodFullTy = piResultTys (varType repShowsPrecId) tys
-      (_, _, methodInDictTy) = splitFunTy methodFullTy
-      (tyVars, tauTy) = splitForAllTyCoVars methodInDictTy
-      (argTys, _) = splitFunTys tauTy
-      scaledPrecTy = argTys !! 0
-      scaledRTy    = argTys !! 1
+       precName <- unsafeLiftTcM $ newName (mkVarOcc "p")
+       rName <- unsafeLiftTcM $ newName (mkVarOcc "r")
+       let precVar = mkLocalId precName (scaledMult scaledPrecTy) (scaledThing scaledPrecTy)
+           rVar    = mkLocalId rName (scaledMult scaledRTy) (scaledThing scaledRTy)
 
-  precName <- unsafeLiftTcM $ newName (mkVarOcc "p")
-  rName <- unsafeLiftTcM $ newName (mkVarOcc "r")
-  let precVar = mkLocalId precName (scaledMult scaledPrecTy) (scaledThing scaledPrecTy)
-      rVar    = mkLocalId rName (scaledMult scaledRTy) (scaledThing scaledRTy)
+           kATy   = mkTyVarTy (tyVars !! 0)
+           fTy    = mkTyVarTy (tyVars !! 1)
+           aTy    = mkTyVarTy (tyVars !! 2)
+           kRowTy = typeKind rowTy
 
-      kATy   = mkTyVarTy (tyVars !! 0)
-      fTy    = mkTyVarTy (tyVars !! 1)
-      aTy    = mkTyVarTy (tyVars !! 2)
-      kRowTy = typeKind rowTy
+           -- Unpack RowRep wrapper: unRowRep r
+           unRowRepTypeArgs = [Type kRowTy, Type kATy, Type fTy, Type rTy, Type rowTy, Type aTy]
+           rep = mkCoreApps (Var (psUnRowRep state)) (unRowRepTypeArgs ++ [Var rVar])
 
-      -- Unpack RowRep wrapper: unRowRep r
-      unRowRepTypeArgs = [Type kRowTy, Type kATy, Type fTy, Type rTy, Type rowTy, Type aTy]
-      rep = mkCoreApps (Var (psUnRowRep state)) (unRowRepTypeArgs ++ [Var rVar])
+           -- Determine record display prefix
+           rowName = case splitTyConApp_maybe rowTy of
+             Just (tc, _)
+               | let name = occNameString (getOccName tc)
+               , name /= ":" && name /= "[]" && name /= "''[]"
+               -> name
+             _ -> "R" ++ show (length fields)
 
-      -- Determine record display prefix
-      rowName = case splitTyConApp_maybe rowTy of
-        Just (tc, _)
-          | let name = occNameString (getOccName tc)
-          , name /= ":" && name /= "[]" && name /= "''[]"
-          -> name
-        _ -> "R" ++ show (length fields)
+       let prefixExpr  = mkCoreStringExpr (rowName ++ " ")
+           prefixShowS = mkCoreApps (Var (psShowString state)) [prefixExpr]
+           spaceShowS  = mkCoreApps (Var (psShowChar state)) [mkCharExpr ' ']
 
-  prefixExpr <- unsafeLiftTcM $ mkStringExpr (rowName ++ " ")
-  let prefixShowS = mkCoreApps (Var (psShowString state)) [prefixExpr]
-      spaceShowS  = mkCoreApps (Var (psShowChar state)) [mkCharExpr ' ']
+       -- Spawn wanted Show constraints for every field type in the row
+       wanteds <- forM fields $ \(i, _nameFS, fieldTy) -> do
+         ev <- newWanted loc (mkAppTy (mkTyConTy (classTyCon (psShowCls state))) fieldTy)
+         pure (i, fieldTy, ev)
 
-  -- Spawn wanted Show constraints for every field type in the row
-  wanteds <- forM fields $ \(i, _nameFS, fieldTy) -> do
-    ev <- newWanted loc (mkAppTy (mkTyConTy (classTyCon (psShowCls state))) fieldTy)
-    pure (i, fieldTy, ev)
+       -- Synthesize ShowS expression for slot i:
+       -- showsPrec @fieldTy showDict 0 (noInlineUnsafeCo (fieldAt @i rep))
+       let showField (i, fieldTy, ev) =
+             let fieldAtTypeArgs = [Type kATy, Type fTy, Type aTy, Type fieldTy]
+                 idxExpr = mkIntExpr i
+                 raw = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep])
+                 fFieldTy = mkAppTy fTy fieldTy
+                 val = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw]
+                 showDict = ctEvExpr ev
+                 zeroPrec = mkIntExpr 0
+             in mkCoreApps (Var (psShowsPrecMeth state)) [Type fieldTy, showDict, zeroPrec, val]
 
-  -- Synthesize ShowS expression for slot i:
-  -- showsPrec @fieldTy showDict 0 (noInlineUnsafeCo (fieldAt @i rep))
-  let showField (i, fieldTy, ev) =
-        let fieldAtTypeArgs = [Type kATy, Type fTy, Type aTy, Type fieldTy]
-            idxExpr = mkIntExpr i
-            raw = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep])
-            fFieldTy = mkAppTy fTy fieldTy
-            val = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw]
-            showDict = ctEvExpr ev
-            zeroPrec = mkIntExpr 0
-        in mkCoreApps (Var (psShowsPrecMeth state)) [Type fieldTy, showDict, zeroPrec, val]
+           fieldShows = map showField wanteds
+           showParts = case fieldShows of
+             [] -> [prefixShowS]
+             (f0 : fs) -> prefixShowS : f0 : concatMap (\f -> [spaceShowS, f]) fs
 
-      fieldShows = map showField wanteds
-      showParts = case fieldShows of
-        [] -> [prefixShowS]
-        (f0 : fs) -> prefixShowS : f0 : concatMap (\f -> [spaceShowS, f]) fs
+           -- Chain all ShowS functions via (.) function composition
+           compFn f g = mkCoreApps (Var (psComp state)) [Type stringTy, Type stringTy, Type stringTy, f, g]
+           bodyExpr = foldr1 compFn showParts
+           repShowsPrecExpr = mkCoreLams (tyVars ++ [precVar, rVar]) bodyExpr
 
-      -- Chain all ShowS functions via (.) function composition
-      compFn f g = mkCoreApps (Var (psComp state)) [Type stringTy, Type stringTy, Type stringTy, f, g]
-      bodyExpr = foldr1 compFn showParts
-      repShowsPrecExpr = mkCoreLams (tyVars ++ [precVar, rVar]) bodyExpr
-
-      dictExpr = evDataConApp (classDataCon cls) tys [scEvidence, repShowsPrecExpr]
-      newWanteds = [mkNonCanonical ev | (_, _, ev) <- wanteds]
-  pure $ Left ((EvExpr dictExpr, ct), newWanteds)
+           dictExpr = evDataConApp (classDataCon cls) tys [scEvidence, repShowsPrecExpr]
+           newWanteds = [mkNonCanonical ev | (_, _, ev) <- wanteds]
+       pure $ Left ((EvExpr dictExpr, ct), newWanteds)
+  | otherwise = pure $ Right ()
 
 -------------------------------------------------------------------------------
 -- RowEqSum / RowShowSum solvers
@@ -1565,90 +1599,92 @@ solveRowEqSum
   -> Class
   -> [Type]
   -> TcPluginM 'Solve (Either ((EvTerm, Ct), [Ct]) ())
-solveRowEqSum state ct cls tys = do
-  let rowTy  = last tys
-      rTy    = tys !! (length tys - 2)
-      constructors = walkSumRowWithTypes rowTy
-      loc    = ctLoc ct
+solveRowEqSum state ct cls tys
+  | rowTy : rTy : _ <- reverse tys
+  , Just constructors    <- walkSumRowWithTypes_maybe rowTy
+  , Just ctorSchemas
+      <- forM constructors \(i, nm, conRowTy) ->
+                              (i, nm,) <$> walkRowWithTypes_maybe conRowTy
+  , let loc          = ctLoc ct
+  = do
+           -- Superclass evidence for RowFlavour r
+       let scEvidence = evDataConApp (classDataCon (psRowFlavourCls state)) [rTy] []
 
-      -- Superclass evidence for RowFlavour r
-      scEvidence = evDataConApp (classDataCon (psRowFlavourCls state)) [rTy] []
+           -- Extract repEqSum method type and bind lambda arguments: \r1 r2 -> ...
+           repEqSumId = case classMethods cls of
+             (m : _) -> m
+             []      -> error "Polytropos.Plugin: RowEqSum class has no methods"
+           methodFullTy = piResultTys (varType repEqSumId) tys
+           (_, _, methodInDictTy) = splitFunTy methodFullTy
+           (tyVars, tauTy) = splitForAllTyCoVars methodInDictTy
+           (argTys, _) = splitFunTys tauTy
+           scaledR1Ty = argTys !! 0
+           scaledR2Ty = argTys !! 1
 
-      -- Extract repEqSum method type and bind lambda arguments: \r1 r2 -> ...
-      repEqSumId = case classMethods cls of
-        (m : _) -> m
-        []      -> error "Polytropos.Plugin: RowEqSum class has no methods"
-      methodFullTy = piResultTys (varType repEqSumId) tys
-      (_, _, methodInDictTy) = splitFunTy methodFullTy
-      (tyVars, tauTy) = splitForAllTyCoVars methodInDictTy
-      (argTys, _) = splitFunTys tauTy
-      scaledR1Ty = argTys !! 0
-      scaledR2Ty = argTys !! 1
+       r1Name <- unsafeLiftTcM $ newName (mkVarOcc "r1")
+       r2Name <- unsafeLiftTcM $ newName (mkVarOcc "r2")
+       let r1Var = mkLocalId r1Name (scaledMult scaledR1Ty) (scaledThing scaledR1Ty)
+           r2Var = mkLocalId r2Name (scaledMult scaledR2Ty) (scaledThing scaledR2Ty)
 
-  r1Name <- unsafeLiftTcM $ newName (mkVarOcc "r1")
-  r2Name <- unsafeLiftTcM $ newName (mkVarOcc "r2")
-  let r1Var = mkLocalId r1Name (scaledMult scaledR1Ty) (scaledThing scaledR1Ty)
-      r2Var = mkLocalId r2Name (scaledMult scaledR2Ty) (scaledThing scaledR2Ty)
+           kATy   = mkTyVarTy (tyVars !! 0)
+           fTy    = mkTyVarTy (tyVars !! 1)
+           aTy    = mkTyVarTy (tyVars !! 2)
+           kRowTy = typeKind rowTy
 
-      kATy   = mkTyVarTy (tyVars !! 0)
-      fTy    = mkTyVarTy (tyVars !! 1)
-      aTy    = mkTyVarTy (tyVars !! 2)
-      kRowTy = typeKind rowTy
+           -- Unpack RowRep wrappers: unRowRep r1, unRowRep r2
+           unRowRepTypeArgs = [Type kRowTy, Type kATy, Type fTy, Type rTy, Type rowTy, Type aTy]
+           rep1 = mkCoreApps (Var (psUnRowRep state)) (unRowRepTypeArgs ++ [Var r1Var])
+           rep2 = mkCoreApps (Var (psUnRowRep state)) (unRowRepTypeArgs ++ [Var r2Var])
 
-      -- Unpack RowRep wrappers: unRowRep r1, unRowRep r2
-      unRowRepTypeArgs = [Type kRowTy, Type kATy, Type fTy, Type rTy, Type rowTy, Type aTy]
-      rep1 = mkCoreApps (Var (psUnRowRep state)) (unRowRepTypeArgs ++ [Var r1Var])
-      rep2 = mkCoreApps (Var (psUnRowRep state)) (unRowRepTypeArgs ++ [Var r2Var])
+           -- Extract and compare constructor tags: repTag rep1 == repTag rep2
+           repTypeArgs = [Type kATy, Type fTy, Type aTy]
+           tag1 = mkCoreApps (Var (psRepTag state)) (repTypeArgs ++ [rep1])
+           tag2 = mkCoreApps (Var (psRepTag state)) (repTypeArgs ++ [rep2])
+           eqTag = mkCoreApps (Var (psEqClass state)) [Type (mkTyConTy wordTyCon), Var (psFEqWord state), tag1, tag2]
 
-      -- Extract and compare constructor tags: repTag rep1 == repTag rep2
-      repTypeArgs = [Type kATy, Type fTy, Type aTy]
-      tag1 = mkCoreApps (Var (psRepTag state)) (repTypeArgs ++ [rep1])
-      tag2 = mkCoreApps (Var (psRepTag state)) (repTypeArgs ++ [rep2])
-      eqTag = mkCoreApps (Var (psEqClass state)) [Type (mkTyConTy wordTyCon), Var (psFEqWord state), tag1, tag2]
+           falseExpr = mkCoreConApps falseDataCon []
+           trueExpr  = mkCoreConApps trueDataCon []
+           andFn e1 e2 = mkCoreApps (Var (psAnd state)) [e1, e2]
 
-      falseExpr = mkCoreConApps falseDataCon []
-      trueExpr  = mkCoreConApps trueDataCon []
-      andFn e1 e2 = mkCoreApps (Var (psAnd state)) [e1, e2]
+       -- Spawn wanted Eq constraints for all fields of all constructors
+       ctorWanteds <- forM ctorSchemas \(i, conName, fields) -> do
+         fWanteds <- forM fields \(fi, _nameFS, fieldTy) -> do
+           ev <- newWanted loc . flip mkAppTy fieldTy . mkTyConTy . classTyCon $ psEqCls state
+           pure (fi, fieldTy, ev)
+         pure (i, conName, fWanteds)
 
-  -- Spawn wanted Eq constraints for all fields of all constructors
-  ctorWanteds <- forM constructors $ \(i, conName, conRowTy) -> do
-    let fields = walkRowWithTypes conRowTy
-    fWanteds <- forM fields $ \(fi, _nameFS, fieldTy) -> do
-      ev <- newWanted loc (mkAppTy (mkTyConTy (classTyCon (psEqCls state))) fieldTy)
-      pure (fi, fieldTy, ev)
-    pure (i, conName, fWanteds)
+       -- Compare fields within an active constructor payload
+       let compareConFields fWanteds =
+             let fieldComps = [ compareField fi fieldTy ev | (fi, fieldTy, ev) <- fWanteds ]
+             in foldl andFn trueExpr fieldComps
 
-  -- Compare fields within an active constructor payload
-  let compareConFields fWanteds =
-        let fieldComps = [ compareField fi fieldTy ev | (fi, fieldTy, ev) <- fWanteds ]
-        in foldl andFn trueExpr fieldComps
+           compareField fi fieldTy ev =
+             let fieldAtTypeArgs = [Type kATy, Type fTy, Type aTy, Type fieldTy]
+                 idxExpr = mkIntExpr fi
+                 raw1 = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep1])
+                 raw2 = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep2])
+                 fFieldTy = mkAppTy fTy fieldTy
+                 val1 = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw1]
+                 val2 = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw2]
+                 eqDict = ctEvExpr ev
+             in mkCoreApps (Var (psEqClass state)) [Type fieldTy, eqDict, val1, val2]
 
-      compareField fi fieldTy ev =
-        let fieldAtTypeArgs = [Type kATy, Type fTy, Type aTy, Type fieldTy]
-            idxExpr = mkIntExpr fi
-            raw1 = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep1])
-            raw2 = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep2])
-            fFieldTy = mkAppTy fTy fieldTy
-            val1 = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw1]
-            val2 = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw2]
-            eqDict = ctEvExpr ev
-        in mkCoreApps (Var (psEqClass state)) [Type fieldTy, eqDict, val1, val2]
+           -- Synthesize recursive branch test: if tag == i then compareConFields else buildTree (rest)
+           buildTree _ [] = falseExpr
+           buildTree tagExpr ((i, _conName, fWanteds) : rest) =
+             let iLit = mkWordExpr (fromIntegral i)
+                 cond = mkCoreApps (Var (psEqClass state)) [Type (mkTyConTy wordTyCon), Var (psFEqWord state), tagExpr, iLit]
+             in mkIfThenElse cond (compareConFields fWanteds) (buildTree tagExpr rest)
 
-      -- Synthesize recursive branch test: if tag == i then compareConFields else buildTree (rest)
-      buildTree _ [] = falseExpr
-      buildTree tagExpr ((i, _conName, fWanteds) : rest) =
-        let iLit = mkWordExpr (fromIntegral i)
-            cond = mkCoreApps (Var (psEqClass state)) [Type (mkTyConTy wordTyCon), Var (psFEqWord state), tagExpr, iLit]
-        in mkIfThenElse cond (compareConFields fWanteds) (buildTree tagExpr rest)
+           -- Top-level check: only inspect payload if constructor tags are equal
+           bodyExpr = mkIfThenElse eqTag (buildTree tag1 ctorWanteds) falseExpr
+           repEqSumExpr = mkCoreLams (tyVars ++ [r1Var, r2Var]) bodyExpr
 
-      -- Top-level check: only inspect payload if constructor tags are equal
-      bodyExpr = mkIfThenElse eqTag (buildTree tag1 ctorWanteds) falseExpr
-      repEqSumExpr = mkCoreLams (tyVars ++ [r1Var, r2Var]) bodyExpr
+           dictExpr = evDataConApp (classDataCon cls) tys [scEvidence, repEqSumExpr]
+           allNewWanteds = [ mkNonCanonical ev | (_, _, fWanteds) <- ctorWanteds, (_, _, ev) <- fWanteds ]
 
-      dictExpr = evDataConApp (classDataCon cls) tys [scEvidence, repEqSumExpr]
-      allNewWanteds = [ mkNonCanonical ev | (_, _, fWanteds) <- ctorWanteds, (_, _, ev) <- fWanteds ]
-
-  pure $ Left ((EvExpr dictExpr, ct), allNewWanteds)
+       pure $ Left ((EvExpr dictExpr, ct), allNewWanteds)
+  | otherwise = pure $ Right ()
 
 -- Solves the 'RowShowSum' constraint by synthesizing constructor branch showsPrec Core trees.
 --
@@ -1672,92 +1708,94 @@ solveRowShowSum
   -> Class
   -> [Type]
   -> TcPluginM 'Solve (Either ((EvTerm, Ct), [Ct]) ())
-solveRowShowSum state ct cls tys = do
-  let rowTy  = last tys
-      rTy    = tys !! (length tys - 2)
-      constructors = walkSumRowWithTypes rowTy
-      loc    = ctLoc ct
+solveRowShowSum state ct cls tys
+  | rowTy : rTy : _ <- reverse tys
+  , Just constructors <- walkSumRowWithTypes_maybe rowTy
+  , Just ctorSchemas
+      <- forM constructors \(i, nm, conRowTy) ->
+                              (i, nm,) <$> walkRowWithTypes_maybe conRowTy
+  , let loc          = ctLoc ct
+  = do
+           -- Superclass evidence for RowFlavour r
+       let scEvidence = evDataConApp (classDataCon (psRowFlavourCls state)) [rTy] []
 
-      -- Superclass evidence for RowFlavour r
-      scEvidence = evDataConApp (classDataCon (psRowFlavourCls state)) [rTy] []
+           -- Extract repShowsPrecSum method type and bind lambda arguments: \p r -> ...
+           repShowsPrecSumId = case classMethods cls of
+             (m : _) -> m
+             []      -> error "Polytropos.Plugin: RowShowSum class has no methods"
+           methodFullTy = piResultTys (varType repShowsPrecSumId) tys
+           (_, _, methodInDictTy) = splitFunTy methodFullTy
+           (tyVars, tauTy) = splitForAllTyCoVars methodInDictTy
+           (argTys, _) = splitFunTys tauTy
+           scaledPrecTy = argTys !! 0
+           scaledRTy    = argTys !! 1
 
-      -- Extract repShowsPrecSum method type and bind lambda arguments: \p r -> ...
-      repShowsPrecSumId = case classMethods cls of
-        (m : _) -> m
-        []      -> error "Polytropos.Plugin: RowShowSum class has no methods"
-      methodFullTy = piResultTys (varType repShowsPrecSumId) tys
-      (_, _, methodInDictTy) = splitFunTy methodFullTy
-      (tyVars, tauTy) = splitForAllTyCoVars methodInDictTy
-      (argTys, _) = splitFunTys tauTy
-      scaledPrecTy = argTys !! 0
-      scaledRTy    = argTys !! 1
+       precName <- unsafeLiftTcM $ newName (mkVarOcc "p")
+       rName <- unsafeLiftTcM $ newName (mkVarOcc "r")
+       let precVar = mkLocalId precName (scaledMult scaledPrecTy) (scaledThing scaledPrecTy)
+           rVar    = mkLocalId rName (scaledMult scaledRTy) (scaledThing scaledRTy)
 
-  precName <- unsafeLiftTcM $ newName (mkVarOcc "p")
-  rName <- unsafeLiftTcM $ newName (mkVarOcc "r")
-  let precVar = mkLocalId precName (scaledMult scaledPrecTy) (scaledThing scaledPrecTy)
-      rVar    = mkLocalId rName (scaledMult scaledRTy) (scaledThing scaledRTy)
+           kATy   = mkTyVarTy (tyVars !! 0)
+           fTy    = mkTyVarTy (tyVars !! 1)
+           aTy    = mkTyVarTy (tyVars !! 2)
+           kRowTy = typeKind rowTy
 
-      kATy   = mkTyVarTy (tyVars !! 0)
-      fTy    = mkTyVarTy (tyVars !! 1)
-      aTy    = mkTyVarTy (tyVars !! 2)
-      kRowTy = typeKind rowTy
+           -- Unpack RowRep wrapper: unRowRep r
+           unRowRepTypeArgs = [Type kRowTy, Type kATy, Type fTy, Type rTy, Type rowTy, Type aTy]
+           rep = mkCoreApps (Var (psUnRowRep state)) (unRowRepTypeArgs ++ [Var rVar])
 
-      -- Unpack RowRep wrapper: unRowRep r
-      unRowRepTypeArgs = [Type kRowTy, Type kATy, Type fTy, Type rTy, Type rowTy, Type aTy]
-      rep = mkCoreApps (Var (psUnRowRep state)) (unRowRepTypeArgs ++ [Var rVar])
+           repTypeArgs = [Type kATy, Type fTy, Type aTy]
+           tag = mkCoreApps (Var (psRepTag state)) (repTypeArgs ++ [rep])
 
-      repTypeArgs = [Type kATy, Type fTy, Type aTy]
-      tag = mkCoreApps (Var (psRepTag state)) (repTypeArgs ++ [rep])
+           spaceShowS  = mkCoreApps (Var (psShowChar state)) [mkCharExpr ' ']
+           compFn f g = mkCoreApps (Var (psComp state)) [Type stringTy, Type stringTy, Type stringTy, f, g]
 
-      spaceShowS  = mkCoreApps (Var (psShowChar state)) [mkCharExpr ' ']
-      compFn f g = mkCoreApps (Var (psComp state)) [Type stringTy, Type stringTy, Type stringTy, f, g]
+       -- Spawn wanted Show constraints for every field of every constructor
+       ctorWanteds <- forM ctorSchemas \(i, conName, fields) -> do
+         fWanteds <- forM fields \(fi, _nameFS, fieldTy) -> do
+           ev <- newWanted loc . flip mkAppTy fieldTy . mkTyConTy . classTyCon $ psShowCls state
+           pure (fi, fieldTy, ev)
+         pure (i, conName, fWanteds)
 
-  -- Spawn wanted Show constraints for every field of every constructor
-  ctorWanteds <- forM constructors $ \(i, conNameFS, conRowTy) -> do
-    let fields = walkRowWithTypes conRowTy
-    fWanteds <- forM fields $ \(fi, _nameFS, fieldTy) -> do
-      ev <- newWanted loc (mkAppTy (mkTyConTy (classTyCon (psShowCls state))) fieldTy)
-      pure (fi, fieldTy, ev)
-    pure (i, conNameFS, fWanteds)
+       let showField fi fieldTy ev =
+             let fieldAtTypeArgs = [Type kATy, Type fTy, Type aTy, Type fieldTy]
+                 idxExpr = mkIntExpr fi
+                 raw = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep])
+                 fFieldTy = mkAppTy fTy fieldTy
+                 val = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw]
+                 showDict = ctEvExpr ev
+                 zeroPrec = mkIntExpr 0
+             in mkCoreApps (Var (psShowsPrecMeth state)) [Type fieldTy, showDict, zeroPrec, val]
 
-  let showField fi fieldTy ev =
-        let fieldAtTypeArgs = [Type kATy, Type fTy, Type aTy, Type fieldTy]
-            idxExpr = mkIntExpr fi
-            raw = mkCoreApps (Var (psFieldAt state)) (fieldAtTypeArgs ++ [idxExpr, rep])
-            fFieldTy = mkAppTy fTy fieldTy
-            val = mkCoreApps (Var (psNoInlineCo state)) [Type fFieldTy, Type fieldTy, raw]
-            showDict = ctEvExpr ev
-            zeroPrec = mkIntExpr 0
-        in mkCoreApps (Var (psShowsPrecMeth state)) [Type fieldTy, showDict, zeroPrec, val]
+           showConFields conNameFS fWanteds = do
+             let conName = unpackFS conNameFS
+                 prefixExpr = mkCoreStringExpr (conName ++ " ")
+                 prefixShowS = mkCoreApps (Var (psShowString state)) [prefixExpr]
+                 fieldShows = [ showField fi fieldTy ev | (fi, fieldTy, ev) <- fWanteds ]
+                 showParts = case fieldShows of
+                   [] -> [prefixShowS]
+                   (f0 : fs) -> prefixShowS : f0 : concatMap (\f -> [spaceShowS, f]) fs
+             pure $ foldr1 compFn showParts
 
-      showConFields conNameFS fWanteds = do
-        let conName = unpackFS conNameFS
-        prefixExpr <- unsafeLiftTcM $ mkStringExpr (conName ++ " ")
-        let prefixShowS = mkCoreApps (Var (psShowString state)) [prefixExpr]
-            fieldShows = [ showField fi fieldTy ev | (fi, fieldTy, ev) <- fWanteds ]
-            showParts = case fieldShows of
-              [] -> [prefixShowS]
-              (f0 : fs) -> prefixShowS : f0 : concatMap (\f -> [spaceShowS, f]) fs
-        pure $ foldr1 compFn showParts
+       -- Synthesize recursive branch dispatcher: if tag == i then showConFields else buildTree (rest)
+       let buildTree _tagExpr [] = do
+             let errorPrefix = mkCoreStringExpr "??? "
+             pure $ mkCoreApps (Var (psShowString state)) [errorPrefix]
+           buildTree tagExpr ((i, conNameFS, fWanteds) : rest) = do
+             let iLit = mkWordExpr (fromIntegral i)
+                 cond = mkCoreApps (Var (psEqClass state)) [Type (mkTyConTy wordTyCon), Var (psFEqWord state), tagExpr, iLit]
+             trueBranch <- showConFields conNameFS fWanteds
+             falseBranch <- buildTree tagExpr rest
+             pure $ mkIfThenElse cond trueBranch falseBranch
 
-  -- Synthesize recursive branch dispatcher: if tag == i then showConFields else buildTree (rest)
-  let buildTree _tagExpr [] = do
-        errorPrefix <- unsafeLiftTcM $ mkStringExpr "??? "
-        pure $ mkCoreApps (Var (psShowString state)) [errorPrefix]
-      buildTree tagExpr ((i, conNameFS, fWanteds) : rest) = do
-        let iLit = mkWordExpr (fromIntegral i)
-            cond = mkCoreApps (Var (psEqClass state)) [Type (mkTyConTy wordTyCon), Var (psFEqWord state), tagExpr, iLit]
-        trueBranch <- showConFields conNameFS fWanteds
-        falseBranch <- buildTree tagExpr rest
-        pure $ mkIfThenElse cond trueBranch falseBranch
+       bodyExpr <- buildTree tag ctorWanteds
+       let repShowsPrecSumExpr = mkCoreLams (tyVars ++ [precVar, rVar]) bodyExpr
 
-  bodyExpr <- buildTree tag ctorWanteds
-  let repShowsPrecSumExpr = mkCoreLams (tyVars ++ [precVar, rVar]) bodyExpr
+           dictExpr = evDataConApp (classDataCon cls) tys [scEvidence, repShowsPrecSumExpr]
+           allNewWanteds = [ mkNonCanonical ev | (_, _, fWanteds) <- ctorWanteds, (_, _, ev) <- fWanteds ]
 
-      dictExpr = evDataConApp (classDataCon cls) tys [scEvidence, repShowsPrecSumExpr]
-      allNewWanteds = [ mkNonCanonical ev | (_, _, fWanteds) <- ctorWanteds, (_, _, ev) <- fWanteds ]
-
-  pure $ Left ((EvExpr dictExpr, ct), allNewWanteds)
+       pure $ Left ((EvExpr dictExpr, ct), allNewWanteds)
+  | otherwise = pure $ Right ()
 
 -------------------------------------------------------------------------------
 -- HasField solver
@@ -2377,7 +2415,7 @@ solveKnownMergeMorph state ct cls tys
   | otherwise = pure $ Right ()
   where
     parseMergeOp :: Type -> Maybe MergeOp
-    parseMergeOp ty = case splitTyConApp_maybe ty of
+    parseMergeOp ty = case splitTyConApp_maybe (unwrapSynonyms ty) of
       Just (tc, []) -> case occNameString (getOccName tc) of
         "OpOverrideR" -> Just OpOverrideR
         "OpOverrideL" -> Just OpOverrideL
@@ -2705,3 +2743,6 @@ mkIntExpr i = mkCoreConApps intDataCon [Lit (LitNumber LitNumInt (toInteger i))]
 -- See Note [Literal Evidence Synthesis vs Type-Level Search] [ref:note-literal-evidence]
 mkWordExpr :: Word -> CoreExpr
 mkWordExpr w = mkCoreConApps wordDataCon [Lit (LitNumber LitNumWord (toInteger w))]
+
+mkCoreStringExpr :: String -> CoreExpr
+mkCoreStringExpr s = mkListExpr charTy (map mkCharExpr s)
