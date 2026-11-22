@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
 
 #if __GLASGOW_HASKELL__ >= 914
@@ -19,10 +20,12 @@ module Polytropos.Plugin.Compat
   , matchRecordUpd
   , extractRecUpdField
   , pattern PrefixConPat
+  , pattern RecConPat
   , stripHsPar
   , mkHsPar
   , polyLabel
   , mkPolytroposImportDecl
+  , compatImportModName
   , mkHsApp
   , mkTupArg
   , mkLambda
@@ -36,6 +39,11 @@ import GHC.Unit.Types
 import GHC.Plugins
   ( Module
   , FastString
+#if __GLASGOW_HASKELL__ >= 1001
+  , unpackFS
+#else
+  , moduleNameString
+#endif
   , unLoc
   , mkModuleName
   , rdrNameOcc
@@ -54,6 +62,9 @@ import GHC.Hs
   , ImportDecl(..)
   , ImportDeclQualifiedStyle(..)
   , IsBootInterface(..)
+#if __GLASGOW_HASKELL__ >= 1001
+  , NoExtField
+#endif
   , noAnn
   , noLocA
 #if __GLASGOW_HASKELL__ >= 910
@@ -80,6 +91,12 @@ import GHC.Hs
 import Language.Haskell.Syntax.Expr
   ( HsTupArg(..)
   )
+#if __GLASGOW_HASKELL__ >= 1001
+import Language.Haskell.Syntax.Type (XPrefixCon)
+import Language.Haskell.Syntax.Text (packHText)
+import Language.Haskell.Syntax.Module.Name (HsModuleName(..), hsModuleNameString)
+import GHC.Types.UnresolvedImport (ImportDeclOrigin(..))
+#endif
 
 import GHC.Hs.ImpExp
   ( XImportDeclPass(..)
@@ -89,7 +106,11 @@ import GHC.Types.SourceText
   ( SourceText(..)
   )
 
-#if __GLASGOW_HASKELL__ >= 910
+#if __GLASGOW_HASKELL__ >= 1001
+import GHC.Builtin.Modules
+  ( gHC_INTERNAL_BASE
+  )
+#elif __GLASGOW_HASKELL__ >= 910
 import GHC.Builtin.Names
   ( gHC_INTERNAL_BASE
   , gHC_INTERNAL_SHOW
@@ -115,7 +136,9 @@ modBase = gHC_BASE
 
 -- | Location of GHC.Show (or GHC.Internal.Show in 9.10+)
 modShow :: Module
-#if __GLASGOW_HASKELL__ >= 910
+#if __GLASGOW_HASKELL__ >= 1001
+modShow = mkModule (moduleUnit modBase) (mkModuleName "GHC.Internal.Show")
+#elif __GLASGOW_HASKELL__ >= 910
 modShow = gHC_INTERNAL_SHOW
 #else
 modShow = gHC_SHOW
@@ -167,13 +190,26 @@ extractRecUpdField (unLoc -> HsFieldBind _ (unLoc -> ambOcc) arg _) =
 -------------------------------------------------------------------------------
 
 -- | Pattern synonym matching PrefixCon constructor details across GHC versions.
-#if __GLASGOW_HASKELL__ >= 914
+#if __GLASGOW_HASKELL__ >= 1001
+pattern PrefixConPat :: (XPrefixCon p ~ NoExtField) => [arg] -> HsConDetails p arg rec
+pattern PrefixConPat args <- PrefixCon _ args where
+  PrefixConPat args = PrefixCon noExtField args
+
+pattern RecConPat :: rec -> HsConDetails p arg rec
+pattern RecConPat r <- RecCon _ r
+#elif __GLASGOW_HASKELL__ >= 914
 pattern PrefixConPat :: [arg] -> HsConDetails arg rec
 pattern PrefixConPat args = PrefixCon args
+
+pattern RecConPat :: rec -> HsConDetails arg rec
+pattern RecConPat r <- RecCon r
 #else
 pattern PrefixConPat :: [arg] -> HsConDetails tyarg arg rec
 pattern PrefixConPat args <- PrefixCon _ args
   where PrefixConPat args = PrefixCon [] args
+
+pattern RecConPat :: rec -> HsConDetails tyarg arg rec
+pattern RecConPat r <- RecCon r
 #endif
 
 -- | Strip enclosing parenthesis expressions across GHC versions.
@@ -195,7 +231,9 @@ mkHsPar e = noLocA (HsPar noAnn noAnn e noAnn)
 
 -- | Construct an overloaded label expression across GHC 9.6-9.14.
 polyLabel :: FastString -> LHsExpr GhcPs
-#if __GLASGOW_HASKELL__ >= 912
+#if __GLASGOW_HASKELL__ >= 1001
+polyLabel fs = noLocA (HsOverLabel NoSourceText (packHText (unpackFS fs)))
+#elif __GLASGOW_HASKELL__ >= 912
 polyLabel fs = noLocA (HsOverLabel NoSourceText fs)
 #elif __GLASGOW_HASKELL__ >= 910
 polyLabel fs = noLocA (HsOverLabel noExtField NoSourceText fs)
@@ -205,7 +243,19 @@ polyLabel fs = noLocA (HsOverLabel noAnn NoSourceText fs)
 
 -- | Construct the 'import qualified Polytropos as Polytropos' declaration.
 mkPolytroposImportDecl :: LImportDecl GhcPs
-#if __GLASGOW_HASKELL__ >= 914
+#if __GLASGOW_HASKELL__ >= 1001
+mkPolytroposImportDecl = noLocA $ ImportDecl
+  { ideclExt        = XImportDeclPass noAnn NoSourceText UserWrittenImport
+  , ideclName       = noLocA (HsModuleName (packHText "Polytropos"))
+  , ideclPkgQual    = NoRawPkgQual
+  , ideclSource     = NotBoot
+  , ideclLevelSpec  = NotLevelled
+  , ideclSafe       = False
+  , ideclQualified  = QualifiedPre
+  , ideclAs         = Just (noLocA (HsModuleName (packHText "Polytropos")))
+  , ideclImportList = Nothing
+  }
+#elif __GLASGOW_HASKELL__ >= 914
 mkPolytroposImportDecl = noLocA $ ImportDecl
   { ideclExt       = XImportDeclPass noAnn NoSourceText False
   , ideclName      = noLocA (mkModuleName "Polytropos")
@@ -228,6 +278,16 @@ mkPolytroposImportDecl = noLocA $ ImportDecl
   , ideclAs        = Just (noLocA (mkModuleName "Polytropos"))
   , ideclImportList = Nothing
   }
+#endif
+
+-- | Extract the imported module name as a String across GHC versions.
+compatImportModName :: LImportDecl GhcPs -> String
+#if __GLASGOW_HASKELL__ >= 1001
+compatImportModName (unLoc -> ImportDecl{ ideclName = unLoc -> modNm }) =
+  hsModuleNameString modNm
+#else
+compatImportModName (unLoc -> ImportDecl{ ideclName = unLoc -> modNm }) =
+  moduleNameString modNm
 #endif
 
 -- | Construct a function application expression across GHC 9.6-9.14.
