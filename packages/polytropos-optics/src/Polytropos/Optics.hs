@@ -104,7 +104,7 @@ instance {-# OVERLAPPING #-} (KnownSymbol n, HasField n (Record r) field, FieldI
   labelOptic = lensVL (fieldLens (Field @n))
 
 -- | Prism optic for a variant constructor specified by label.
-ctorOptic :: forall c s fs. ConstructorIndex c s => Field c -> Optic A_Prism NoIx (Variant s) (Variant s) (Record fs) (Record fs)
+ctorOptic :: forall c s fs. (ConstructorIndex c s, fs ~ ConstructorPayload c s) => Field c -> Optic A_Prism NoIx (Variant s) (Variant s) (Record fs) (Record fs)
 ctorOptic f = prism' (injectVariant f) project
   where
     project :: Variant s -> Maybe (Record fs)

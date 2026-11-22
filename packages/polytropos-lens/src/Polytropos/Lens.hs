@@ -104,7 +104,8 @@ import Control.Lens          (At (..), Each (..), Field1 (..), Field2 (..),
                               Prism', preview, prism, set, (<&>))
 import GHC.Exts              (toList)
 import GHC.TypeLits          (KnownSymbol, symbolVal)
-import Polytropos            (Record, Variant, Field (..), injectVariant)
+import Polytropos            (ConstructorPayload, Record, Variant,
+                              Field (..), injectVariant)
 import Polytropos.Core       (ConstructorIndex (..), FieldIndex (..), Pair (..),
                               Row, fieldAt, noInlineUnsafeCo, productRep,
                               projectRep, repVals, setFieldAt, RowRep (..))
@@ -277,12 +278,11 @@ fieldLens _ f (RowRep rep) =
 -- Built from 'Polytropos.injectVariant' and 'Polytropos.Core.projectRep': the
 -- 'ConstructorIndex' dictionary carries the constructor's tag as a literal,
 -- so matching is a single runtime tag comparison.
-prismVariant :: forall c s fs. ConstructorIndex c s
-             => Field c -> Prism' (Variant s) (Record fs)
-prismVariant f = prism (injectVariant f) project
-  where
-    project :: Variant s -> Either (Variant s) (Record fs)
-    project (RowRep rep) =
-      case projectRep (constructorIndex @_ @c @s) rep of
-        Just prodRep -> Right (RowRep prodRep)
-        Nothing      -> Left (RowRep rep)
+prismVariant :: forall c s. ConstructorIndex c s
+             => Field c -> Prism' (Variant s) (Record (ConstructorPayload c s))
+prismVariant f = prism (injectVariant f) project where
+  -- maybeToEither from extra would be nice
+  project :: Variant s -> Either (Variant s) (Record fs)
+  project rowRep@(RowRep rep)
+    = maybe (Left rowRep) (Right . RowRep)
+    $ projectRep (constructorIndex @_ @c @s) rep

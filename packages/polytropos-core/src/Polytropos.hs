@@ -569,8 +569,8 @@ type family ConstructorPayloadHKD (f :: Type -> Type) (n :: Symbol) (s :: SumRow
   ConstructorPayloadHKD f n ((m ':= fs) ': rest) = ConstructorPayloadHKD f n rest
 
 -- | Inject an HKD record into an HKD variant for a specific constructor.
-injectVariantF :: forall (n :: Symbol) (f :: Type -> Type) (s :: SumRowHKD f) (fs :: ProductRow f).
-                  ConstructorIndex n s => Field n -> RecordF f fs -> VariantF f s
+injectVariantF :: forall (n :: Symbol) (f :: Type -> Type) (s :: SumRowHKD f).
+                  ConstructorIndex n s => Field n -> RecordF f (ConstructorPayloadHKD f n s) -> VariantF f s
 injectVariantF _ (RowRep (Rep _ v)) =
   RowRep (Rep (constructorIndex @_ @n @s) v)
 
@@ -593,7 +593,7 @@ pattern VariantF f r <- ( (\v -> (Field :: Field n, projectVariantF (Field :: Fi
   where VariantF f r = injectVariantF f r
 
 -- | Inject a record of fields into a variant for a specific constructor in \(\mathcal{O}(1)\) time.
-injectVariant :: forall n s fs. ConstructorIndex n s => Field n -> Record fs -> Variant s
+injectVariant :: forall n s. ConstructorIndex n s => Field n -> Record (ConstructorPayload n s) -> Variant s
 injectVariant _ (RowRep (Rep _ v)) =
   RowRep (Rep (constructorIndex @_ @n @s) v)
 
