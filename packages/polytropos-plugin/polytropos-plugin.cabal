@@ -79,3 +79,25 @@ test-suite polytropos-plugin-smoke
   ghc-options:
       -fplugin=Polytropos.Plugin
       -dcore-lint
+
+benchmark polytropos-bench
+  import:           warnings
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   bench
+  main-is:          Main.hs
+  default-language: GHC2021
+  ghc-options:
+      -Wall
+      -Wcompat
+      -O2
+      -rtsopts
+      "-with-rtsopts=-T"
+      -fplugin=Polytropos.Plugin
+  build-depends:
+      base              >= 4.18 && < 4.24
+    , containers        >= 0.6  && < 0.9
+    , deepseq           >= 1.4  && < 1.6
+    , text              >= 2.0  && < 2.2
+    , polytropos-core   >= 0.1.2.0 && < 0.2
+    , polytropos-plugin >= 0.1.2.0 && < 0.2
+    , tasty-bench       >= 0.3.5 && < 0.6
